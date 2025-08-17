@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mac Pro Home Server Setup - Quick Reference</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 0.5in;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            font-size: 10pt;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+            color: #000;
+        }
+        
+        h1 {
+            font-size: 18pt;
+            margin: 0 0 10px 0;
+            padding-bottom: 5px;
+            border-bottom: 3px solid #000;
+        }
+        
+        h2 {
+            font-size: 12pt;
+            margin: 15px 0 8px 0;
+            background: #000;
+            color: #fff;
+            padding: 3px 8px;
+            display: inline-block;
+        }
+        
+        h3 {
+            font-size: 10pt;
+            margin: 10px 0 5px 0;
+            text-decoration: underline;
+        }
+        
+        .columns {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        
+        .column {
+            flex: 1;
+        }
+        
+        .command {
+            background: #f0f0f0;
+            padding: 4px 6px;
+            margin: 3px 0;
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 9pt;
+            border-left: 3px solid #666;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .step {
+            margin: 8px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .step::before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+        
+        .important {
+            background: #ffeb3b;
+            padding: 2px 4px;
+            font-weight: bold;
+        }
+        
+        .section {
+            border: 1px solid #999;
+            padding: 8px;
+            margin: 10px 0;
+            background: #fafafa;
+        }
+        
+        .specs {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 5px;
+            font-size: 9pt;
+        }
+        
+        .specs dt {
+            font-weight: bold;
+        }
+        
+        .specs dd {
+            margin: 0;
+        }
+        
+        @media print {
+            body {
+                font-size: 9pt;
+            }
+            .command {
+                font-size: 8pt;
+            }
+            h1 {
+                font-size: 16pt;
+            }
+            h2 {
+                font-size: 11pt;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🖥️ Mac Pro (2013) Home Server Setup</h1>
+    <p style="margin-top: 0;"><strong>Purpose:</strong> Computational experiments server for HD computing, genomics, and neural efficiency research</p>
+    
+    <div class="columns">
+        <div class="column">
+            <h2>PHASE 1: INITIAL SETUP</h2>
+            
+            <h3>Prerequisites Check</h3>
+            <div class="step">macOS 10.14+ (Mojave or later)</div>
+            <div class="step">Admin access to Mac Pro</div>
+            <div class="step">Stable internet connection</div>
+            <div class="step">At least 50GB free disk space</div>
+            
+            <h3>1. Run Setup Scripts (In Order)</h3>
+            <div class="command">bash ~/mac_pro_server_setup.sh</div>
+            <p style="margin: 5px 0; font-size: 9pt;">↳ Installs Homebrew, Python, computational libraries (~15 min)</p>
+            
+            <div class="command">bash ~/setup_experiment_env.sh</div>
+            <p style="margin: 5px 0; font-size: 9pt;">↳ Creates experiment directories and templates (~2 min)</p>
+            
+            <div class="command">bash ~/setup_monitoring.sh</div>
+            <p style="margin: 5px 0; font-size: 9pt;">↳ Sets up system monitoring dashboard (~1 min)</p>
+            
+            <div class="command">bash ~/setup_remote_access.sh</div>
+            <p style="margin: 5px 0; font-size: 9pt;">↳ Enables SSH, API server, Jupyter (~3 min)</p>
+            
+            <div class="command">bash ~/optimize_performance.sh</div>
+            <p style="margin: 5px 0; font-size: 9pt;">↳ Optimizes system for compute workloads (~1 min)</p>
+            
+            <h3>2. Verify Installation</h3>
+            <div class="command">python3 --version  # Should be 3.11+
+brew list | grep -E "numpy|scipy|jupyter"
+ls ~/experiments/  # Should see directories</div>
+            
+            <h2>PHASE 2: TEST EXPERIMENTS</h2>
+            
+            <h3>Quick Tests</h3>
+            <div class="command"># Test HD computing
+python3 ~/experiments/genomevault_hd_experiment.py
+
+# Test efficiency methods
+python3 ~/experiments/efficiency_methods.py
+
+# View monitoring dashboard
+python3 ~/experiments/monitor_server.py</div>
+            
+            <h3>Remote Access Test</h3>
+            <div class="command"># Get your IP address
+ifconfig | grep "inet " | grep -v 127.0.0.1
+
+# Test SSH (from another machine)
+ssh rohanvinaik@[YOUR_MAC_IP]</div>
+        </div>
+        
+        <div class="column">
+            <h2>QUICK REFERENCE</h2>
+            
+            <div class="section">
+                <strong>Key Directories:</strong>
+                <div class="specs">
+                    <dt>Experiments:</dt><dd>~/experiments/</dd>
+                    <dt>Results:</dt><dd>~/experiments/results/</dd>
+                    <dt>Logs:</dt><dd>~/experiments/logs/</dd>
+                    <dt>HD Computing:</dt><dd>~/experiments/hd_computing/</dd>
+                    <dt>Genomics:</dt><dd>~/experiments/genomics/</dd>
+                </div>
+            </div>
+            
+            <div class="section">
+                <strong>Service Ports:</strong>
+                <div class="specs">
+                    <dt>SSH:</dt><dd>22</dd>
+                    <dt>API Server:</dt><dd>5000</dd>
+                    <dt>Jupyter Lab:</dt><dd>8888</dd>
+                </div>
+            </div>
+            
+            <div class="section">
+                <strong>Common Commands:</strong>
+                <div class="command"># Submit experiment via API
+curl -X POST http://localhost:5000/api/experiments/submit \
+  -H 'Content-Type: application/json' \
+  -d '{"type": "hd_computing"}'
+
+# Check system status
+curl http://localhost:5000/api/system/status
+
+# Run specific experiment
+python3 ~/experiments/run_experiment.py hd_computing \
+  --config ~/experiments/hd_config.json
+
+# Access Jupyter notebooks
+open http://localhost:8888</div>
+            </div>
+            
+            <h2>TROUBLESHOOTING</h2>
+            
+            <h3>Common Issues</h3>
+            <div class="step"><strong>Homebrew fails:</strong> Run <span class="command" style="display: inline;">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</span></div>
+            
+            <div class="step"><strong>Python packages fail:</strong> Create fresh venv: <span class="command" style="display: inline;">python3 -m venv ~/experiment_env && source ~/experiment_env/bin/activate</span></div>
+            
+            <div class="step"><strong>Remote access denied:</strong> Enable in System Preferences → Sharing → Remote Login</div>
+            
+            <div class="step"><strong>Port already in use:</strong> Find process: <span class="command" style="display: inline;">lsof -i :5000</span> then kill it</div>
+            
+            <h2>OPTIMIZATION TIPS</h2>
+            
+            <div class="section" style="background: #e8f5e9;">
+                <strong>For Best Performance:</strong>
+                <div class="step">Close unnecessary apps before experiments</div>
+                <div class="step">Use wired ethernet for remote access</div>
+                <div class="step">Monitor temperature: <span class="command" style="display: inline;">sudo powermetrics --samplers smc</span></div>
+                <div class="step">For GPU experiments: Install PyOpenCL</div>
+                <div class="step">Schedule heavy tasks overnight with <span class="command" style="display: inline;">at</span> command</div>
+            </div>
+            
+            <div style="position: absolute; bottom: 10px; right: 10px; font-size: 8pt; color: #666;">
+                Mac Pro Specs: 12-core Xeon E5 | 64GB ECC RAM | Dual AMD FirePro | PCIe SSD
+            </div>
+        </div>
+    </div>
+    
+    <div style="border-top: 2px solid #000; margin-top: 20px; padding-top: 10px;">
+        <strong style="font-size: 11pt;">🚨 IMPORTANT FIRST-TIME SETUP:</strong>
+        <span class="important">Run all 5 setup scripts in order!</span> Total time: ~25 minutes. 
+        After setup, the server will auto-start on boot. Access experiment dashboard at 
+        <span class="command" style="display: inline; background: #ffeb3b;">http://[YOUR_MAC_IP]:5000</span>
+    </div>
+</body>
+</html>
