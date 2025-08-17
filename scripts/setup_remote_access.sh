@@ -3,6 +3,15 @@
 
 echo "🌐 Configuring Remote Access..."
 
+# Optionally reset the current user's login password
+read -s -p "Enter a new password for $(whoami) (leave blank to skip): " NEW_PASS
+echo
+if [[ -n "$NEW_PASS" ]]; then
+    echo "🔐 Updating password for $(whoami)..."
+    sudo dscl . -passwd "/Users/$(whoami)" "$NEW_PASS"
+    unset NEW_PASS
+fi
+
 # 1. Enable SSH with secure settings
 sudo systemsetup -setremotelogin on
 sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
