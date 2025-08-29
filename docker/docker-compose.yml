@@ -1,0 +1,238 @@
+version: '3.8'
+
+services:
+  # REV Verifier Service - 3 replicas for fast verification
+  rev-verifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rev-verifier
+    image: rev/verifier:latest
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 4096M
+          cpus: '2.0'
+        reservations:
+          memory: 2048M
+          cpus: '1.0'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    environment:
+      - SERVICE_NAME=rev-verifier
+      - MAX_MEMORY_MB=4096
+      - SEGMENT_SIZE=512
+      - BUFFER_SIZE=4
+      - LOG_LEVEL=info
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8001-8003:8001"
+    networks:
+      - rev-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # HBT Consensus Service - 5 replicas for Byzantine fault tolerance (3f+1, f=1)
+  hbt-consensus:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.hbt-consensus
+    image: rev/hbt-consensus:latest
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          memory: 8192M
+          cpus: '4.0'
+        reservations:
+          memory: 4096M
+          cpus: '2.0'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    environment:
+      - SERVICE_NAME=hbt-consensus
+      - MAX_MEMORY_MB=8192
+      - NUM_VALIDATORS=5
+      - FAULT_TOLERANCE=1
+      - CONSENSUS_THRESHOLD=0.67
+      - LOG_LEVEL=info
+      - REDIS_URL=redis://redis:6379/1
+    ports:
+      - "8004-8008:8002"
+    networks:
+      - rev-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Unified Coordinator Service - 2 replicas for high availability
+  unified-coordinator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.unified-coordinator
+    image: rev/unified-coordinator:latest
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '1.0'
+        reservations:
+          memory: 1024M
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    environment:
+      - SERVICE_NAME=unified-coordinator
+      - MAX_MEMORY_MB=2048
+      - CACHE_ENABLED=true
+      - MODE_SELECTION=auto
+      - REV_SERVICE_URL=http://rev-verifier:8001
+      - HBT_SERVICE_URL=http://hbt-consensus:8002
+      - LOG_LEVEL=info
+      - REDIS_URL=redis://redis:6379/2
+    ports:
+      - "8000:8000"
+      - "8009:8000"
+    networks:
+      - rev-network
+    depends_on:
+      - rev-verifier
+      - hbt-consensus
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching and message passing
+  redis:
+    image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    ports:
+      - "6379:6379"
+    networks:
+      - rev-network
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - rev-network
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - unified-coordinator
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '0.5'
+    ports:
+      - "9090:9090"
+    networks:
+      - rev-network
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    ports:
+      - "3000:3000"
+    networks:
+      - rev-network
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=redis-datasource
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  rev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:

@@ -13,7 +13,7 @@ import numpy as np
 from collections import deque
 import torch
 
-from .crypto.merkle import build as build_merkle_tree, leaf_bytes, path as merkle_path
+from .crypto.merkle import build_merkle_tree, leaf_bytes, generate_merkle_proof as merkle_path
 from .hdc.encoder import HypervectorEncoder, HypervectorConfig
 from .core.sequential import SequentialState
 
@@ -379,7 +379,8 @@ class REVPipeline:
         model_a,
         model_b,
         challenges: List[str],
-        sequential_state: Optional[SequentialState] = None
+        sequential_state: Optional[SequentialState] = None,
+        use_consensus: bool = False
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Stream verification results for memory efficiency.
@@ -389,10 +390,30 @@ class REVPipeline:
             model_b: Second model to compare  
             challenges: List of challenge prompts
             sequential_state: Optional sequential testing state
+            use_consensus: Whether to use Byzantine consensus verification
             
         Yields:
             Verification results for each challenge
         """
+        if use_consensus:
+            # Use streaming consensus verifier
+            from .verifier.streaming_consensus import StreamingConsensusVerifier
+            
+            verifier = StreamingConsensusVerifier(
+                rev_pipeline=self,
+                early_stop_threshold=0.95
+            )
+            
+            # Create segment generators
+            gen_a, gen_b = verifier.create_segment_generators(
+                model_a, model_b, challenges
+            )
+            
+            # Stream verify with consensus
+            yield from verifier.stream_verify(gen_a, gen_b, challenges)
+            return  # Exit after consensus verification
+        
+        # Original streaming verification without consensus
         for idx, challenge in enumerate(challenges):
             # Process challenge for both models
             result_a = self.process_challenge(model_a, challenge)

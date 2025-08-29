@@ -14,7 +14,7 @@ from scipy import signal
 from scipy.fft import fft, ifft
 
 from .encoder import HypervectorEncoder, HypervectorConfig
-from .binding import BindingOperations
+from .binding_operations import BindingOperations
 
 
 class TaskCategory(Enum):

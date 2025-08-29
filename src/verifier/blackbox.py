@@ -8,16 +8,20 @@ extracting logits, generating response hypervectors, and managing rate limits.
 import time
 import json
 import hashlib
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Dict, List, Tuple, Optional, Any, Union, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
 import requests
-from collections import deque
+from collections import deque, defaultdict
 from datetime import datetime, timedelta
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Avoid circular import - use TYPE_CHECKING
+if TYPE_CHECKING:
+    from .contamination import UnifiedContaminationDetector, ContaminationResult
 
 
 @dataclass
@@ -676,6 +680,221 @@ class BlackBoxVerifier:
                 results[model_name] = response
         
         return results
+    
+    def get_model_response(
+        self,
+        prompt: str,
+        config: APIConfig
+    ) -> Dict[str, Any]:
+        """
+        Get model response for contamination detection.
+        
+        Args:
+            prompt: Input prompt
+            config: API configuration for the model
+            
+        Returns:
+            Response dictionary with text and optional logits
+        """
+        # Detect provider
+        provider = self._detect_provider(config)
+        
+        # Call API
+        handler = self.providers.get(provider, self._call_custom)
+        response = handler(config, prompt)
+        
+        # Extract components
+        text = self._extract_text(response, provider)
+        logits = self.extract_logits(response, provider)
+        
+        return {
+            'text': text,
+            'logits': logits,
+            'raw_response': response,
+            'provider': provider.value
+        }
+    
+    def detect_contamination_api(
+        self,
+        target_model_name: str,
+        reference_model_names: List[str],
+        challenges: Optional[List[str]] = None,
+        contamination_detector: Optional["UnifiedContaminationDetector"] = None
+    ) -> "ContaminationResult":
+        """
+        Detect contamination in API-accessible models.
+        
+        Args:
+            target_model_name: Name of target model to check
+            reference_model_names: Names of reference models
+            challenges: Test challenges for analysis
+            contamination_detector: Optional detector instance
+            
+        Returns:
+            ContaminationResult with detection details
+        """
+        # Initialize contamination detector if not provided
+        if contamination_detector is None:
+            from .contamination import UnifiedContaminationDetector
+            contamination_detector = UnifiedContaminationDetector(
+                blackbox_verifier=self
+            )
+        
+        # Prepare API configs
+        api_configs = {
+            target_model_name: self.configs[target_model_name]
+        }
+        for ref_name in reference_model_names:
+            if ref_name in self.configs:
+                api_configs[ref_name] = self.configs[ref_name]
+        
+        # Run contamination detection using API
+        result = contamination_detector.detect_contamination(
+            model=None,  # No direct model access
+            reference_models=[None] * len(reference_model_names),
+            model_id=target_model_name,
+            reference_ids=reference_model_names,
+            challenges=challenges,
+            use_api=True,
+            api_configs=api_configs
+        )
+        
+        return result
+    
+    def batch_contamination_check(
+        self,
+        model_names: List[str],
+        reference_model_names: Optional[List[str]] = None,
+        challenges: Optional[List[str]] = None
+    ) -> Dict[str, "ContaminationResult"]:
+        """
+        Check contamination for multiple models in batch.
+        
+        Args:
+            model_names: List of models to check
+            reference_model_names: Reference models (uses all others if None)
+            challenges: Test challenges
+            
+        Returns:
+            Dictionary mapping model names to contamination results
+        """
+        if reference_model_names is None:
+            # Use all other models as references
+            reference_model_names = [
+                name for name in self.configs.keys() 
+                if name not in model_names
+            ]
+        
+        # Initialize detector once for efficiency
+        from .contamination import UnifiedContaminationDetector
+        contamination_detector = UnifiedContaminationDetector(
+            blackbox_verifier=self,
+            cache_signatures=True  # Cache for efficiency
+        )
+        
+        results = {}
+        
+        # Check each model
+        for model_name in model_names:
+            print(f"Checking contamination for {model_name}...")
+            
+            try:
+                result = self.detect_contamination_api(
+                    target_model_name=model_name,
+                    reference_model_names=reference_model_names,
+                    challenges=challenges,
+                    contamination_detector=contamination_detector
+                )
+                results[model_name] = result
+                
+                # Print summary
+                print(f"  - Type: {result.contamination_type.value}")
+                print(f"  - Score: {result.contamination_score:.3f}")
+                print(f"  - Confidence: {result.confidence:.3f}")
+                
+            except Exception as e:
+                print(f"  - Error: {e}")
+                results[model_name] = None
+        
+        return results
+    
+    def generate_contamination_report(
+        self,
+        results: Dict[str, "ContaminationResult"]
+    ) -> str:
+        """
+        Generate comprehensive contamination report for multiple models.
+        
+        Args:
+            results: Dictionary of contamination results
+            
+        Returns:
+            Formatted report string
+        """
+        report = []
+        report.append("="*70)
+        report.append("API MODEL CONTAMINATION ANALYSIS REPORT")
+        report.append("="*70)
+        report.append(f"\nModels Analyzed: {len(results)}")
+        report.append(f"Timestamp: {datetime.now().isoformat()}")
+        
+        # Summary statistics
+        contaminated = sum(
+            1 for r in results.values() 
+            if r and r.is_contaminated()
+        )
+        report.append(f"Contaminated Models: {contaminated}/{len(results)}")
+        
+        report.append("\n" + "-"*70)
+        report.append("INDIVIDUAL MODEL RESULTS:")
+        report.append("-"*70)
+        
+        # Sort by contamination score
+        sorted_results = sorted(
+            results.items(),
+            key=lambda x: x[1].contamination_score if x[1] else 0,
+            reverse=True
+        )
+        
+        for model_name, result in sorted_results:
+            report.append(f"\n{model_name}:")
+            
+            if result is None:
+                report.append("  Status: ERROR")
+                continue
+            
+            report.append(f"  Contamination Type: {result.contamination_type.value}")
+            report.append(f"  Score: {result.contamination_score:.3f}")
+            report.append(f"  Confidence: {result.confidence:.3f}")
+            report.append(f"  Contaminated: {'YES' if result.is_contaminated() else 'NO'}")
+            
+            if result.suspicious_models:
+                report.append(f"  Related Models: {', '.join(result.suspicious_models[:3])}")
+            
+            if result.artifact_patterns:
+                report.append(f"  Artifacts Detected: {len(result.artifact_patterns)}")
+        
+        # Relationship analysis
+        report.append("\n" + "-"*70)
+        report.append("CONTAMINATION RELATIONSHIPS:")
+        report.append("-"*70)
+        
+        # Find clusters of related models
+        relationships = defaultdict(list)
+        for model_name, result in results.items():
+            if result and result.suspicious_models:
+                for suspicious in result.suspicious_models:
+                    relationships[suspicious].append(model_name)
+        
+        for related_model, affected in relationships.items():
+            if len(affected) > 1:
+                report.append(f"\n{related_model} potentially contaminated:")
+                for model in affected:
+                    report.append(f"  - {model}")
+        
+        report.append("\n" + "="*70)
+        
+        return "\n".join(report)
     
     def cleanup(self):
         """Clean up resources."""

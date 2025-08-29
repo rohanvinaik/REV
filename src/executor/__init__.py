@@ -6,8 +6,21 @@ from .segment_runner import (
     KVCache
 )
 
+from .parallel_pipeline import (
+    ParallelVerificationPipeline,
+    ParallelConfig,
+    VerificationTask,
+    ParallelResult,
+    ThreadSafeResourceManager
+)
+
 __all__ = [
     "SegmentRunner",
     "SegmentConfig", 
-    "KVCache"
+    "KVCache",
+    "ParallelVerificationPipeline",
+    "ParallelConfig",
+    "VerificationTask",
+    "ParallelResult",
+    "ThreadSafeResourceManager"
 ]

@@ -26,6 +26,10 @@ TAGS = {
     "REV_COMMITMENT": b"REV_COMMITMENT",
     "REV_MODEL_SIG": b"REV_MODEL_SIG",
     "REV_VERIFY": b"REV_VERIFY",
+    # Hierarchical verification tags
+    "CERT": b"CERT",  # Behavioral certificate
+    "BEHAVE": b"BEHAVE",  # Behavioral signature
+    "LINK": b"LINK",  # Certificate linkage
 }
 
 
