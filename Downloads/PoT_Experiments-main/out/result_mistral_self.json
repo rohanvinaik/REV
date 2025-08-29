@@ -1,0 +1,47 @@
+{
+  "case": "mistral_self",
+  "expected": "ACCEPT",
+  "accepted": true,
+  "distance": 0.0,
+  "confidence_radius": Infinity,
+  "fuzzy_similarity": 1.0,
+  "n_challenges": 1,
+  "time_elapsed": 105.2981071472168,
+  "metadata": {
+    "test_statistic": 0.0,
+    "tolerance": 0.5,
+    "n_evaluated": 1,
+    "distance_stats": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0
+    },
+    "fuzzy_stats": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "advanced_fuzzy": [
+      {
+        "tlsh": 1.0,
+        "ngram": 1.0
+      },
+      {
+        "tlsh": 1.0,
+        "ngram": 1.0
+      },
+      {
+        "tlsh": 1.0,
+        "ngram": 1.0
+      },
+      {
+        "tlsh": 1.0,
+        "ngram": 1.0
+      },
+      {
+        "tlsh": 1.0,
+        "ngram": 1.0
+      }
+    ]
+  }
+}

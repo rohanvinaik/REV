@@ -1,0 +1,46 @@
+{
+  "case": "mistral_vs_gpt2",
+  "expected": "REJECT",
+  "accepted": false,
+  "distance": 0.8725490196078431,
+  "confidence_radius": Infinity,
+  "fuzzy_similarity": 0.12745098039215685,
+  "n_challenges": 1,
+  "time_elapsed": 76.75869083404541,
+  "metadata": {
+    "test_statistic": 0.8725490196078431,
+    "tolerance": 0.5,
+    "n_evaluated": 1,
+    "distance_stats": {
+      "mean": 0.8725490196078431,
+      "std": 0.0,
+      "min": 0.8725490196078431,
+      "max": 0.8725490196078431
+    },
+    "fuzzy_stats": {
+      "mean": 0.12745098039215685,
+      "std": 0.0
+    },
+    "advanced_fuzzy": [
+      {
+        "tlsh": 0.25,
+        "ngram": 0.12745098039215685
+      },
+      {
+        "ngram": 0.19658119658119658
+      },
+      {
+        "tlsh": 0,
+        "ngram": 0.08904109589041095
+      },
+      {
+        "tlsh": 0,
+        "ngram": 0.07109004739336493
+      },
+      {
+        "tlsh": 0.0050000000000000044,
+        "ngram": 0.08035714285714286
+      }
+    ]
+  }
+}
