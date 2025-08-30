@@ -1,10 +1,10 @@
-# REV - Rapid Extreme Verification
+# REV - Restriction Enzyme Verification
 
 A comprehensive framework for memory-bounded, black-box LLM comparison using restriction enzyme verification techniques combined with hyperdimensional computing and privacy-preserving infrastructure.
 
 ## 🚀 Overview
 
-REV (Rapid Extreme Verification) provides a production-ready framework for comparing and verifying Large Language Models (LLMs) under memory-bounded constraints. The system combines cutting-edge techniques from statistical testing, hyperdimensional computing, cryptography, and distributed systems to enable efficient, scalable, and privacy-preserving model verification.
+REV (Restriction Enzyme Verification) provides a production-ready framework for comparing and verifying Large Language Models (LLMs) under memory-bounded constraints. The system combines cutting-edge techniques from statistical testing, hyperdimensional computing, cryptography, and distributed systems to enable efficient, scalable, and privacy-preserving model verification.
 
 ## ✨ Key Features
 
