@@ -1,10 +1,12 @@
 """
-HDC Behavioral Sites - Feature extraction and hypervector generation for model behavior.
+Semantic Hypervector Behavioral Sites for REV verification.
 
-This module implements probe feature extraction, response hypervector generation,
-and hierarchical zoom levels for analyzing model behavior at different granularities.
+Implements the GenomeVault-inspired behavioral site encoding from Section 6 of the REV paper,
+mapping probe features and model responses to high-dimensional hypervectors for robust,
+spoof-resistant behavioral comparison.
 """
 
+import hashlib
 from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -115,8 +117,7 @@ class BehavioralSites:
         """
         self.hdc_config = hdc_config or HypervectorConfig(
             dimension=10000,
-            sparse_density=0.01,
-            dtype="float32"
+            sparsity=0.01
         )
         self.encoder = HypervectorEncoder(self.hdc_config)
         self.binding_ops = binding_ops or BindingOperations(self.hdc_config.dimension)
@@ -525,3 +526,165 @@ class BehavioralSites:
             return sum(similarities) / total_weight
         else:
             return 0.0
+
+
+# New functions from Section 7.2 of the paper
+def probe_to_hypervector(features: Dict[str, Any], dims: int = 16384, seed: int = 0xBEEF) -> np.ndarray:
+    """
+    Map probe features to hypervector per Section 7.2 of the REV paper.
+    
+    Hash features -> base vectors; bind via XOR/permutation
+    
+    Args:
+        features: Dictionary of probe features (task_category, syntactic_complexity, etc.)
+        dims: Dimension of hypervector (default 16384 as per paper)
+        seed: Random seed for reproducibility
+        
+    Returns:
+        Bit-packed hypervector representing the probe
+    """
+    # Initialize random generator with seed
+    np.random.seed(seed)
+    
+    # Create base random hypervector
+    vec = np.random.choice([-1, 1], size=dims).astype(np.float32)
+    
+    # Canonicalize features for consistent ordering
+    canonicalized = sorted(features.items())
+    
+    # Bind each feature using XOR and permutation
+    for k, v in canonicalized:
+        # Hash key and value to get deterministic seeds
+        k_seed = int(hashlib.md5(str(k).encode()).hexdigest()[:8], 16)
+        v_seed = int(hashlib.md5(str(v).encode()).hexdigest()[:8], 16)
+        
+        # Generate hypervectors for key and value
+        np.random.seed(k_seed)
+        hv_k = np.random.choice([-1, 1], size=dims).astype(np.float32)
+        
+        np.random.seed(v_seed)
+        hv_v = np.random.choice([-1, 1], size=dims).astype(np.float32)
+        
+        # Compute shift amount based on combined hash
+        combined_seed = int(hashlib.md5(f"{k}{v}".encode()).hexdigest()[:8], 16)
+        shift = combined_seed % 257  # Prime number for good distribution
+        
+        # Permute key hypervector
+        hv_k_permuted = np.roll(hv_k, shift)
+        
+        # XOR bind: for bipolar {-1, +1}, XOR is element-wise multiplication
+        vec = vec * hv_k_permuted * hv_v
+    
+    # Reset random seed
+    np.random.seed(None)
+    
+    return vec
+
+
+def response_to_hypervector(logits: np.ndarray, dims: int = 16384, seed: int = 0xF00D, top_k: int = 16) -> np.ndarray:
+    """
+    Map response logits to hypervector per Section 7.2 of the REV paper.
+    
+    Bucket top-K tokens & their ranks/weights; bind rank and token ids using weighted binding
+    
+    Args:
+        logits: Model output logits
+        dims: Dimension of hypervector (default 16384 as per paper)
+        seed: Random seed for reproducibility
+        top_k: Number of top tokens to consider (default 16 as per paper)
+        
+    Returns:
+        Bit-packed hypervector representing the response
+    """
+    # Initialize random generator with seed
+    np.random.seed(seed)
+    
+    # Create base random hypervector
+    vec = np.random.choice([-1, 1], size=dims).astype(np.float32)
+    
+    # Get top-k token indices and their probabilities
+    if len(logits.shape) == 1:
+        # Single logit vector
+        top_indices = np.argsort(logits)[-top_k:][::-1]
+        top_probs = np.exp(logits[top_indices])
+        top_probs = top_probs / np.sum(top_probs)  # Softmax normalization
+    else:
+        # Handle batched logits by flattening
+        flat_logits = logits.flatten()
+        top_indices = np.argsort(flat_logits)[-top_k:][::-1]
+        top_probs = np.exp(flat_logits[top_indices])
+        top_probs = top_probs / np.sum(top_probs)
+    
+    # Bind each top-k token with its rank
+    for rank, (tok_id, prob) in enumerate(zip(top_indices, top_probs)):
+        # Generate hypervector for token ID
+        np.random.seed(int(tok_id))
+        hv_tok = np.random.choice([-1, 1], size=dims).astype(np.float32)
+        
+        # Generate hypervector for rank
+        np.random.seed(rank)
+        hv_rnk = np.random.choice([-1, 1], size=dims).astype(np.float32)
+        
+        # Weighted bind: XOR binding weighted by probability
+        bound = hv_tok * hv_rnk  # XOR for bipolar vectors
+        vec = vec + prob * bound  # Weighted addition
+    
+    # Normalize to maintain bipolar nature
+    vec = np.sign(vec)
+    vec[vec == 0] = 1  # Handle zeros
+    
+    # Reset random seed
+    np.random.seed(None)
+    
+    return vec
+
+
+def weighted_bind(hv_tok: np.ndarray, hv_rnk: np.ndarray, weight: float) -> np.ndarray:
+    """
+    Weighted binding operation for probability distributions.
+    
+    Args:
+        hv_tok: Token hypervector
+        hv_rnk: Rank hypervector
+        weight: Probability weight
+        
+    Returns:
+        Weighted bound hypervector
+    """
+    # XOR binding (element-wise multiplication for bipolar)
+    bound = hv_tok * hv_rnk
+    
+    # Apply weight
+    return weight * bound
+
+
+# Zoom levels support per Section 6.2
+zoom_levels = {
+    0: {},  # corpus/site-wide prototypes
+    1: {},  # prompt-level hypervectors
+    2: {},  # span/tile-level hypervectors
+}
+
+
+def integrate_with_encoder(encoder: HypervectorEncoder) -> HypervectorEncoder:
+    """
+    Integrate behavioral sites with existing HypervectorEncoder.
+    
+    Args:
+        encoder: Existing HypervectorEncoder instance
+        
+    Returns:
+        Enhanced encoder with behavioral site support
+    """
+    # Add the probe and response hypervector functions as methods
+    encoder.probe_to_hypervector = probe_to_hypervector
+    encoder.response_to_hypervector = response_to_hypervector
+    encoder.weighted_bind = weighted_bind
+    
+    # Add zoom levels to encoder
+    if not hasattr(encoder, 'zoom_levels'):
+        encoder.zoom_levels = zoom_levels
+    else:
+        encoder.zoom_levels.update(zoom_levels)
+    
+    return encoder

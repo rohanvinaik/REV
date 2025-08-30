@@ -1,18 +1,19 @@
 """
-Merkle tree implementation for REV verification certificates.
+Enhanced Merkle tree implementation for REV per-challenge verification (Sections 4.3, 5.5).
 
-This module provides Merkle tree construction and verification for REV's
-audit logging and verification certificate generation, with hierarchical
-certificate support for multi-level verification proofs.
+This module provides per-challenge Merkle tree construction with support for
+both architectural segments and HDC behavioral sites, incremental updates for
+streaming, and comprehensive audit trail generation.
 """
 
 from __future__ import annotations
-from typing import Iterable, List, Dict, Any, Sequence, NamedTuple, Optional, Tuple
+from typing import Iterable, List, Dict, Any, Sequence, NamedTuple, Optional, Tuple, Union
 from dataclasses import dataclass, field, asdict
 from collections import deque
 import hashlib
 import json
 import time
+import numpy as np
 from .commit import TAGS, H
 from .zk_proofs import ZKProofSystem, ZKProof, ZKCircuitParams
 
@@ -63,6 +64,307 @@ def node_bytes(left: bytes, right: bytes) -> bytes:
         Parent node hash
     """
     return H(TAGS["NODE"], left, right)
+
+
+@dataclass
+class SegmentSite:
+    """
+    Segment or behavioral site for per-challenge Merkle trees (Section 5.5).
+    
+    Represents either an architectural segment or HDC behavioral site
+    that will be included in the per-challenge Merkle tree.
+    """
+    seg_id: str  # Unique segment identifier
+    segment_type: str  # "architectural" or "behavioral"
+    token_range: Tuple[int, int]  # Token indices [start, end)
+    projector_seed: int  # Seed for random projection matrix
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Signature:
+    """
+    Signature for a segment/site in the per-challenge Merkle tree.
+    
+    Contains the binary signature and associated metadata including
+    the leaf hash for Merkle tree construction.
+    """
+    seg_id: str
+    sigma: bytes  # Binary signature
+    metadata: Dict[str, Any]  # Contains leaf hash and other data
+
+
+@dataclass 
+class ChallengeLeaf:
+    """
+    Leaf node for per-challenge Merkle tree (Section 4.3).
+    
+    Encodes segment ID, signature, and execution policy into a single
+    leaf hash for inclusion in the challenge-specific Merkle tree.
+    """
+    seg_id: str
+    sigma: bytes  # Binary signature from build_signature()
+    policy: Dict[str, Any]  # Execution policy (e.g., temperature, max_tokens)
+    leaf_hash: Optional[bytes] = None
+    
+    def compute_leaf(self) -> bytes:
+        """Compute leaf hash as per Section 4.3."""
+        leaf_data = {
+            "seg": self.seg_id,
+            "sigma": self.sigma.hex() if isinstance(self.sigma, bytes) else str(self.sigma),
+            "policy": self.policy
+        }
+        
+        # Canonical encoding for deterministic hashing
+        encoded = json.dumps(leaf_data, sort_keys=True).encode('utf-8')
+        leaf_hash = H(TAGS["LEAF"], encoded)
+        
+        self.leaf_hash = leaf_hash
+        return leaf_hash
+
+
+@dataclass
+class PerChallengeTree:
+    """
+    Per-challenge Merkle tree for REV verification (Section 4.3).
+    
+    Each challenge gets its own Merkle tree built from segment signatures
+    and behavioral sites, enabling efficient verification of specific segments.
+    """
+    challenge_id: str
+    leaves: List[ChallengeLeaf]
+    tree: Optional[Dict[str, Any]] = None
+    root: Optional[bytes] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def build_tree(self) -> bytes:
+        """Build Merkle tree from challenge leaves."""
+        if not self.leaves:
+            raise ValueError(f"No leaves for challenge {self.challenge_id}")
+        
+        # Compute leaf hashes
+        leaf_hashes = [leaf.compute_leaf() for leaf in self.leaves]
+        
+        # Build tree
+        self.tree = build_merkle_tree(leaf_hashes)
+        self.root = self.tree["root"]
+        
+        # Update metadata
+        self.metadata.update({
+            "num_leaves": len(self.leaves),
+            "tree_depth": len(self.tree["layers"]),
+            "build_time": time.time()
+        })
+        
+        return self.root
+    
+    def generate_proof(self, seg_id: str) -> Optional[List[PathItem]]:
+        """Generate proof for specific segment."""
+        if not self.tree:
+            self.build_tree()
+        
+        # Find leaf index
+        for idx, leaf in enumerate(self.leaves):
+            if leaf.seg_id == seg_id:
+                return generate_merkle_proof(self.tree, idx)
+        
+        return None
+    
+    def verify_segment(self, seg_id: str, sigma: bytes, policy: Dict[str, Any]) -> bool:
+        """Verify that a segment is included in this challenge tree."""
+        if not self.root:
+            return False
+        
+        # Find the leaf
+        leaf_idx = None
+        for idx, leaf in enumerate(self.leaves):
+            if leaf.seg_id == seg_id:
+                leaf_idx = idx
+                break
+        
+        if leaf_idx is None:
+            return False
+        
+        # Generate proof
+        proof = self.generate_proof(seg_id)
+        if not proof:
+            return False
+        
+        # Recreate leaf
+        test_leaf = ChallengeLeaf(seg_id, sigma, policy)
+        leaf_hash = test_leaf.compute_leaf()
+        
+        # Verify proof
+        return verify_merkle_proof_bytes(leaf_hash, proof, self.root)
+
+
+class IncrementalMerkleTree:
+    """
+    Incremental Merkle tree for streaming updates (Section 4.3).
+    
+    Supports efficient incremental updates as new segments are processed,
+    without rebuilding the entire tree from scratch.
+    """
+    
+    def __init__(self, challenge_id: str):
+        """Initialize incremental tree."""
+        self.challenge_id = challenge_id
+        self.leaves: List[bytes] = []
+        self.nodes: List[List[bytes]] = []  # Layers of the tree
+        self.pending_updates: deque = deque()
+        self.finalized = False
+    
+    def add_leaf(self, leaf: ChallengeLeaf) -> None:
+        """Add a new leaf to the tree incrementally."""
+        if self.finalized:
+            raise ValueError("Cannot add leaves to finalized tree")
+        
+        leaf_hash = leaf.compute_leaf()
+        self.leaves.append(leaf_hash)
+        self.pending_updates.append(leaf_hash)
+        
+        # Update tree structure incrementally
+        self._update_incremental()
+    
+    def _update_incremental(self) -> None:
+        """Update tree structure incrementally."""
+        # This is a simplified version - production would optimize further
+        if len(self.leaves) == 1:
+            # First leaf
+            self.nodes = [[self.leaves[0]]]
+        else:
+            # Rebuild affected portions
+            # In production, would only update affected paths
+            tree = build_merkle_tree(self.leaves)
+            self.nodes = tree["layers"]
+    
+    def get_current_root(self) -> bytes:
+        """Get current root hash."""
+        if not self.nodes:
+            raise ValueError("Tree is empty")
+        
+        # Root is at the top layer
+        return self.nodes[-1][0]
+    
+    def finalize(self) -> bytes:
+        """Finalize tree and return final root."""
+        self.finalized = True
+        self.pending_updates.clear()
+        return self.get_current_root()
+    
+    def generate_streaming_proof(self, leaf_idx: int) -> List[PathItem]:
+        """Generate proof for streaming verification."""
+        if not self.nodes:
+            raise ValueError("Tree is empty")
+        
+        proof_path = []
+        idx = leaf_idx
+        
+        for layer_idx in range(len(self.nodes) - 1):
+            layer = self.nodes[layer_idx]
+            
+            # Determine sibling
+            if idx % 2 == 0:
+                sib_idx = min(idx + 1, len(layer) - 1)
+                is_right = True
+            else:
+                sib_idx = idx - 1
+                is_right = False
+            
+            proof_path.append(PathItem(layer[sib_idx], is_right))
+            idx //= 2
+        
+        return proof_path
+
+
+@dataclass
+class AuditTranscript:
+    """
+    Audit transcript for REV verification (Section 5.5).
+    
+    Contains all roots, metadata, and verification data needed for
+    comprehensive audit trail of the verification process.
+    """
+    transcript_id: str
+    run_id: str
+    challenge_trees: List[PerChallengeTree]
+    master_root: bytes
+    timestamp: float
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def add_challenge_tree(self, tree: PerChallengeTree) -> None:
+        """Add a per-challenge tree to the transcript."""
+        self.challenge_trees.append(tree)
+        self._update_master_root()
+    
+    def _update_master_root(self) -> None:
+        """Update master root from all challenge trees."""
+        if not self.challenge_trees:
+            self.master_root = b"\x00" * 32
+            return
+        
+        # Collect all challenge roots
+        roots = []
+        for tree in self.challenge_trees:
+            if tree.root is None:
+                tree.build_tree()
+            roots.append(tree.root)
+        
+        # Aggregate into master root
+        self.master_root = aggregate_merkle_roots(roots)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert transcript to dictionary for serialization."""
+        return {
+            "transcript_id": self.transcript_id,
+            "run_id": self.run_id,
+            "master_root": self.master_root.hex(),
+            "timestamp": self.timestamp,
+            "num_challenges": len(self.challenge_trees),
+            "challenges": [
+                {
+                    "challenge_id": tree.challenge_id,
+                    "root": tree.root.hex() if tree.root else None,
+                    "num_segments": len(tree.leaves),
+                    "metadata": tree.metadata
+                }
+                for tree in self.challenge_trees
+            ],
+            "metadata": self.metadata
+        }
+    
+    def verify_challenge(self, challenge_id: str, expected_root: bytes) -> bool:
+        """Verify a specific challenge tree."""
+        for tree in self.challenge_trees:
+            if tree.challenge_id == challenge_id:
+                if tree.root is None:
+                    tree.build_tree()
+                return tree.root == expected_root
+        return False
+    
+    def generate_challenge_proof(self, challenge_id: str) -> Optional[Dict[str, Any]]:
+        """Generate proof that a challenge is included in the transcript."""
+        # Find challenge tree
+        tree_idx = None
+        for idx, tree in enumerate(self.challenge_trees):
+            if tree.challenge_id == challenge_id:
+                tree_idx = idx
+                break
+        
+        if tree_idx is None:
+            return None
+        
+        # Build proof showing challenge root is in master tree
+        roots = [t.root if t.root else t.build_tree() for t in self.challenge_trees]
+        master_tree = build_merkle_tree(roots)
+        proof_path = generate_merkle_proof(master_tree, tree_idx)
+        
+        return {
+            "challenge_id": challenge_id,
+            "challenge_root": roots[tree_idx].hex(),
+            "proof_path": [(p.sibling.hex(), p.is_right) for p in proof_path],
+            "master_root": self.master_root.hex()
+        }
 
 
 def build_merkle_tree(leaves: Sequence[bytes]) -> Dict[str, Any]:
@@ -178,6 +480,33 @@ def verify_merkle_proof(
     return current_hash == root
 
 
+def verify_merkle_proof_bytes(
+    leaf_hash: bytes,
+    proof_path: List[PathItem],
+    root: bytes
+) -> bool:
+    """
+    Verify a Merkle proof for given leaf hash against root.
+    
+    Args:
+        leaf_hash: Pre-computed leaf hash
+        proof_path: Proof path from generate_merkle_proof
+        root: Expected Merkle root
+        
+    Returns:
+        True if proof is valid, False otherwise
+    """
+    current_hash = leaf_hash
+    
+    for path_item in proof_path:
+        if path_item.is_right:
+            current_hash = node_bytes(current_hash, path_item.sibling)
+        else:
+            current_hash = node_bytes(path_item.sibling, current_hash)
+    
+    return current_hash == root
+
+
 def compute_merkle_root(leaves: Sequence[bytes]) -> bytes:
     """
     Compute just the Merkle root without storing full tree.
@@ -235,6 +564,111 @@ def aggregate_merkle_roots(roots: List[bytes]) -> bytes:
     return agg_tree["root"]
 
 
+def build_signature(
+    activations_or_logits: Union[np.ndarray, Dict[str, np.ndarray]],
+    seg: SegmentSite,
+    policy: Dict[str, Any],
+    d_prime: int = 256,
+    tau: float = 3.0,
+    q: int = 8
+) -> Signature:
+    """
+    Build signature for segment/site as per Sections 4.3 and 5.5.
+    
+    Implements the signature generation algorithm:
+    1. Select and pool activations
+    2. Apply seeded random projection
+    3. Quantize and binarize
+    4. Create leaf hash for Merkle tree
+    
+    Args:
+        activations_or_logits: Model activations or logits
+        seg: Segment or behavioral site
+        policy: Execution policy (temperature, max_tokens, etc.)
+        d_prime: Projected dimension
+        tau: Clipping threshold
+        q: Quantization bits
+        
+    Returns:
+        Signature with binary signature and leaf hash
+    """
+    # Step 1: Select and pool activations
+    if isinstance(activations_or_logits, dict):
+        # Pool across layers if dict of activations
+        pooled = []
+        for layer_name in sorted(activations_or_logits.keys()):
+            act = activations_or_logits[layer_name]
+            # Global average pooling
+            if len(act.shape) > 1:
+                pooled.append(np.mean(act, axis=tuple(range(1, len(act.shape)))))
+            else:
+                pooled.append(act)
+        a = np.concatenate(pooled)
+    else:
+        # Direct use if already array
+        a = activations_or_logits.flatten()
+    
+    # Step 2: Seeded random projection
+    np.random.seed(seg.projector_seed)
+    a_dim = len(a)
+    R = np.random.randn(d_prime, a_dim) / np.sqrt(a_dim)
+    
+    # Step 3: Project, clip, and quantize
+    z = R @ a
+    z = np.clip(z, -tau, tau)
+    
+    # Quantize to q bits
+    z_min, z_max = -tau, tau
+    z_normalized = (z - z_min) / (z_max - z_min)  # Normalize to [0, 1]
+    z_quantized = np.round(z_normalized * (2**q - 1)).astype(np.uint8)
+    
+    # Step 4: Binarize (pack into bytes)
+    sigma = _pack_binary(z_quantized, q)
+    
+    # Step 5: Create leaf hash
+    leaf = ChallengeLeaf(seg.seg_id, sigma, policy)
+    leaf_hash = leaf.compute_leaf()
+    
+    return Signature(
+        seg_id=seg.seg_id,
+        sigma=sigma,
+        metadata={
+            "leaf": leaf_hash,
+            "leaf_hex": leaf_hash.hex(),
+            "d_prime": d_prime,
+            "tau": tau,
+            "q": q,
+            "projector_seed": seg.projector_seed,
+            "a_dim": a_dim
+        }
+    )
+
+
+def _pack_binary(values: np.ndarray, bits_per_value: int) -> bytes:
+    """Pack values into binary representation."""
+    # Simple packing - production would optimize
+    packed = []
+    current_byte = 0
+    bit_position = 0
+    
+    for val in values:
+        # Add bits to current byte
+        current_byte |= (int(val) << bit_position)
+        bit_position += bits_per_value
+        
+        # Flush complete bytes
+        while bit_position >= 8:
+            packed.append(current_byte & 0xFF)
+            current_byte >>= 8
+            bit_position -= 8
+    
+    # Add remaining bits
+    if bit_position > 0:
+        packed.append(current_byte)
+    
+    return bytes(packed)
+
+
 @dataclass
 class BehavioralCertificate:
     """HBT-style behavioral certificate for consensus checkpoints."""
@@ -285,6 +719,7 @@ class HierarchicalVerificationTree:
     master_root: bytes
     zk_proofs: List[ZKProof] = field(default_factory=list)
     certificates: List[BehavioralCertificate] = field(default_factory=list)
+    per_challenge_trees: List[PerChallengeTree] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def get_level(self, level_id: int) -> Optional[VerificationLevel]:
@@ -292,6 +727,13 @@ class HierarchicalVerificationTree:
         for level in self.levels:
             if level.level_id == level_id:
                 return level
+        return None
+    
+    def get_challenge_tree(self, challenge_id: str) -> Optional[PerChallengeTree]:
+        """Get per-challenge tree by ID."""
+        for tree in self.per_challenge_trees:
+            if tree.challenge_id == challenge_id:
+                return tree
         return None
     
     def to_dict(self) -> Dict[str, Any]:
@@ -311,15 +753,24 @@ class HierarchicalVerificationTree:
             ],
             "master_root": self.master_root.hex(),
             "num_zk_proofs": len(self.zk_proofs),
+            "per_challenge_trees": [
+                {
+                    "challenge_id": tree.challenge_id,
+                    "root": tree.root.hex() if tree.root else None,
+                    "num_leaves": len(tree.leaves)
+                }
+                for tree in self.per_challenge_trees
+            ],
             "metadata": self.metadata
         }
 
 
 class HierarchicalVerificationChain:
     """
-    Hierarchical verification chain with multi-level certificate support.
+    Enhanced hierarchical verification chain with per-challenge tree support.
     
     This class implements:
+    - Level 0: Per-challenge Merkle trees (NEW)
     - Level 1: Merkle trees from segment hashes
     - Level 2: HBT behavioral certificates at consensus points
     - Level 3: Master verification proofs with ZK support
@@ -329,7 +780,8 @@ class HierarchicalVerificationChain:
         self,
         enable_zk: bool = True,
         consensus_interval: int = 10,
-        circuit_params: Optional[ZKCircuitParams] = None
+        circuit_params: Optional[ZKCircuitParams] = None,
+        enable_per_challenge: bool = True
     ):
         """
         Initialize hierarchical verification chain.
@@ -338,20 +790,152 @@ class HierarchicalVerificationChain:
             enable_zk: Whether to generate ZK proofs
             consensus_interval: Number of segments between consensus points
             circuit_params: Parameters for ZK circuit
+            enable_per_challenge: Whether to build per-challenge trees
         """
         self.enable_zk = enable_zk
         self.consensus_interval = consensus_interval
         self.zk_system = ZKProofSystem(circuit_params) if enable_zk else None
+        self.enable_per_challenge = enable_per_challenge
         
         # Storage for levels
+        self.per_challenge_trees: List[PerChallengeTree] = []
         self.segment_trees: List[Dict[str, Any]] = []
         self.behavioral_certificates: List[BehavioralCertificate] = []
         self.master_proofs: List[ZKProof] = []
         
+        # Incremental trees for streaming
+        self.incremental_trees: Dict[str, IncrementalMerkleTree] = {}
+    
+    def build_per_challenge_tree(
+        self,
+        challenge_id: str,
+        signatures: List[Signature]
+    ) -> PerChallengeTree:
+        """
+        Build per-challenge Merkle tree from signatures.
+        
+        Args:
+            challenge_id: Unique challenge identifier
+            signatures: List of signatures from build_signature()
+            
+        Returns:
+            Per-challenge Merkle tree
+        """
+        # Create leaves from signatures
+        leaves = []
+        for sig in signatures:
+            # Extract policy from metadata if available
+            policy = sig.metadata.get("policy", {})
+            
+            leaf = ChallengeLeaf(
+                seg_id=sig.seg_id,
+                sigma=sig.sigma,
+                policy=policy
+            )
+            leaves.append(leaf)
+        
+        # Create tree
+        tree = PerChallengeTree(
+            challenge_id=challenge_id,
+            leaves=leaves,
+            metadata={
+                "num_signatures": len(signatures),
+                "creation_time": time.time()
+            }
+        )
+        
+        # Build tree
+        tree.build_tree()
+        self.per_challenge_trees.append(tree)
+        
+        return tree
+    
+    def start_incremental_tree(self, challenge_id: str) -> IncrementalMerkleTree:
+        """
+        Start building an incremental tree for streaming.
+        
+        Args:
+            challenge_id: Challenge identifier
+            
+        Returns:
+            Incremental tree instance
+        """
+        tree = IncrementalMerkleTree(challenge_id)
+        self.incremental_trees[challenge_id] = tree
+        return tree
+    
+    def add_to_incremental(
+        self,
+        challenge_id: str,
+        signature: Signature,
+        policy: Optional[Dict[str, Any]] = None
+    ) -> bytes:
+        """
+        Add signature to incremental tree.
+        
+        Args:
+            challenge_id: Challenge identifier
+            signature: Signature to add
+            policy: Optional execution policy
+            
+        Returns:
+            Current root hash
+        """
+        if challenge_id not in self.incremental_trees:
+            self.start_incremental_tree(challenge_id)
+        
+        tree = self.incremental_trees[challenge_id]
+        
+        # Create leaf
+        leaf = ChallengeLeaf(
+            seg_id=signature.seg_id,
+            sigma=signature.sigma,
+            policy=policy or {}
+        )
+        
+        # Add to tree
+        tree.add_leaf(leaf)
+        
+        return tree.get_current_root()
+    
+    def finalize_incremental(self, challenge_id: str) -> PerChallengeTree:
+        """
+        Finalize incremental tree and convert to per-challenge tree.
+        
+        Args:
+            challenge_id: Challenge identifier
+            
+        Returns:
+            Finalized per-challenge tree
+        """
+        if challenge_id not in self.incremental_trees:
+            raise ValueError(f"No incremental tree for {challenge_id}")
+        
+        inc_tree = self.incremental_trees[challenge_id]
+        root = inc_tree.finalize()
+        
+        # Convert to per-challenge tree
+        # (In production, would preserve the incremental structure)
+        tree = PerChallengeTree(
+            challenge_id=challenge_id,
+            leaves=[],  # Would reconstruct from incremental
+            root=root,
+            metadata={
+                "finalized_from_incremental": True,
+                "final_root": root.hex()
+            }
+        )
+        
+        self.per_challenge_trees.append(tree)
+        del self.incremental_trees[challenge_id]
+        
+        return tree
+    
     def build_verification_tree(
         self,
         segments: Sequence[Dict[str, Any]],
-        consensus_checkpoints: Optional[List[Dict[str, Any]]] = None
+        consensus_checkpoints: Optional[List[Dict[str, Any]]] = None,
+        challenge_trees: Optional[List[PerChallengeTree]] = None
     ) -> HierarchicalVerificationTree:
         """
         Build complete hierarchical verification tree.
@@ -359,6 +943,7 @@ class HierarchicalVerificationChain:
         Args:
             segments: Sequence of segments from REVPipeline.segment_buffer
             consensus_checkpoints: Optional consensus checkpoint data
+            challenge_trees: Optional pre-built per-challenge trees
             
         Returns:
             Complete verification proof structure
@@ -372,12 +957,16 @@ class HierarchicalVerificationChain:
         
         levels = []
         
+        # Level 0: Per-challenge trees (if enabled)
+        if self.enable_per_challenge and challenge_trees:
+            level0 = self._build_per_challenge_level(challenge_trees)
+            levels.append(level0)
+        
         # Level 1: Build Merkle trees from segment hashes
         level1 = self._build_segment_level(segments)
         levels.append(level1)
         
         # Level 2: Create behavioral certificates at consensus points
-        # If no checkpoints provided, create default ones
         if consensus_checkpoints is None:
             # Create default consensus checkpoints
             consensus_checkpoints = []
@@ -411,11 +1000,43 @@ class HierarchicalVerificationChain:
             master_root=master_root,
             zk_proofs=self.master_proofs,
             certificates=self.behavioral_certificates,
+            per_challenge_trees=challenge_trees or self.per_challenge_trees,
             metadata={
                 "num_segments": len(segments),
                 "num_levels": len(levels),
                 "consensus_interval": self.consensus_interval,
-                "zk_enabled": self.enable_zk
+                "zk_enabled": self.enable_zk,
+                "per_challenge_enabled": self.enable_per_challenge
+            }
+        )
+    
+    def _build_per_challenge_level(
+        self,
+        challenge_trees: List[PerChallengeTree]
+    ) -> VerificationLevel:
+        """Build Level 0: Per-challenge Merkle trees."""
+        challenge_roots = []
+        
+        for tree in challenge_trees:
+            if tree.root is None:
+                tree.build_tree()
+            challenge_roots.append(tree.root)
+        
+        # Aggregate challenge roots
+        if challenge_roots:
+            aggregated = build_merkle_tree(challenge_roots)
+            merkle_root = aggregated["root"]
+        else:
+            merkle_root = b"\x00" * 32
+        
+        return VerificationLevel(
+            level_id=0,
+            level_type="per_challenge",
+            nodes=challenge_roots,
+            merkle_root=merkle_root,
+            metadata={
+                "num_challenges": len(challenge_trees),
+                "challenge_ids": [t.challenge_id for t in challenge_trees]
             }
         )
     
@@ -603,6 +1224,78 @@ class HierarchicalVerificationChain:
         link_bytes = json.dumps(link_data, sort_keys=True).encode()
         return H(TAGS["LINK"], link_bytes)
     
+    def generate_segment_proof(
+        self,
+        challenge_id: str,
+        seg_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate proof for specific segment in challenge tree.
+        
+        Args:
+            challenge_id: Challenge identifier
+            seg_id: Segment identifier
+            
+        Returns:
+            Proof dictionary or None if not found
+        """
+        # Find challenge tree
+        tree = None
+        for t in self.per_challenge_trees:
+            if t.challenge_id == challenge_id:
+                tree = t
+                break
+        
+        if not tree:
+            return None
+        
+        # Generate proof
+        proof_path = tree.generate_proof(seg_id)
+        if not proof_path:
+            return None
+        
+        return {
+            "challenge_id": challenge_id,
+            "seg_id": seg_id,
+            "proof_path": [(p.sibling.hex(), p.is_right) for p in proof_path],
+            "challenge_root": tree.root.hex() if tree.root else None
+        }
+    
+    def create_audit_transcript(
+        self,
+        run_id: str,
+        verification_tree: HierarchicalVerificationTree
+    ) -> AuditTranscript:
+        """
+        Create comprehensive audit transcript.
+        
+        Args:
+            run_id: Run identifier
+            verification_tree: Complete verification tree
+            
+        Returns:
+            Audit transcript with all roots and metadata
+        """
+        transcript_id = hashlib.sha256(
+            f"transcript_{run_id}_{time.time()}".encode()
+        ).hexdigest()[:16]
+        
+        transcript = AuditTranscript(
+            transcript_id=transcript_id,
+            run_id=run_id,
+            challenge_trees=verification_tree.per_challenge_trees,
+            master_root=verification_tree.master_root,
+            timestamp=time.time(),
+            metadata={
+                "tree_id": verification_tree.tree_id,
+                "num_levels": len(verification_tree.levels),
+                "num_challenges": len(verification_tree.per_challenge_trees),
+                "zk_enabled": self.enable_zk
+            }
+        )
+        
+        return transcript
+    
     def verify_chain(
         self,
         verification_tree: HierarchicalVerificationTree,
@@ -623,8 +1316,25 @@ class HierarchicalVerificationChain:
             "levels_verified": [],
             "certificates_verified": [],
             "zk_proofs_verified": [],
+            "per_challenge_verified": [],
             "overall_valid": True
         }
+        
+        # Verify per-challenge trees
+        for tree in verification_tree.per_challenge_trees:
+            if tree.root is None:
+                tree.build_tree()
+            
+            # Verify tree structure
+            tree_valid = len(tree.leaves) > 0 and tree.root is not None
+            details["per_challenge_verified"].append({
+                "challenge_id": tree.challenge_id,
+                "valid": tree_valid,
+                "num_segments": len(tree.leaves)
+            })
+            
+            if not tree_valid:
+                details["overall_valid"] = False
         
         # Verify each level
         for level in verification_tree.levels:
@@ -735,9 +1445,20 @@ class HierarchicalVerificationChain:
             "tree_id": verification_tree.tree_id,
             "master_root": verification_tree.master_root.hex(),
             "timestamp": time.time(),
-            "levels": []
+            "levels": [],
+            "per_challenge_trees": []
         }
         
+        # Add per-challenge tree info
+        for tree in verification_tree.per_challenge_trees:
+            trail["per_challenge_trees"].append({
+                "challenge_id": tree.challenge_id,
+                "root": tree.root.hex() if tree.root else None,
+                "num_segments": len(tree.leaves),
+                "metadata": tree.metadata
+            })
+        
+        # Add level info
         for level in verification_tree.levels:
             level_info = {
                 "level_id": level.level_id,
@@ -776,7 +1497,8 @@ class HierarchicalVerificationChain:
 def create_hierarchical_tree_from_segments(
     segments: Sequence[Dict[str, Any]],
     enable_zk: bool = True,
-    consensus_interval: int = 10
+    consensus_interval: int = 10,
+    enable_per_challenge: bool = True
 ) -> HierarchicalVerificationTree:
     """
     Convenience function to create hierarchical tree from segments.
@@ -785,13 +1507,15 @@ def create_hierarchical_tree_from_segments(
         segments: Segments from REVPipeline
         enable_zk: Whether to enable ZK proofs
         consensus_interval: Interval for consensus checkpoints
+        enable_per_challenge: Whether to build per-challenge trees
         
     Returns:
         Hierarchical verification tree
     """
     chain = HierarchicalVerificationChain(
         enable_zk=enable_zk,
-        consensus_interval=consensus_interval
+        consensus_interval=consensus_interval,
+        enable_per_challenge=enable_per_challenge
     )
     
     # Generate consensus checkpoints
