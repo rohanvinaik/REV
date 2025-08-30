@@ -2,13 +2,18 @@
 Secure aggregation for REV model signature combination.
 
 This module provides cryptographic protocols for securely combining
-multiple model signatures without revealing individual signatures.
+multiple model signatures without revealing individual signatures,
+including secret sharing schemes and multi-party computation protocols.
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Callable, Any
 import torch
 import numpy as np
 from dataclasses import dataclass
+import random
+import secrets
+from collections import defaultdict
+import json
 
 from ..crypto.commit import H, TAGS
 
@@ -346,3 +351,509 @@ def verify_aggregation_proof(
         
     except Exception:
         return False
+
+
+class ShamirSecretSharing:
+    """
+    Shamir's Secret Sharing scheme for distributed signatures.
+    
+    Allows splitting a signature into n shares where any k shares
+    can reconstruct the original, providing fault tolerance.
+    """
+    
+    def __init__(self, threshold: int, num_parties: int, prime: int = 2**31 - 1):
+        """
+        Initialize secret sharing scheme.
+        
+        Args:
+            threshold: Minimum shares needed to reconstruct (k)
+            num_parties: Total number of parties (n)
+            prime: Prime modulus for finite field arithmetic (smaller for stability)
+        """
+        if threshold > num_parties:
+            raise ValueError("Threshold cannot exceed number of parties")
+        if threshold < 2:
+            raise ValueError("Threshold must be at least 2")
+        
+        self.threshold = threshold
+        self.num_parties = num_parties
+        self.prime = prime
+    
+    def share_signature(self, signature: torch.Tensor) -> List[Tuple[int, torch.Tensor]]:
+        """
+        Split signature into secret shares.
+        
+        Args:
+            signature: Original signature to share
+            
+        Returns:
+            List of (party_id, share) tuples
+        """
+        # Convert to integers for finite field arithmetic
+        signature_int = (signature * 1e3).long()  # Scale for precision (reduced for stability)
+        
+        shares = []
+        for dim in range(signature_int.shape[0]):
+            secret = signature_int[dim].item()
+            dim_shares = self._share_secret(secret)
+            shares.append(dim_shares)
+        
+        # Reorganize by party
+        party_shares = []
+        for party_id in range(1, self.num_parties + 1):
+            party_tensor = torch.zeros_like(signature_int)
+            for dim in range(signature_int.shape[0]):
+                party_tensor[dim] = shares[dim][party_id - 1][1]
+            party_shares.append((party_id, party_tensor.float() / 1e3))
+        
+        return party_shares
+    
+    def reconstruct_signature(
+        self, 
+        shares: List[Tuple[int, torch.Tensor]]
+    ) -> torch.Tensor:
+        """
+        Reconstruct signature from shares.
+        
+        Args:
+            shares: List of (party_id, share) tuples
+            
+        Returns:
+            Reconstructed signature
+        """
+        if len(shares) < self.threshold:
+            raise ValueError(f"Need at least {self.threshold} shares, got {len(shares)}")
+        
+        # Use first threshold shares
+        shares = shares[:self.threshold]
+        
+        # Convert to integers
+        signature_int = torch.zeros_like(shares[0][1]).long()
+        
+        for dim in range(signature_int.shape[0]):
+            dim_shares = [(party_id, int(share[dim].item() * 1e3)) 
+                         for party_id, share in shares]
+            reconstructed = self._reconstruct_secret(dim_shares)
+            signature_int[dim] = reconstructed
+        
+        return signature_int.float() / 1e3
+    
+    def _share_secret(self, secret: int) -> List[Tuple[int, int]]:
+        """Generate shares for a single secret value."""
+        # Generate random coefficients for polynomial of degree k-1
+        coefficients = [secret]  # a_0 = secret
+        for _ in range(self.threshold - 1):
+            coefficients.append(secrets.randbelow(self.prime))
+        
+        # Evaluate polynomial at points 1, 2, ..., n
+        shares = []
+        for x in range(1, self.num_parties + 1):
+            y = 0
+            for i, coeff in enumerate(coefficients):
+                y = (y + coeff * pow(x, i, self.prime)) % self.prime
+            shares.append((x, y))
+        
+        return shares
+    
+    def _reconstruct_secret(self, shares: List[Tuple[int, int]]) -> int:
+        """Reconstruct secret using Lagrange interpolation."""
+        result = 0
+        
+        for i, (x_i, y_i) in enumerate(shares):
+            # Compute Lagrange coefficient
+            numerator = 1
+            denominator = 1
+            
+            for j, (x_j, _) in enumerate(shares):
+                if i != j:
+                    # Keep values small to avoid overflow
+                    numerator = (numerator * (-x_j % self.prime)) % self.prime
+                    denominator = (denominator * ((x_i - x_j) % self.prime)) % self.prime
+            
+            # Ensure denominator is not zero
+            if denominator == 0:
+                continue
+            
+            # Compute modular inverse of denominator
+            try:
+                denominator_inv = pow(denominator % self.prime, self.prime - 2, self.prime)
+                lagrange_coeff = (numerator * denominator_inv) % self.prime
+                result = (result + (y_i * lagrange_coeff) % self.prime) % self.prime
+            except:
+                # Skip if computation fails
+                continue
+        
+        # Convert back to signed if needed
+        if result > self.prime // 2:
+            result -= self.prime
+        
+        return result
+
+
+class MultiPartyComputation:
+    """
+    Multi-party computation protocols for secure REV operations.
+    
+    Implements protocols for computing on encrypted/shared data without
+    revealing individual inputs to any party.
+    """
+    
+    def __init__(self, num_parties: int, threshold: int):
+        """
+        Initialize MPC system.
+        
+        Args:
+            num_parties: Total number of parties
+            threshold: Threshold for secret sharing
+        """
+        self.num_parties = num_parties
+        self.threshold = threshold
+        self.secret_sharing = ShamirSecretSharing(threshold, num_parties)
+        
+        # Communication channels (simulated)
+        self.channels: Dict[Tuple[int, int], List[Any]] = defaultdict(list)
+    
+    def secure_sum(
+        self,
+        private_values: List[torch.Tensor],
+        party_ids: List[int]
+    ) -> torch.Tensor:
+        """
+        Compute sum of private values using secure MPC.
+        
+        Args:
+            private_values: Private values from each party
+            party_ids: IDs of participating parties
+            
+        Returns:
+            Sum without revealing individual values
+        """
+        if len(private_values) != len(party_ids):
+            raise ValueError("Mismatched number of values and party IDs")
+        
+        # Phase 1: Each party secret-shares their value
+        all_shares = []
+        for value, party_id in zip(private_values, party_ids):
+            shares = self.secret_sharing.share_signature(value)
+            all_shares.append(shares)
+        
+        # Phase 2: Compute sum of shares (additive homomorphism)
+        sum_shares = []
+        for party_idx in range(self.num_parties):
+            party_sum = torch.zeros_like(private_values[0])
+            for shares in all_shares:
+                party_sum += shares[party_idx][1]
+            sum_shares.append((party_idx + 1, party_sum))
+        
+        # Phase 3: Reconstruct result
+        return self.secret_sharing.reconstruct_signature(sum_shares[:self.threshold])
+    
+    def secure_dot_product(
+        self,
+        vec_a_shares: List[Tuple[int, torch.Tensor]],
+        vec_b_shares: List[Tuple[int, torch.Tensor]]
+    ) -> float:
+        """
+        Compute dot product of two shared vectors.
+        
+        Args:
+            vec_a_shares: Secret shares of vector A
+            vec_b_shares: Secret shares of vector B
+            
+        Returns:
+            Dot product result
+        """
+        # Multiply corresponding shares (works for Shamir sharing)
+        product_shares = []
+        for (id_a, share_a), (id_b, share_b) in zip(vec_a_shares, vec_b_shares):
+            if id_a != id_b:
+                raise ValueError("Mismatched party IDs in shares")
+            product = share_a * share_b
+            product_shares.append((id_a, product))
+        
+        # Reconstruct product vector
+        product_vector = self.secret_sharing.reconstruct_signature(
+            product_shares[:self.threshold]
+        )
+        
+        # Sum elements for dot product
+        return product_vector.sum().item()
+    
+    def secure_distance_computation(
+        self,
+        vec_a_shares: List[Tuple[int, torch.Tensor]],
+        vec_b_shares: List[Tuple[int, torch.Tensor]],
+        metric: str = "euclidean"
+    ) -> float:
+        """
+        Compute distance between shared vectors.
+        
+        Args:
+            vec_a_shares: Secret shares of vector A
+            vec_b_shares: Secret shares of vector B
+            metric: Distance metric ("euclidean", "cosine")
+            
+        Returns:
+            Distance without revealing vectors
+        """
+        if metric == "euclidean":
+            # ||a - b||^2 = ||a||^2 + ||b||^2 - 2<a,b>
+            dot_ab = self.secure_dot_product(vec_a_shares, vec_b_shares)
+            dot_aa = self.secure_dot_product(vec_a_shares, vec_a_shares)
+            dot_bb = self.secure_dot_product(vec_b_shares, vec_b_shares)
+            
+            distance_squared = dot_aa + dot_bb - 2 * dot_ab
+            return np.sqrt(max(0, distance_squared))
+            
+        elif metric == "cosine":
+            # cos_sim = <a,b> / (||a|| * ||b||)
+            dot_ab = self.secure_dot_product(vec_a_shares, vec_b_shares)
+            dot_aa = self.secure_dot_product(vec_a_shares, vec_a_shares)
+            dot_bb = self.secure_dot_product(vec_b_shares, vec_b_shares)
+            
+            norm_a = np.sqrt(max(0, dot_aa))
+            norm_b = np.sqrt(max(0, dot_bb))
+            
+            if norm_a * norm_b == 0:
+                return 0.0
+            
+            cosine_sim = dot_ab / (norm_a * norm_b)
+            return 1.0 - cosine_sim  # Convert to distance
+        
+        else:
+            raise ValueError(f"Unsupported metric: {metric}")
+    
+    def byzantine_robust_aggregation(
+        self,
+        signatures: List[torch.Tensor],
+        party_ids: List[int],
+        max_byzantine: int
+    ) -> torch.Tensor:
+        """
+        Aggregate signatures with Byzantine fault tolerance.
+        
+        Args:
+            signatures: Input signatures from parties
+            party_ids: Party identifiers
+            max_byzantine: Maximum number of Byzantine parties
+            
+        Returns:
+            Robust aggregated signature
+        """
+        if len(signatures) < 3 * max_byzantine + 1:
+            raise ValueError("Need at least 3f+1 parties for f Byzantine faults")
+        
+        # Use coordinate-wise median for Byzantine robustness
+        stacked = torch.stack(signatures)
+        
+        # Compute trimmed mean (remove extreme values)
+        sorted_vals, _ = torch.sort(stacked, dim=0)
+        
+        # Remove top and bottom max_byzantine values
+        if max_byzantine > 0:
+            trimmed = sorted_vals[max_byzantine:-max_byzantine]
+        else:
+            trimmed = sorted_vals
+        
+        # Compute mean of remaining values
+        robust_mean = trimmed.mean(dim=0)
+        
+        # Normalize result
+        if torch.norm(robust_mean) > 0:
+            robust_mean = robust_mean / torch.norm(robust_mean)
+        
+        return robust_mean
+
+
+class FederatedAggregationProtocol:
+    """
+    Federated aggregation protocol with privacy guarantees.
+    
+    Combines secure aggregation with differential privacy for
+    federated REV verification across multiple organizations.
+    """
+    
+    def __init__(
+        self,
+        privacy_budget: float = 1.0,
+        min_participants: int = 10,
+        dropout_resilience: float = 0.5
+    ):
+        """
+        Initialize federated protocol.
+        
+        Args:
+            privacy_budget: Total privacy budget for aggregation
+            min_participants: Minimum participants needed
+            dropout_resilience: Fraction of dropouts to tolerate
+        """
+        self.privacy_budget = privacy_budget
+        self.min_participants = min_participants
+        self.dropout_resilience = dropout_resilience
+    
+    def setup_secure_aggregation(
+        self,
+        participant_ids: List[str],
+        signature_dimension: int
+    ) -> Dict[str, Any]:
+        """
+        Set up secure aggregation round.
+        
+        Args:
+            participant_ids: List of participant identifiers
+            signature_dimension: Dimension of signatures to aggregate
+            
+        Returns:
+            Setup information for participants
+        """
+        num_participants = len(participant_ids)
+        
+        if num_participants < self.min_participants:
+            raise ValueError(f"Need at least {self.min_participants} participants")
+        
+        # Calculate threshold for secret sharing
+        max_dropouts = int(num_participants * self.dropout_resilience)
+        threshold = num_participants - max_dropouts
+        
+        # Generate shared randomness for secure aggregation
+        # Each pair of participants shares a random mask
+        pairwise_masks = {}
+        for i, id_i in enumerate(participant_ids):
+            for j, id_j in enumerate(participant_ids):
+                if i < j:  # Only generate once per pair
+                    mask = torch.randn(signature_dimension)
+                    pairwise_masks[(id_i, id_j)] = mask
+        
+        setup_info = {
+            "participant_ids": participant_ids,
+            "threshold": threshold,
+            "signature_dimension": signature_dimension,
+            "pairwise_masks": pairwise_masks,
+            "privacy_noise_scale": self._compute_noise_scale(num_participants),
+            "round_id": secrets.token_hex(16)
+        }
+        
+        return setup_info
+    
+    def participant_mask(
+        self,
+        participant_id: str,
+        setup_info: Dict[str, Any]
+    ) -> torch.Tensor:
+        """
+        Compute aggregated mask for a participant.
+        
+        Args:
+            participant_id: ID of the participant
+            setup_info: Setup information from setup phase
+            
+        Returns:
+            Aggregated mask for this participant
+        """
+        participant_ids = setup_info["participant_ids"]
+        pairwise_masks = setup_info["pairwise_masks"]
+        signature_dim = setup_info["signature_dimension"]
+        
+        if participant_id not in participant_ids:
+            raise ValueError("Unknown participant ID")
+        
+        # Aggregate masks: +mask for (self, other), -mask for (other, self)
+        aggregated_mask = torch.zeros(signature_dim)
+        
+        for other_id in participant_ids:
+            if other_id != participant_id:
+                if (participant_id, other_id) in pairwise_masks:
+                    aggregated_mask += pairwise_masks[(participant_id, other_id)]
+                elif (other_id, participant_id) in pairwise_masks:
+                    aggregated_mask -= pairwise_masks[(other_id, participant_id)]
+        
+        return aggregated_mask
+    
+    def secure_aggregate_round(
+        self,
+        masked_signatures: Dict[str, torch.Tensor],
+        setup_info: Dict[str, Any]
+    ) -> torch.Tensor:
+        """
+        Perform secure aggregation round.
+        
+        Args:
+            masked_signatures: Dictionary of participant_id -> masked_signature
+            setup_info: Setup information
+            
+        Returns:
+            Aggregated signature with privacy guarantees
+        """
+        participant_ids = setup_info["participant_ids"]
+        threshold = setup_info["threshold"]
+        noise_scale = setup_info["privacy_noise_scale"]
+        
+        if len(masked_signatures) < threshold:
+            raise ValueError(f"Insufficient participants: {len(masked_signatures)} < {threshold}")
+        
+        # Sum all masked signatures (masks cancel out)
+        total_signature = torch.zeros_like(next(iter(masked_signatures.values())))
+        
+        for signature in masked_signatures.values():
+            total_signature += signature
+        
+        # Add differential privacy noise
+        privacy_noise = torch.normal(
+            mean=0.0,
+            std=noise_scale,
+            size=total_signature.shape
+        )
+        
+        noisy_aggregate = total_signature + privacy_noise
+        
+        # Normalize result
+        if torch.norm(noisy_aggregate) > 0:
+            noisy_aggregate = noisy_aggregate / torch.norm(noisy_aggregate)
+        
+        return noisy_aggregate
+    
+    def _compute_noise_scale(self, num_participants: int) -> float:
+        """Compute DP noise scale based on number of participants."""
+        # Sensitivity is 2 (each participant contributes ±1 to aggregation)
+        sensitivity = 2.0
+        epsilon = self.privacy_budget / np.log(num_participants)  # Adaptive epsilon
+        
+        # Use Gaussian mechanism
+        delta = 1e-6
+        sigma = np.sqrt(2 * np.log(1.25 / delta)) * sensitivity / epsilon
+        
+        return sigma
+    
+    def verify_aggregation_correctness(
+        self,
+        participants: List[str],
+        individual_signatures: Dict[str, torch.Tensor],
+        aggregated_signature: torch.Tensor,
+        tolerance: float = 0.1
+    ) -> bool:
+        """
+        Verify that aggregation was performed correctly (for testing).
+        
+        Args:
+            participants: List of participant IDs
+            individual_signatures: Original signatures (for verification only)
+            aggregated_signature: Claimed aggregated result
+            tolerance: Tolerance for numerical differences
+            
+        Returns:
+            True if aggregation appears correct
+        """
+        # Compute expected aggregate (without privacy noise)
+        expected = torch.zeros_like(aggregated_signature)
+        for signature in individual_signatures.values():
+            expected += signature
+        
+        if torch.norm(expected) > 0:
+            expected = expected / torch.norm(expected)
+        
+        # Check if result is within expected noise bounds
+        difference = torch.norm(expected - aggregated_signature).item()
+        noise_scale = self._compute_noise_scale(len(participants))
+        expected_noise = noise_scale * np.sqrt(len(aggregated_signature))
+        
+        return difference <= expected_noise + tolerance

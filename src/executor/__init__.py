@@ -7,20 +7,46 @@ from .segment_runner import (
 )
 
 from .parallel_pipeline import (
-    ParallelVerificationPipeline,
-    ParallelConfig,
-    VerificationTask,
-    ParallelResult,
-    ThreadSafeResourceManager
+    ParallelPipeline,
+    PipelineConfig,
+    MemoryConfig,
+    GPUConfig,
+    OptimizationConfig,
+    SegmentTask,
+    TaskResult,
+    MemoryManager,
+    WorkStealingQueue,
+    ResourceMonitor,
+    ProgressTracker,
+    BatchProcessor,
+    TaskPriority,
+    TaskStatus,
+    ExecutionMode,
+    Segment,
+    create_pipeline,
+    process_segments_parallel
 )
 
 __all__ = [
     "SegmentRunner",
     "SegmentConfig", 
     "KVCache",
-    "ParallelVerificationPipeline",
-    "ParallelConfig",
-    "VerificationTask",
-    "ParallelResult",
-    "ThreadSafeResourceManager"
+    "ParallelPipeline",
+    "PipelineConfig",
+    "MemoryConfig",
+    "GPUConfig",
+    "OptimizationConfig",
+    "SegmentTask",
+    "TaskResult",
+    "MemoryManager",
+    "WorkStealingQueue",
+    "ResourceMonitor",
+    "ProgressTracker",
+    "BatchProcessor",
+    "TaskPriority",
+    "TaskStatus",
+    "ExecutionMode",
+    "Segment",
+    "create_pipeline",
+    "process_segments_parallel"
 ]

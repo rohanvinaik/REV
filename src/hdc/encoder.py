@@ -1,21 +1,42 @@
-"""Hyperdimensional Computing Encoder for REV verification."""
+"""Hyperdimensional Computing Encoder for REV verification.
+
+Implements Semantic Hypervector encoding from Section 6 of the REV paper,
+integrating GenomeVault's HDC architecture with optimizations.
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Union, List, Tuple, Literal
+from typing import Dict, Optional, Union, List, Tuple, Literal, Any
 import logging
+import hashlib
+import struct
+import os
+from functools import lru_cache
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
+try:
+    import pyblake2
+    BLAKE2B_AVAILABLE = True
+except ImportError:
+    BLAKE2B_AVAILABLE = False
+    
 logger = logging.getLogger(__name__)
 
 # Constants for REV and HBT HDC implementation
 DEFAULT_DIMENSION = 10000  # 10K dimensional vectors as mentioned in REV paper
 HBT_DIMENSION = 16384      # 16K dimensional vectors for HBT standard
 MAX_DIMENSION = 100000     # Up to 100K as mentioned in REV paper
+MIN_DIMENSION = 8000       # 8K minimum as per Section 6
+
+# Optimization constants
+LUT_BITS = 16              # 16-bit LUT for popcount acceleration
+SIMD_THRESHOLD = 1024      # Use SIMD for vectors larger than this
+BATCH_SIZE = 32            # Default batch processing size
+BIT_PACK_THRESHOLD = 32000 # Use bit-packing for dimensions above this
 
 TensorLike = Union[np.ndarray, torch.Tensor]
 EncodingMode = Literal["rev", "hbt", "hybrid"]
@@ -42,7 +63,14 @@ class HypervectorConfig:
     quantization_bits: int = 8
     similarity_threshold: float = 0.85
     variance_threshold: float = 0.01  # For variance-aware encoding
-    multi_scale: bool = False  # Enable multi-scale zoom levels
+    multi_scale: bool = True  # Enable multi-scale zoom levels
+    use_blake2b: bool = True  # Use BLAKE2b for stable feature encoding
+    enable_lut: bool = True  # Enable LUT acceleration
+    enable_simd: bool = True  # Enable SIMD operations
+    bit_packed: bool = False  # Use bit-packed storage
+    batch_size: int = BATCH_SIZE
+    privacy_mode: bool = False  # Enable privacy-preserving features
+    homomorphic_friendly: bool = False  # Use homomorphic-friendly operations
 
 
 class HypervectorEncoder:
@@ -57,12 +85,16 @@ class HypervectorEncoder:
 
     def __init__(self, config: Optional[HypervectorConfig] = None) -> None:
         """
-        Initialize HDC encoder for REV/HBT.
+        Initialize HDC encoder for REV/HBT with optimizations.
         
         Args:
             config: Configuration for hypervector encoding
         """
         self.config = config or HypervectorConfig()
+        
+        # Validate dimension
+        if not MIN_DIMENSION <= self.config.dimension <= MAX_DIMENSION:
+            raise ValueError(f"Dimension must be between {MIN_DIMENSION} and {MAX_DIMENSION}")
         
         # Adjust dimension based on encoding mode
         if self.config.encoding_mode == "hbt":
@@ -72,6 +104,11 @@ class HypervectorEncoder:
             self.rev_dimension = self.config.dimension
             self.hbt_dimension = HBT_DIMENSION
             self.config.dimension = self.rev_dimension + self.hbt_dimension
+        
+        # Check BLAKE2b availability
+        if self.config.use_blake2b and not BLAKE2B_AVAILABLE:
+            logger.warning("BLAKE2b not available, falling back to SHA256")
+            self.config.use_blake2b = False
         
         # Ensure reproducibility for REV/HBT verification
         if self.config.seed is None:
@@ -84,7 +121,12 @@ class HypervectorEncoder:
         self._projection_cache: Dict[str, torch.Tensor] = {}
         self._variance_cache: Dict[str, torch.Tensor] = {}
         self._zoom_levels: Dict[ZoomLevel, Dict] = {}
+        self._feature_cache: Dict[str, np.ndarray] = {}
+        self._lut_table: Optional[np.ndarray] = None
+        
         self._initialize_projections()
+        self._initialize_optimizations()
+        self._initialize_privacy_features()
 
     def _initialize_projections(self) -> None:
         """Initialize projection matrices for encoding"""
@@ -127,6 +169,402 @@ class HypervectorEncoder:
         Q, _ = torch.qr(A)
         
         self._projection_cache["base"] = Q[0]  # Use first row as base projection
+    
+    def _initialize_optimizations(self) -> None:
+        """Initialize optimization features for fast encoding."""
+        # Initialize 16-bit LUT for popcount acceleration
+        if self.config.enable_lut:
+            self._init_popcount_lut()
+        
+        # Initialize SIMD helpers if available
+        if self.config.enable_simd:
+            self._check_simd_availability()
+        
+        # Initialize bit-packing structures
+        if self.config.bit_packed and self.config.dimension > BIT_PACK_THRESHOLD:
+            self._init_bit_packing()
+    
+    def _init_popcount_lut(self) -> None:
+        """Initialize 16-bit lookup table for fast popcount."""
+        self._lut_table = np.zeros(2**LUT_BITS, dtype=np.uint16)
+        for i in range(2**LUT_BITS):
+            self._lut_table[i] = bin(i).count('1')
+        logger.info(f"Initialized {LUT_BITS}-bit LUT for popcount acceleration")
+    
+    def _check_simd_availability(self) -> None:
+        """Check and log SIMD availability."""
+        try:
+            # Check for AVX support in numpy
+            import io
+            import sys
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            np.__config__.show()
+            config_str = sys.stdout.getvalue()
+            sys.stdout = old_stdout
+            
+            if 'avx' in config_str.lower() or 'neon' in config_str.lower():
+                self._simd_available = True
+                logger.info("SIMD operations available")
+            else:
+                self._simd_available = False
+        except:
+            self._simd_available = False
+    
+    def _init_bit_packing(self) -> None:
+        """Initialize bit-packing for memory efficiency."""
+        self._bits_per_element = self.config.quantization_bits if self.config.quantize else 1
+        self._packed_size = (self.config.dimension * self._bits_per_element + 7) // 8
+        logger.info(f"Bit-packing enabled: {self.config.dimension} dims -> {self._packed_size} bytes")
+    
+    def _initialize_privacy_features(self) -> None:
+        """Initialize privacy-preserving mechanisms."""
+        if self.config.privacy_mode:
+            # Initialize distributed representation parameters
+            self._noise_scale = 0.1  # Differential privacy noise
+            self._split_factor = 4  # Split vector into 4 parts for distributed encoding
+            
+            # Initialize homomorphic-friendly parameters
+            if self.config.homomorphic_friendly:
+                self._init_homomorphic_params()
+    
+    def _init_homomorphic_params(self) -> None:
+        """Initialize parameters for homomorphic operations."""
+        # Use power-of-2 dimensions for efficient homomorphic ops
+        self._he_modulus = 2**16  # 16-bit modulus for homomorphic operations
+        self._he_scale = 1000  # Scaling factor for fixed-point arithmetic
+        logger.info("Initialized homomorphic-friendly parameters")
+    
+    def blake2b_hash(self, data: Union[str, bytes], output_size: int = 64) -> bytes:
+        """
+        Use BLAKE2b for stable feature encoding.
+        
+        Args:
+            data: Input data to hash
+            output_size: Output size in bytes
+            
+        Returns:
+            Hash digest
+        """
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        
+        if BLAKE2B_AVAILABLE and self.config.use_blake2b:
+            h = pyblake2.blake2b(data, digest_size=output_size)
+            return h.digest()
+        else:
+            # Fallback to SHA256
+            h = hashlib.sha256(data)
+            return h.digest()[:output_size]
+    
+    @lru_cache(maxsize=1024)
+    def encode_feature(self, feature: str, zoom_level: ZoomLevel = "token_window") -> np.ndarray:
+        """
+        Encode a feature using BLAKE2b hashing for stability.
+        
+        Args:
+            feature: Feature string to encode
+            zoom_level: Hierarchical zoom level
+            
+        Returns:
+            High-dimensional feature vector
+        """
+        # Generate stable hash
+        feature_hash = self.blake2b_hash(f"{feature}:{zoom_level}")
+        
+        # Convert hash to vector indices
+        vector = np.zeros(self.config.dimension)
+        
+        # Use hash to deterministically set sparse features
+        n_active = int(self.config.dimension * self.config.sparsity)
+        for i in range(n_active):
+            # Get position from hash
+            pos_bytes = self.blake2b_hash(feature_hash + struct.pack('I', i), 4)
+            position = struct.unpack('I', pos_bytes)[0] % self.config.dimension
+            
+            # Get value from hash (binary or continuous)
+            val_bytes = self.blake2b_hash(feature_hash + struct.pack('I', i + n_active), 4)
+            if self.config.quantize:
+                value = 1.0 if struct.unpack('I', val_bytes)[0] % 2 == 0 else -1.0
+            else:
+                value = struct.unpack('f', val_bytes)[0]
+            
+            vector[position] = value
+        
+        if self.config.normalize:
+            norm = np.linalg.norm(vector)
+            if norm > 0:
+                vector = vector / norm
+        
+        return vector
+    
+    def encode_hierarchical(
+        self,
+        text: str,
+        return_all_levels: bool = False
+    ) -> Union[np.ndarray, Dict[ZoomLevel, np.ndarray]]:
+        """
+        Encode text at multiple hierarchical zoom levels.
+        
+        Args:
+            text: Input text to encode
+            return_all_levels: Return all zoom levels or just finest
+            
+        Returns:
+            Encoded vector(s) at different zoom levels
+        """
+        levels = {}
+        
+        # Corpus level - overall document statistics
+        levels["corpus"] = self.encode_feature(text[:100], "corpus")
+        
+        # Prompt level - full prompt encoding
+        levels["prompt"] = self.encode_feature(text, "prompt")
+        
+        # Span level - encode text spans
+        words = text.split()
+        span_vectors = []
+        for i in range(0, len(words), 10):  # 10-word spans
+            span = " ".join(words[i:i+10])
+            span_vectors.append(self.encode_feature(span, "span"))
+        if span_vectors:
+            levels["span"] = np.mean(span_vectors, axis=0)
+        else:
+            levels["span"] = levels["prompt"]
+        
+        # Token window level - fine-grained encoding
+        token_vectors = []
+        for i in range(0, len(words), 3):  # 3-word windows
+            window = " ".join(words[i:i+3])
+            token_vectors.append(self.encode_feature(window, "token_window"))
+        if token_vectors:
+            levels["token_window"] = np.mean(token_vectors, axis=0)
+        else:
+            levels["token_window"] = levels["span"]
+        
+        self._zoom_levels = levels
+        
+        if return_all_levels:
+            return levels
+        else:
+            return levels["token_window"]
+    
+    def batch_encode(
+        self,
+        texts: List[str],
+        zoom_level: ZoomLevel = "token_window"
+    ) -> np.ndarray:
+        """
+        Batch encode multiple texts efficiently.
+        
+        Args:
+            texts: List of texts to encode
+            zoom_level: Zoom level for encoding
+            
+        Returns:
+            Batch of encoded vectors
+        """
+        batch_size = min(len(texts), self.config.batch_size)
+        vectors = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+            batch_vectors = np.array([
+                self.encode_feature(text, zoom_level) for text in batch
+            ])
+            
+            # Apply SIMD optimizations if available
+            if self._simd_available and len(batch_vectors) > SIMD_THRESHOLD:
+                batch_vectors = self._simd_optimize(batch_vectors)
+            
+            vectors.append(batch_vectors)
+        
+        return np.vstack(vectors)
+    
+    def _simd_optimize(self, vectors: np.ndarray) -> np.ndarray:
+        """Apply SIMD optimizations to vector operations."""
+        # Use numpy's vectorized operations which leverage SIMD
+        return np.ascontiguousarray(vectors, dtype=np.float32)
+    
+    def popcount_hamming(self, a: np.ndarray, b: np.ndarray) -> int:
+        """
+        Fast Hamming distance using 16-bit LUT popcount.
+        
+        Args:
+            a: First binary vector
+            b: Second binary vector
+            
+        Returns:
+            Hamming distance
+        """
+        if not self.config.enable_lut or self._lut_table is None:
+            # Fallback to standard XOR + popcount
+            xor = np.bitwise_xor(a.astype(int), b.astype(int))
+            return np.sum(xor != 0)
+        
+        # Convert to binary representation
+        a_binary = (a > 0).astype(np.uint8)
+        b_binary = (b > 0).astype(np.uint8)
+        
+        # XOR
+        xor = np.bitwise_xor(a_binary, b_binary)
+        
+        # Pack into 16-bit chunks and use LUT
+        distance = 0
+        for i in range(0, len(xor), 16):
+            chunk = xor[i:min(i+16, len(xor))]
+            # Convert chunk to 16-bit integer
+            value = sum(bit << j for j, bit in enumerate(chunk))
+            distance += self._lut_table[value]
+        
+        return distance
+    
+    def bit_pack(self, vector: np.ndarray) -> bytes:
+        """
+        Pack vector into bits for memory efficiency.
+        
+        Args:
+            vector: Vector to pack
+            
+        Returns:
+            Bit-packed representation
+        """
+        if not self.config.bit_packed:
+            return vector.tobytes()
+        
+        # Quantize to binary
+        binary = (vector > 0).astype(np.uint8)
+        
+        # Pack bits
+        packed = bytearray()
+        for i in range(0, len(binary), 8):
+            byte = 0
+            for j in range(min(8, len(binary) - i)):
+                if binary[i + j]:
+                    byte |= (1 << j)
+            packed.append(byte)
+        
+        return bytes(packed)
+    
+    def bit_unpack(self, packed: bytes) -> np.ndarray:
+        """
+        Unpack bit-packed vector.
+        
+        Args:
+            packed: Bit-packed representation
+            
+        Returns:
+            Unpacked vector
+        """
+        if not self.config.bit_packed:
+            return np.frombuffer(packed, dtype=np.float32)
+        
+        # Unpack bits
+        binary = []
+        for byte in packed:
+            for j in range(8):
+                if len(binary) < self.config.dimension:
+                    binary.append(1.0 if byte & (1 << j) else -1.0)
+        
+        return np.array(binary[:self.config.dimension])
+    
+    def distributed_encode(self, data: str, n_shares: int = 4) -> List[np.ndarray]:
+        """
+        Create distributed representation for privacy.
+        
+        Args:
+            data: Data to encode
+            n_shares: Number of shares to create
+            
+        Returns:
+            List of share vectors that sum to original
+        """
+        if not self.config.privacy_mode:
+            return [self.encode_feature(data)]
+        
+        # Encode original
+        original = self.encode_feature(data)
+        
+        # Create shares with noise
+        shares = []
+        accumulated = np.zeros_like(original)
+        
+        for i in range(n_shares - 1):
+            # Add differential privacy noise
+            share = np.random.randn(*original.shape) * self._noise_scale
+            shares.append(share)
+            accumulated += share
+        
+        # Last share ensures sum equals original
+        shares.append(original - accumulated)
+        
+        return shares
+    
+    def homomorphic_encode(self, vector: np.ndarray) -> np.ndarray:
+        """
+        Encode vector for homomorphic operations.
+        
+        Args:
+            vector: Input vector
+            
+        Returns:
+            Homomorphic-friendly encoding
+        """
+        if not self.config.homomorphic_friendly:
+            return vector
+        
+        # Scale to integer domain
+        scaled = (vector * self._he_scale).astype(np.int32)
+        
+        # Apply modulus for ring operations
+        encoded = scaled % self._he_modulus
+        
+        return encoded
+    
+    def zero_knowledge_commit(self, vector: np.ndarray) -> Tuple[bytes, bytes]:
+        """
+        Create zero-knowledge commitment to vector.
+        
+        Args:
+            vector: Vector to commit to
+            
+        Returns:
+            Commitment and opening values
+        """
+        # Generate random blinding factor
+        r = os.urandom(32)
+        
+        # Create commitment: H(vector || r)
+        vector_bytes = vector.tobytes()
+        commitment = self.blake2b_hash(vector_bytes + r)
+        
+        # Opening is the random value
+        opening = r
+        
+        return commitment, opening
+    
+    def verify_zk_commitment(
+        self,
+        vector: np.ndarray,
+        commitment: bytes,
+        opening: bytes
+    ) -> bool:
+        """
+        Verify zero-knowledge commitment.
+        
+        Args:
+            vector: Claimed vector
+            commitment: Commitment to verify
+            opening: Opening value
+            
+        Returns:
+            True if commitment is valid
+        """
+        # Recompute commitment
+        vector_bytes = vector.tobytes()
+        expected = self.blake2b_hash(vector_bytes + opening)
+        
+        return commitment == expected
 
     def encode_sequence(self, sequence: List[float], sequence_id: str = "default") -> torch.Tensor:
         """

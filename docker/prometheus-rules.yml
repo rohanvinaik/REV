@@ -1,0 +1,349 @@
+groups:
+  # REV System Alerts
+  - name: rev_system_alerts
+    interval: 30s
+    rules:
+      # Service availability alerts
+      - alert: REVServiceDown
+        expr: up{job=~"rev-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "REV service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} has been down for more than 2 minutes"
+
+      - alert: HighServiceErrorRate
+        expr: |
+          (
+            sum by (service) (rate(rev_errors_total[5m]))
+            /
+            sum by (service) (rate(rev_requests_total[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate for {{ $labels.service }}"
+          description: "Error rate for {{ $labels.service }} is {{ $value | humanizePercentage }}"
+
+      # Performance alerts
+      - alert: HighVerificationLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(rev_verification_duration_seconds_bucket[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High verification latency detected"
+          description: "P99 verification latency is {{ $value }}s (threshold: 1s)"
+
+      - alert: LowThroughput
+        expr: |
+          sum(rate(rev_verifications_completed_total[5m])) < 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low verification throughput"
+          description: "System throughput is {{ $value }} verifications/sec (expected: >10)"
+
+      # Resource alerts
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_working_set_bytes{container=~"rev-.*"}
+            /
+            container_spec_memory_limit_bytes{container=~"rev-.*"}
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High memory usage for {{ $labels.container }}"
+          description: "Memory usage is {{ $value | humanizePercentage }} of limit"
+
+      - alert: HighCPUUsage
+        expr: |
+          rate(container_cpu_usage_seconds_total{container=~"rev-.*"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU usage for {{ $labels.container }}"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      - alert: GPUUtilizationHigh
+        expr: |
+          avg by (gpu_id, node) (DCGM_FI_DEV_GPU_UTIL) > 95
+        for: 10m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu_id }} utilization high"
+          description: "GPU {{ $labels.gpu_id }} on {{ $labels.node }} at {{ $value }}% utilization"
+
+  # HDC System Alerts
+  - name: hdc_alerts
+    interval: 30s
+    rules:
+      - alert: LowHDCSimilarity
+        expr: |
+          histogram_quantile(0.50,
+            rate(rev_hdc_similarity_bucket[5m])
+          ) < 0.7
+        for: 10m
+        labels:
+          severity: warning
+          component: hdc
+        annotations:
+          summary: "Low HDC similarity scores"
+          description: "Median HDC similarity is {{ $value }} (expected: >0.7)"
+
+      - alert: HighEncodingLatency
+        expr: |
+          rate(rev_hdc_encoding_duration_seconds_sum[5m])
+          /
+          rate(rev_hdc_encoding_duration_seconds_count[5m])
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: hdc
+        annotations:
+          summary: "High HDC encoding latency"
+          description: "Average encoding time is {{ $value }}s (threshold: 100ms)"
+
+      - alert: ErrorCorrectionFailures
+        expr: |
+          rate(rev_hdc_error_correction_failures_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          component: hdc
+        annotations:
+          summary: "HDC error correction failures"
+          description: "Error correction failure rate: {{ $value }}/sec"
+
+  # Consensus Alerts
+  - name: consensus_alerts
+    interval: 30s
+    rules:
+      - alert: ConsensusNodeDown
+        expr: |
+          count(up{job="rev-consensus"} == 1) < 3
+        for: 2m
+        labels:
+          severity: critical
+          component: consensus
+        annotations:
+          summary: "Insufficient consensus nodes"
+          description: "Only {{ $value }} consensus nodes available (minimum: 3)"
+
+      - alert: LowConsensusAgreement
+        expr: |
+          (
+            rate(rev_consensus_agreements_total[5m])
+            /
+            rate(rev_consensus_proposals_total[5m])
+          ) < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: consensus
+        annotations:
+          summary: "Low consensus agreement rate"
+          description: "Agreement rate is {{ $value | humanizePercentage }} (expected: >80%)"
+
+      - alert: ByzantineFaultDetected
+        expr: |
+          rate(rev_consensus_byzantine_faults_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: consensus
+        annotations:
+          summary: "Byzantine fault detected"
+          description: "Byzantine fault rate: {{ $value }}/sec"
+
+  # Database and Cache Alerts
+  - name: data_layer_alerts
+    interval: 30s
+    rules:
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          pg_stat_database_numbackends
+          /
+          pg_settings_max_connections
+          > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Connection pool utilization: {{ $value | humanizePercentage }}"
+
+      - alert: LowCacheHitRate
+        expr: |
+          rate(redis_keyspace_hits_total[5m])
+          /
+          (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
+          < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Low Redis cache hit rate"
+          description: "Cache hit rate: {{ $value | humanizePercentage }} (expected: >80%)"
+
+      - alert: HighQueueDepth
+        expr: |
+          sum by (queue) (rabbitmq_queue_messages) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High message queue depth"
+          description: "Queue {{ $labels.queue }} has {{ $value }} messages"
+
+  # SLO Violations
+  - name: slo_alerts
+    interval: 1m
+    rules:
+      - alert: AvailabilitySLOViolation
+        expr: |
+          (
+            sum(up{job=~"rev-.*"})
+            /
+            count(up{job=~"rev-.*"})
+          ) < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "Availability SLO violation"
+          description: "System availability is {{ $value | humanizePercentage }} (SLO: 99.9%)"
+
+      - alert: LatencySLOViolation
+        expr: |
+          histogram_quantile(0.99,
+            rate(rev_verification_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          slo: latency
+        annotations:
+          summary: "Latency SLO violation"
+          description: "P99 latency is {{ $value }}s (SLO: <500ms)"
+
+      - alert: ErrorRateSLOViolation
+        expr: |
+          (
+            sum(rate(rev_errors_total[5m]))
+            /
+            sum(rate(rev_requests_total[5m]))
+          ) > 0.001
+        for: 5m
+        labels:
+          severity: critical
+          slo: error_rate
+        annotations:
+          summary: "Error rate SLO violation"
+          description: "Error rate is {{ $value | humanizePercentage }} (SLO: <0.1%)"
+
+  # Security Alerts
+  - name: security_alerts
+    interval: 30s
+    rules:
+      - alert: UnauthorizedAccessAttempt
+        expr: |
+          rate(rev_auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "High rate of authentication failures"
+          description: "{{ $value }}/sec authentication failures detected"
+
+      - alert: AnomalousTrafficPattern
+        expr: |
+          (
+            abs(rate(traefik_service_requests_total[5m]) - 
+            avg_over_time(rate(traefik_service_requests_total[5m])[1h:5m]))
+            /
+            avg_over_time(rate(traefik_service_requests_total[5m])[1h:5m])
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Anomalous traffic pattern detected"
+          description: "Traffic deviation: {{ $value }}x normal"
+
+      - alert: PrivacyBudgetExhaustion
+        expr: |
+          rev_privacy_budget_remaining < 0.1
+        for: 1m
+        labels:
+          severity: critical
+          component: privacy
+        annotations:
+          summary: "Privacy budget near exhaustion"
+          description: "Remaining privacy budget: {{ $value }}"
+
+  # Infrastructure Alerts
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      - alert: DiskSpaceRunningLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+
+      - alert: NetworkLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(traefik_service_duration_seconds_bucket[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "High network latency"
+          description: "P99 network latency: {{ $value }}s"
+
+      - alert: CertificateExpiringSoon
+        expr: |
+          (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "Certificate expires in {{ $value }} days"

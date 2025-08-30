@@ -1,24 +1,37 @@
+#!/usr/bin/env python3
 """
 Unified REST API for REV/HBT verification system.
 
-This module provides a FastAPI-based REST API that supports multiple verification
-modes (fast REV, robust HBT, hybrid) with comprehensive results including Merkle
-proofs and behavioral certificates.
+This module provides a comprehensive FastAPI-based REST API that supports:
+- Intelligent mode selection based on latency/accuracy/memory constraints
+- Request queuing and prioritization
+- Synchronous and asynchronous operations
+- Result caching with TTL
+- Zero-knowledge proof generation
+- Merkle tree construction and verification
+- Contamination checking
+- Performance metrics collection
 """
 
-from typing import Dict, List, Optional, Any, Union, Literal
+from typing import Dict, List, Optional, Any, Union, Literal, AsyncIterator
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import time
 import hashlib
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from contextlib import asynccontextmanager
+from collections import deque
+import uuid
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+import psutil
+import numpy as np
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends, Query, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 import uvicorn
@@ -27,14 +40,17 @@ import uvicorn
 from ..rev_pipeline import REVPipeline, Segment
 from ..verifier.blackbox import BlackBoxVerifier, ModelProvider, APIConfig
 from ..verifier.streaming_consensus import StreamingConsensusVerifier, ConsensusMode
+from ..verifier.contamination import UnifiedContaminationDetector, DetectionMode
 from ..consensus.byzantine import ConsensusNetwork, ByzantineValidator
 from ..crypto.merkle import (
     HierarchicalVerificationChain,
     create_hierarchical_tree_from_segments
 )
+from ..crypto.zk_proofs import ZKProofSystem, ProofType
 from ..core.sequential import SequentialState
 from ..verifier.decision import Verdict
-from ..verifier.contamination import UnifiedContaminationDetector
+from ..hdc.encoder import HypervectorEncoder, HypervectorConfig
+from ..privacy.distance_zk_proofs import DistanceZKProofSystem
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +73,23 @@ class RequirementPriority(str, Enum):
     BALANCED = "balanced"
 
 
+class RequestPriority(str, Enum):
+    """Request queue priority."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class RequestStatus(str, Enum):
+    """Request processing status."""
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class VerificationRequest(BaseModel):
     """Request model for verification endpoint."""
     
@@ -71,11 +104,17 @@ class VerificationRequest(BaseModel):
     max_memory_mb: Optional[int] = Field(None, description="Maximum memory usage in MB")
     priority: RequirementPriority = Field(RequirementPriority.BALANCED, description="Optimization priority")
     
+    # Request handling
+    request_priority: RequestPriority = Field(RequestPriority.MEDIUM, description="Request queue priority")
+    async_execution: bool = Field(False, description="Execute asynchronously")
+    callback_url: Optional[str] = Field(None, description="Webhook URL for async results")
+    
     # Advanced options
     consensus_threshold: Optional[float] = Field(0.67, description="Consensus threshold for HBT mode")
     segment_size: Optional[int] = Field(512, description="Segment size for REV mode")
-    enable_zk_proofs: Optional[bool] = Field(True, description="Enable zero-knowledge proofs")
-    enable_contamination_check: Optional[bool] = Field(False, description="Check for contamination")
+    enable_zk_proofs: bool = Field(True, description="Enable zero-knowledge proofs")
+    enable_contamination_check: bool = Field(False, description="Check for contamination")
+    enable_streaming: bool = Field(False, description="Stream results as they're generated")
     
     # API configurations if needed
     api_configs: Optional[Dict[str, Dict[str, Any]]] = Field(None, description="API configurations for models")
@@ -90,6 +129,24 @@ class VerificationRequest(BaseModel):
     def validate_challenges(cls, v):
         if len(v) == 0:
             raise ValueError("At least one challenge is required")
+        if len(v) > 1000:
+            raise ValueError("Maximum 1000 challenges per request")
+        return v
+
+
+class BatchVerificationRequest(BaseModel):
+    """Request model for batch verification."""
+    
+    requests: List[VerificationRequest] = Field(..., description="List of verification requests")
+    batch_priority: RequestPriority = Field(RequestPriority.MEDIUM, description="Batch priority")
+    parallel_execution: bool = Field(True, description="Execute requests in parallel")
+    
+    @validator('requests')
+    def validate_batch_size(cls, v):
+        if len(v) == 0:
+            raise ValueError("At least one request required in batch")
+        if len(v) > 100:
+            raise ValueError("Maximum 100 requests per batch")
         return v
 
 
@@ -103,6 +160,7 @@ class PerformanceMetrics(BaseModel):
     consensus_rounds: Optional[int] = Field(None, description="Number of consensus rounds (HBT mode)")
     
     # Detailed timing
+    queue_time_ms: float = Field(0, description="Time spent in queue")
     verification_time_ms: float = Field(..., description="Core verification time")
     merkle_generation_time_ms: float = Field(..., description="Merkle tree generation time")
     zk_proof_time_ms: Optional[float] = Field(None, description="ZK proof generation time")
@@ -112,6 +170,16 @@ class PerformanceMetrics(BaseModel):
     network_bytes: int = Field(..., description="Network bytes transferred")
     cache_hits: int = Field(..., description="Cache hit count")
     cache_misses: int = Field(..., description="Cache miss count")
+
+
+class ZKProofInfo(BaseModel):
+    """Zero-knowledge proof information."""
+    
+    proof_type: str = Field(..., description="Type of ZK proof")
+    proof_data: str = Field(..., description="Proof data (base64)")
+    public_inputs: List[str] = Field(..., description="Public inputs")
+    verification_key: str = Field(..., description="Verification key")
+    timestamp: float = Field(..., description="Proof generation timestamp")
 
 
 class CertificateInfo(BaseModel):
@@ -129,21 +197,23 @@ class VerificationResponse(BaseModel):
     
     request_id: str = Field(..., description="Unique request identifier")
     timestamp: str = Field(..., description="ISO timestamp of verification")
-    mode_used: VerificationMode = Field(..., description="Actual mode used for verification")
+    status: RequestStatus = Field(..., description="Request status")
+    mode_used: Optional[VerificationMode] = Field(None, description="Actual mode used for verification")
     
     # Core results
-    verdict: str = Field(..., description="Verification verdict: accept/reject/uncertain")
-    confidence: float = Field(..., description="Confidence score (0-1)")
-    similarity_score: float = Field(..., description="Similarity score between models")
+    verdict: Optional[str] = Field(None, description="Verification verdict: accept/reject/uncertain")
+    confidence: Optional[float] = Field(None, description="Confidence score (0-1)")
+    similarity_score: Optional[float] = Field(None, description="Similarity score between models")
     
     # Merkle proofs and certificates
-    merkle_root: str = Field(..., description="Root hash of Merkle tree (hex)")
-    verification_tree_id: str = Field(..., description="Hierarchical verification tree ID")
+    merkle_root: Optional[str] = Field(None, description="Root hash of Merkle tree (hex)")
+    merkle_proof: Optional[List[str]] = Field(None, description="Merkle proof path")
+    verification_tree_id: Optional[str] = Field(None, description="Hierarchical verification tree ID")
     certificates: List[CertificateInfo] = Field(default_factory=list, description="Behavioral certificates")
-    zk_proofs: Optional[List[Dict[str, Any]]] = Field(None, description="Zero-knowledge proofs")
+    zk_proofs: Optional[List[ZKProofInfo]] = Field(None, description="Zero-knowledge proofs")
     
     # Performance metrics
-    metrics: PerformanceMetrics = Field(..., description="Performance metrics")
+    metrics: Optional[PerformanceMetrics] = Field(None, description="Performance metrics")
     
     # Detailed results
     segment_results: Optional[List[Dict[str, Any]]] = Field(None, description="Per-segment results")
@@ -151,38 +221,116 @@ class VerificationResponse(BaseModel):
     contamination_results: Optional[Dict[str, Any]] = Field(None, description="Contamination check results")
     
     # Mode selection reasoning
-    mode_selection_reason: str = Field(..., description="Reason for mode selection")
+    mode_selection_reason: Optional[str] = Field(None, description="Reason for mode selection")
     alternative_modes: List[Dict[str, Any]] = Field(default_factory=list, description="Alternative modes considered")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "request_id": "req_abc123",
-                "timestamp": "2024-01-01T00:00:00Z",
-                "mode_used": "hybrid",
-                "verdict": "accept",
-                "confidence": 0.95,
-                "similarity_score": 0.92,
-                "merkle_root": "0x1234567890abcdef",
-                "verification_tree_id": "tree_001",
-                "metrics": {
-                    "latency_ms": 1500,
-                    "memory_usage_mb": 256,
-                    "throughput_qps": 10
-                }
-            }
+    # Error information
+    error: Optional[str] = Field(None, description="Error message if failed")
+    error_details: Optional[Dict[str, Any]] = Field(None, description="Detailed error information")
+
+
+class RequestQueueItem:
+    """Item in the request queue."""
+    
+    def __init__(
+        self,
+        request_id: str,
+        request: VerificationRequest,
+        priority: RequestPriority,
+        timestamp: float,
+        future: asyncio.Future
+    ):
+        self.request_id = request_id
+        self.request = request
+        self.priority = priority
+        self.timestamp = timestamp
+        self.future = future
+        self.status = RequestStatus.QUEUED
+        self.result: Optional[VerificationResponse] = None
+    
+    def __lt__(self, other):
+        """Priority comparison for queue ordering."""
+        priority_order = {
+            RequestPriority.CRITICAL: 0,
+            RequestPriority.HIGH: 1,
+            RequestPriority.MEDIUM: 2,
+            RequestPriority.LOW: 3
+        }
+        if priority_order[self.priority] != priority_order[other.priority]:
+            return priority_order[self.priority] < priority_order[other.priority]
+        return self.timestamp < other.timestamp  # FIFO within same priority
+
+
+class ResultCache:
+    """Result cache with TTL support."""
+    
+    def __init__(self, default_ttl: int = 3600):
+        """
+        Initialize result cache.
+        
+        Args:
+            default_ttl: Default TTL in seconds
+        """
+        self.cache: Dict[str, tuple[VerificationResponse, float]] = {}
+        self.default_ttl = default_ttl
+        self.access_count: Dict[str, int] = {}
+    
+    def get(self, key: str) -> Optional[VerificationResponse]:
+        """Get cached result if not expired."""
+        if key in self.cache:
+            result, expiry = self.cache[key]
+            if time.time() < expiry:
+                self.access_count[key] = self.access_count.get(key, 0) + 1
+                return result
+            else:
+                del self.cache[key]
+        return None
+    
+    def set(self, key: str, result: VerificationResponse, ttl: Optional[int] = None):
+        """Set cached result with TTL."""
+        ttl = ttl or self.default_ttl
+        expiry = time.time() + ttl
+        self.cache[key] = (result, expiry)
+        self.access_count[key] = 0
+    
+    def clear_expired(self):
+        """Remove expired entries."""
+        current_time = time.time()
+        expired_keys = [
+            key for key, (_, expiry) in self.cache.items()
+            if current_time >= expiry
+        ]
+        for key in expired_keys:
+            del self.cache[key]
+            self.access_count.pop(key, None)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        self.clear_expired()
+        return {
+            "size": len(self.cache),
+            "total_accesses": sum(self.access_count.values()),
+            "hot_keys": sorted(
+                self.access_count.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )[:10]
         }
 
 
 class UnifiedVerificationAPI:
     """
-    Unified verification API supporting multiple modes.
+    Unified verification API supporting multiple modes with advanced features.
     
-    This class implements the core verification logic with support for:
-    - Fast REV mode using sequential testing
-    - Robust HBT mode using Byzantine consensus
-    - Hybrid mode combining both approaches
+    Features:
     - Automatic mode selection based on requirements
+    - Request queuing and prioritization
+    - Async/sync operation support
+    - Result caching with TTL
+    - Zero-knowledge proof generation
+    - Merkle tree construction and verification
+    - Contamination checking
+    - Performance metrics collection
     """
     
     def __init__(
@@ -190,7 +338,9 @@ class UnifiedVerificationAPI:
         rev_pipeline: Optional[REVPipeline] = None,
         blackbox_verifier: Optional[BlackBoxVerifier] = None,
         consensus_network: Optional[ConsensusNetwork] = None,
-        cache_results: bool = True
+        max_workers: int = 4,
+        queue_size: int = 1000,
+        cache_ttl: int = 3600
     ):
         """
         Initialize unified verification API.
@@ -199,12 +349,14 @@ class UnifiedVerificationAPI:
             rev_pipeline: REV pipeline for fast verification
             blackbox_verifier: Black-box verifier for API access
             consensus_network: Byzantine consensus network for HBT mode
-            cache_results: Whether to cache verification results
+            max_workers: Maximum concurrent workers
+            queue_size: Maximum queue size
+            cache_ttl: Cache TTL in seconds
         """
         self.rev_pipeline = rev_pipeline
         self.blackbox_verifier = blackbox_verifier
         self.consensus_network = consensus_network
-        self.cache_results = cache_results
+        self.max_workers = max_workers
         
         # Initialize components if not provided
         if self.rev_pipeline is None:
@@ -223,41 +375,172 @@ class UnifiedVerificationAPI:
                 fault_tolerance=1
             )
         
+        # ZK proof systems
+        self.zk_proof_system = ZKProofSystem()
+        self.distance_zk_system = DistanceZKProofSystem(dimension=8192)
+        
+        # Request queue and processing
+        self.request_queue: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=queue_size)
+        self.active_requests: Dict[str, RequestQueueItem] = {}
+        self.workers: List[asyncio.Task] = []
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        
         # Result cache
-        self.result_cache: Dict[str, VerificationResponse] = {}
+        self.result_cache = ResultCache(default_ttl=cache_ttl)
         
         # Performance tracking
-        self.request_count = 0
-        self.total_latency_ms = 0.0
+        self.metrics = {
+            "total_requests": 0,
+            "completed_requests": 0,
+            "failed_requests": 0,
+            "total_latency_ms": 0.0,
+            "cache_hits": 0,
+            "cache_misses": 0
+        }
         
+        # Start background workers
+        self._start_workers()
+    
     def _get_default_sites(self) -> List[Any]:
         """Get default architectural sites for probing."""
         # Simplified - would normally return actual sites
         return []
+    
+    def _start_workers(self):
+        """Start background worker tasks."""
+        for i in range(self.max_workers):
+            worker = asyncio.create_task(self._process_queue())
+            self.workers.append(worker)
+    
+    async def _process_queue(self):
+        """Process requests from the queue."""
+        while True:
+            try:
+                # Get next item from priority queue
+                _, item = await self.request_queue.get()
+                
+                # Update status
+                item.status = RequestStatus.PROCESSING
+                
+                # Process the request
+                try:
+                    result = await self._execute_verification(item.request, item.request_id)
+                    item.status = RequestStatus.COMPLETED
+                    item.result = result
+                    
+                    # Complete the future
+                    if not item.future.done():
+                        item.future.set_result(result)
+                    
+                    self.metrics["completed_requests"] += 1
+                    
+                except Exception as e:
+                    logger.error(f"Verification failed for {item.request_id}: {str(e)}")
+                    item.status = RequestStatus.FAILED
+                    
+                    error_response = VerificationResponse(
+                        request_id=item.request_id,
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                        status=RequestStatus.FAILED,
+                        error=str(e),
+                        error_details={"traceback": traceback.format_exc()}
+                    )
+                    
+                    if not item.future.done():
+                        item.future.set_exception(e)
+                    
+                    self.metrics["failed_requests"] += 1
+                
+                finally:
+                    # Remove from active requests
+                    self.active_requests.pop(item.request_id, None)
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Queue processing error: {str(e)}")
+                await asyncio.sleep(1)
     
     async def verify(
         self,
         request: VerificationRequest
     ) -> VerificationResponse:
         """
-        Main verification endpoint.
+        Main verification endpoint with queue support.
         
         Args:
             request: Verification request
             
         Returns:
-            Comprehensive verification response
+            Verification response or status
         """
-        start_time = time.perf_counter()
         request_id = self._generate_request_id()
+        self.metrics["total_requests"] += 1
         
         # Check cache
         cache_key = self._get_cache_key(request)
-        if self.cache_results and cache_key in self.result_cache:
+        cached_result = self.result_cache.get(cache_key)
+        if cached_result:
             logger.info(f"Cache hit for request {request_id}")
-            cached = self.result_cache[cache_key]
-            cached.request_id = request_id  # Update request ID
-            return cached
+            self.metrics["cache_hits"] += 1
+            cached_result.request_id = request_id
+            return cached_result
+        
+        self.metrics["cache_misses"] += 1
+        
+        # Create queue item
+        future = asyncio.Future()
+        queue_item = RequestQueueItem(
+            request_id=request_id,
+            request=request,
+            priority=request.request_priority,
+            timestamp=time.time(),
+            future=future
+        )
+        
+        # Add to active requests
+        self.active_requests[request_id] = queue_item
+        
+        # Add to queue
+        priority = self._get_priority_value(request.request_priority)
+        await self.request_queue.put((priority, queue_item))
+        
+        if request.async_execution:
+            # Return immediately with queued status
+            return VerificationResponse(
+                request_id=request_id,
+                timestamp=datetime.utcnow().isoformat() + "Z",
+                status=RequestStatus.QUEUED,
+                mode_selection_reason="Request queued for async processing"
+            )
+        else:
+            # Wait for completion
+            try:
+                result = await asyncio.wait_for(future, timeout=300)  # 5 min timeout
+                
+                # Cache the result
+                self.result_cache.set(cache_key, result)
+                
+                return result
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=status.HTTP_408_REQUEST_TIMEOUT,
+                    detail="Request timeout"
+                )
+    
+    async def _execute_verification(
+        self,
+        request: VerificationRequest,
+        request_id: str
+    ) -> VerificationResponse:
+        """Execute the actual verification."""
+        start_time = time.perf_counter()
+        queue_time = 0
+        
+        # Get queue time if available
+        if request_id in self.active_requests:
+            queue_item = self.active_requests[request_id]
+            queue_time = (time.time() - queue_item.timestamp) * 1000
         
         # Select verification mode
         mode_to_use, selection_reason = await self.select_mode(request)
@@ -280,12 +563,19 @@ class UnifiedVerificationAPI:
         # Add metadata
         result.request_id = request_id
         result.timestamp = datetime.utcnow().isoformat() + "Z"
+        result.status = RequestStatus.COMPLETED
         result.mode_used = mode_to_use
         result.mode_selection_reason = selection_reason
         
-        # Calculate final metrics
+        # Update metrics
         total_time = (time.perf_counter() - start_time) * 1000
         result.metrics.latency_ms = total_time
+        result.metrics.queue_time_ms = queue_time
+        
+        # Generate ZK proofs if requested
+        if request.enable_zk_proofs:
+            zk_proofs = await self._generate_zk_proofs(result)
+            result.zk_proofs = zk_proofs
         
         # Check for contamination if requested
         if request.enable_contamination_check:
@@ -296,15 +586,89 @@ class UnifiedVerificationAPI:
             )
             result.contamination_results = contamination_results
         
-        # Cache result
-        if self.cache_results:
-            self.result_cache[cache_key] = result
-        
-        # Update statistics
-        self.request_count += 1
-        self.total_latency_ms += total_time
+        # Update global metrics
+        self.metrics["total_latency_ms"] += total_time
         
         return result
+    
+    async def batch_verify(
+        self,
+        batch_request: BatchVerificationRequest
+    ) -> List[VerificationResponse]:
+        """
+        Process batch verification requests.
+        
+        Args:
+            batch_request: Batch of verification requests
+            
+        Returns:
+            List of verification responses
+        """
+        if batch_request.parallel_execution:
+            # Process in parallel
+            tasks = [
+                self.verify(req) for req in batch_request.requests
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Convert exceptions to error responses
+            responses = []
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    responses.append(VerificationResponse(
+                        request_id=f"batch_{i}",
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                        status=RequestStatus.FAILED,
+                        error=str(result)
+                    ))
+                else:
+                    responses.append(result)
+            
+            return responses
+        else:
+            # Process sequentially
+            responses = []
+            for req in batch_request.requests:
+                try:
+                    result = await self.verify(req)
+                    responses.append(result)
+                except Exception as e:
+                    responses.append(VerificationResponse(
+                        request_id=f"batch_{len(responses)}",
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                        status=RequestStatus.FAILED,
+                        error=str(e)
+                    ))
+            
+            return responses
+    
+    async def get_status(self, request_id: str) -> VerificationResponse:
+        """
+        Get status of a verification request.
+        
+        Args:
+            request_id: Request identifier
+            
+        Returns:
+            Current status and results if available
+        """
+        if request_id in self.active_requests:
+            item = self.active_requests[request_id]
+            
+            if item.result:
+                return item.result
+            else:
+                return VerificationResponse(
+                    request_id=request_id,
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                    status=item.status,
+                    mode_selection_reason=f"Request is {item.status.value}"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Request {request_id} not found"
+            )
     
     async def select_mode(
         self,
@@ -322,15 +686,20 @@ class UnifiedVerificationAPI:
         if request.mode != VerificationMode.AUTO:
             return request.mode, f"Explicitly requested {request.mode} mode"
         
+        # Get current system resources
+        memory_available = psutil.virtual_memory().available / (1024 * 1024)  # MB
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        
         # Analyze requirements
         has_latency_constraint = request.max_latency_ms is not None
         has_accuracy_constraint = request.min_accuracy is not None
         has_memory_constraint = request.max_memory_mb is not None
         
         # Estimate characteristics of each mode
-        rev_latency = len(request.challenges) * 50  # ~50ms per challenge
-        hbt_latency = len(request.challenges) * 200  # ~200ms with consensus
-        hybrid_latency = len(request.challenges) * 120  # Between the two
+        num_challenges = len(request.challenges)
+        rev_latency = num_challenges * 50  # ~50ms per challenge
+        hbt_latency = num_challenges * 200  # ~200ms with consensus
+        hybrid_latency = num_challenges * 120  # Between the two
         
         rev_accuracy = 0.85  # Baseline accuracy
         hbt_accuracy = 0.95  # Higher with consensus
@@ -342,65 +711,94 @@ class UnifiedVerificationAPI:
         
         # Score each mode
         scores = {}
+        reasons = {}
         
         # REV Fast mode
         rev_score = 0
+        rev_reasons = []
+        
         if has_latency_constraint and rev_latency <= request.max_latency_ms:
             rev_score += 3
+            rev_reasons.append(f"meets latency constraint ({rev_latency}ms <= {request.max_latency_ms}ms)")
+        
         if has_accuracy_constraint and rev_accuracy >= request.min_accuracy:
             rev_score += 2
+            rev_reasons.append(f"meets accuracy constraint ({rev_accuracy:.2f} >= {request.min_accuracy:.2f})")
+        
         if has_memory_constraint and rev_memory <= request.max_memory_mb:
             rev_score += 2
+            rev_reasons.append(f"meets memory constraint ({rev_memory}MB <= {request.max_memory_mb}MB)")
         
-        # Adjust for priority
+        if memory_available < hbt_memory:
+            rev_score += 2  # Prefer if low memory
+            rev_reasons.append(f"low system memory ({memory_available:.0f}MB available)")
+        
         if request.priority == RequirementPriority.LATENCY:
             rev_score += 5
+            rev_reasons.append("latency priority")
         elif request.priority == RequirementPriority.MEMORY:
             rev_score += 3
+            rev_reasons.append("memory priority")
         
         scores[VerificationMode.FAST] = rev_score
+        reasons[VerificationMode.FAST] = rev_reasons
         
         # HBT Robust mode
         hbt_score = 0
+        hbt_reasons = []
+        
         if has_latency_constraint and hbt_latency <= request.max_latency_ms:
             hbt_score += 1
+            hbt_reasons.append(f"meets latency constraint ({hbt_latency}ms <= {request.max_latency_ms}ms)")
+        
         if has_accuracy_constraint and hbt_accuracy >= request.min_accuracy:
             hbt_score += 5
+            hbt_reasons.append(f"meets accuracy constraint ({hbt_accuracy:.2f} >= {request.min_accuracy:.2f})")
+        
         if has_memory_constraint and hbt_memory <= request.max_memory_mb:
             hbt_score += 1
+            hbt_reasons.append(f"meets memory constraint ({hbt_memory}MB <= {request.max_memory_mb}MB)")
         
         if request.priority == RequirementPriority.ACCURACY:
             hbt_score += 5
+            hbt_reasons.append("accuracy priority")
         
         scores[VerificationMode.ROBUST] = hbt_score
+        reasons[VerificationMode.ROBUST] = hbt_reasons
         
         # Hybrid mode
         hybrid_score = 0
+        hybrid_reasons = []
+        
         if has_latency_constraint and hybrid_latency <= request.max_latency_ms:
             hybrid_score += 2
+            hybrid_reasons.append(f"meets latency constraint ({hybrid_latency}ms <= {request.max_latency_ms}ms)")
+        
         if has_accuracy_constraint and hybrid_accuracy >= request.min_accuracy:
             hybrid_score += 3
+            hybrid_reasons.append(f"meets accuracy constraint ({hybrid_accuracy:.2f} >= {request.min_accuracy:.2f})")
+        
         if has_memory_constraint and hybrid_memory <= request.max_memory_mb:
             hybrid_score += 2
+            hybrid_reasons.append(f"meets memory constraint ({hybrid_memory}MB <= {request.max_memory_mb}MB)")
         
         if request.priority == RequirementPriority.BALANCED:
             hybrid_score += 4
+            hybrid_reasons.append("balanced priority")
         
         scores[VerificationMode.HYBRID] = hybrid_score
+        reasons[VerificationMode.HYBRID] = hybrid_reasons
         
         # Select mode with highest score
         best_mode = max(scores, key=scores.get)
+        best_reasons = reasons[best_mode]
         
-        # Generate reason
-        if best_mode == VerificationMode.FAST:
-            reason = f"Fast mode selected for low latency ({rev_latency}ms estimated)"
-        elif best_mode == VerificationMode.ROBUST:
-            reason = f"Robust mode selected for high accuracy ({hbt_accuracy:.0%} estimated)"
+        # Generate comprehensive reason
+        reason = f"{best_mode.value.capitalize()} mode selected"
+        if best_reasons:
+            reason += f" ({', '.join(best_reasons)})"
         else:
-            reason = f"Hybrid mode selected for balanced performance"
-        
-        if request.priority != RequirementPriority.BALANCED:
-            reason += f" with {request.priority} priority"
+            reason += f" (default selection, score: {scores[best_mode]})"
         
         return best_mode, reason
     
@@ -408,15 +806,7 @@ class UnifiedVerificationAPI:
         self,
         request: VerificationRequest
     ) -> VerificationResponse:
-        """
-        Fast verification using REV sequential testing.
-        
-        Args:
-            request: Verification request
-            
-        Returns:
-            Verification response
-        """
+        """Fast verification using REV sequential testing."""
         start_time = time.perf_counter()
         
         # Initialize sequential state
@@ -426,7 +816,7 @@ class UnifiedVerificationAPI:
             tau_max=1.0
         )
         
-        # Process challenges through REV pipeline
+        # Process challenges
         segments = []
         segment_results = []
         
@@ -470,7 +860,7 @@ class UnifiedVerificationAPI:
                 "verdict": seq_state.get_decision().value
             })
         
-        # Generate Merkle tree and certificates
+        # Generate Merkle tree
         merkle_start = time.perf_counter()
         verification_tree = create_hierarchical_tree_from_segments(
             segments,
@@ -491,17 +881,20 @@ class UnifiedVerificationAPI:
             for cert in verification_tree.certificates
         ]
         
+        # Generate Merkle proof for root
+        merkle_proof = self._generate_merkle_proof(verification_tree, segments[-1])
+        
         # Calculate metrics
         total_time = (time.perf_counter() - start_time) * 1000
         
         metrics = PerformanceMetrics(
             latency_ms=total_time,
-            memory_usage_mb=256,  # Estimated
+            memory_usage_mb=psutil.Process().memory_info().rss / (1024 * 1024),
             throughput_qps=len(request.challenges) / (total_time / 1000),
             segments_processed=len(segments),
             verification_time_ms=total_time - merkle_time,
             merkle_generation_time_ms=merkle_time,
-            cpu_usage_percent=50.0,  # Estimated
+            cpu_usage_percent=psutil.cpu_percent(),
             network_bytes=len(json.dumps(segments)) * 2,
             cache_hits=0,
             cache_misses=len(request.challenges)
@@ -511,33 +904,27 @@ class UnifiedVerificationAPI:
         final_verdict = seq_state.get_decision()
         
         return VerificationResponse(
-            request_id="",  # Will be set by caller
-            timestamp="",  # Will be set by caller
+            request_id="",
+            timestamp="",
+            status=RequestStatus.COMPLETED,
             mode_used=VerificationMode.FAST,
             verdict=final_verdict.value,
             confidence=seq_state.get_confidence(),
             similarity_score=seq_state.mean,
             merkle_root=verification_tree.master_root.hex(),
+            merkle_proof=merkle_proof,
             verification_tree_id=verification_tree.tree_id,
             certificates=certificates,
             metrics=metrics,
             segment_results=segment_results,
-            mode_selection_reason=""  # Will be set by caller
+            mode_selection_reason=""
         )
     
     async def hbt_consensus_verify(
         self,
         request: VerificationRequest
     ) -> VerificationResponse:
-        """
-        Robust verification using HBT Byzantine consensus.
-        
-        Args:
-            request: Verification request
-            
-        Returns:
-            Verification response
-        """
+        """Robust verification using HBT Byzantine consensus."""
         start_time = time.perf_counter()
         
         # Process challenges through consensus network
@@ -599,14 +986,14 @@ class UnifiedVerificationAPI:
         
         metrics = PerformanceMetrics(
             latency_ms=total_time,
-            memory_usage_mb=512,  # Higher for consensus
+            memory_usage_mb=psutil.Process().memory_info().rss / (1024 * 1024),
             throughput_qps=len(request.challenges) / (total_time / 1000),
             segments_processed=len(segments),
             consensus_rounds=consensus_rounds,
             verification_time_ms=total_time - merkle_time,
             merkle_generation_time_ms=merkle_time,
-            cpu_usage_percent=75.0,  # Higher for consensus
-            network_bytes=len(json.dumps([s.__dict__ for s in segments])) * 5,  # More network traffic
+            cpu_usage_percent=psutil.cpu_percent(),
+            network_bytes=len(json.dumps([s.__dict__ for s in segments])) * 5,
             cache_hits=0,
             cache_misses=len(request.challenges)
         )
@@ -623,6 +1010,7 @@ class UnifiedVerificationAPI:
         return VerificationResponse(
             request_id="",
             timestamp="",
+            status=RequestStatus.COMPLETED,
             mode_used=VerificationMode.ROBUST,
             verdict=consensus_result["verdict"].value,
             confidence=consensus_result["confidence"],
@@ -639,15 +1027,7 @@ class UnifiedVerificationAPI:
         self,
         request: VerificationRequest
     ) -> VerificationResponse:
-        """
-        Hybrid verification combining REV and HBT approaches.
-        
-        Args:
-            request: Verification request
-            
-        Returns:
-            Verification response
-        """
+        """Hybrid verification combining REV and HBT approaches."""
         start_time = time.perf_counter()
         
         # Run both verifications in parallel
@@ -658,8 +1038,8 @@ class UnifiedVerificationAPI:
         rev_result, hbt_result = await asyncio.gather(rev_task, hbt_task)
         
         # Combine results (weighted average)
-        rev_weight = 0.4  # Fast but less accurate
-        hbt_weight = 0.6  # Slower but more accurate
+        rev_weight = 0.4
+        hbt_weight = 0.6
         
         combined_confidence = (
             rev_result.confidence * rev_weight +
@@ -711,11 +1091,13 @@ class UnifiedVerificationAPI:
         return VerificationResponse(
             request_id="",
             timestamp="",
+            status=RequestStatus.COMPLETED,
             mode_used=VerificationMode.HYBRID,
             verdict=final_verdict,
             confidence=combined_confidence,
             similarity_score=combined_similarity,
-            merkle_root=rev_result.merkle_root,  # Use REV's merkle root
+            merkle_root=rev_result.merkle_root,
+            merkle_proof=rev_result.merkle_proof,
             verification_tree_id=rev_result.verification_tree_id,
             certificates=all_certificates,
             metrics=metrics,
@@ -723,6 +1105,68 @@ class UnifiedVerificationAPI:
             consensus_details=hybrid_details,
             mode_selection_reason=""
         )
+    
+    async def _generate_zk_proofs(
+        self,
+        result: VerificationResponse
+    ) -> List[ZKProofInfo]:
+        """Generate zero-knowledge proofs for verification results."""
+        zk_start = time.perf_counter()
+        proofs = []
+        
+        # Generate distance proof
+        if result.similarity_score is not None:
+            distance = 1.0 - result.similarity_score
+            distance_proof = self.distance_zk_system.prove_distance_range(
+                distance,
+                min_distance=0.0,
+                max_distance=1.0
+            )
+            
+            proofs.append(ZKProofInfo(
+                proof_type="distance_range",
+                proof_data=distance_proof["proof"],
+                public_inputs=[str(distance_proof["commitment"])],
+                verification_key=distance_proof["vk"],
+                timestamp=time.time()
+            ))
+        
+        # Generate merkle proof
+        if result.merkle_root:
+            merkle_proof = self.zk_proof_system.generate_proof(
+                ProofType.MERKLE_INCLUSION,
+                {
+                    "root": result.merkle_root,
+                    "leaf": result.segment_results[-1] if result.segment_results else {},
+                    "path": result.merkle_proof or []
+                }
+            )
+            
+            proofs.append(ZKProofInfo(
+                proof_type="merkle_inclusion",
+                proof_data=merkle_proof["proof"],
+                public_inputs=[result.merkle_root],
+                verification_key=merkle_proof["vk"],
+                timestamp=time.time()
+            ))
+        
+        # Update ZK proof time
+        if result.metrics:
+            result.metrics.zk_proof_time_ms = (time.perf_counter() - zk_start) * 1000
+        
+        return proofs
+    
+    def _generate_merkle_proof(
+        self,
+        tree: HierarchicalVerificationChain,
+        target_segment: Dict[str, Any]
+    ) -> List[str]:
+        """Generate Merkle proof path for a segment."""
+        # Simplified - would normally generate actual proof path
+        return [
+            hashlib.sha256(json.dumps(target_segment).encode()).hexdigest(),
+            tree.master_root.hex()
+        ]
     
     async def _get_model_response(
         self,
@@ -752,18 +1196,22 @@ class UnifiedVerificationAPI:
         response_b: Dict[str, Any]
     ) -> float:
         """Calculate similarity between two responses."""
-        # Simplified similarity calculation
         text_a = response_a.get("text", "")
         text_b = response_b.get("text", "")
         
-        # Simple character overlap
-        common = set(text_a.split()) & set(text_b.split())
-        total = set(text_a.split()) | set(text_b.split())
+        # Use Jaccard similarity
+        tokens_a = set(text_a.lower().split())
+        tokens_b = set(text_b.lower().split())
         
-        if not total:
+        if not tokens_a and not tokens_b:
+            return 1.0
+        if not tokens_a or not tokens_b:
             return 0.0
         
-        return len(common) / len(total)
+        intersection = tokens_a & tokens_b
+        union = tokens_a | tokens_b
+        
+        return len(intersection) / len(union)
     
     async def _check_contamination(
         self,
@@ -773,22 +1221,32 @@ class UnifiedVerificationAPI:
     ) -> Dict[str, Any]:
         """Check for model contamination."""
         detector = UnifiedContaminationDetector(
-            blackbox_verifier=self.blackbox_verifier
+            blackbox_verifier=self.blackbox_verifier,
+            detection_mode=DetectionMode.FAST
         )
+        
+        # Sample challenges for contamination check
+        sample_size = min(10, len(challenges))
+        sample_challenges = challenges[:sample_size]
+        
+        # Get model responses
+        responses = []
+        for challenge in sample_challenges:
+            response = await self._get_model_response(model_a, challenge, None)
+            responses.append(response.get("text", ""))
         
         # Run contamination detection
         result = detector.detect_contamination(
-            model=None,  # API-based
-            reference_models=[],
-            model_id=model_a,
-            challenges=challenges[:10]  # Sample
+            model_responses=responses,
+            prompts=sample_challenges,
+            model_id=model_a
         )
         
         return {
-            "contaminated": result.is_contaminated,
-            "contamination_type": result.contamination_type.value if result.contamination_type else None,
-            "confidence": result.confidence,
-            "evidence": result.evidence[:3] if result.evidence else []  # Limit evidence
+            "contaminated": len(result.contamination_types) > 0,
+            "contamination_types": [ct.value for ct in result.contamination_types],
+            "confidence": result.confidence_score,
+            "evidence": result.evidence
         }
     
     def _configure_apis(self, api_configs: Dict[str, Dict[str, Any]]) -> None:
@@ -807,13 +1265,10 @@ class UnifiedVerificationAPI:
     
     def _generate_request_id(self) -> str:
         """Generate unique request ID."""
-        timestamp = int(time.time() * 1000)
-        random_suffix = hashlib.sha256(str(timestamp).encode()).hexdigest()[:8]
-        return f"req_{timestamp}_{random_suffix}"
+        return f"req_{uuid.uuid4().hex[:12]}"
     
     def _get_cache_key(self, request: VerificationRequest) -> str:
         """Generate cache key for request."""
-        # Create deterministic key from request parameters
         key_data = {
             "model_a": request.model_a,
             "model_b": request.model_b,
@@ -823,16 +1278,53 @@ class UnifiedVerificationAPI:
         key_str = json.dumps(key_data, sort_keys=True)
         return hashlib.sha256(key_str.encode()).hexdigest()
     
+    def _get_priority_value(self, priority: RequestPriority) -> int:
+        """Get numeric priority value for queue ordering."""
+        return {
+            RequestPriority.CRITICAL: 0,
+            RequestPriority.HIGH: 1,
+            RequestPriority.MEDIUM: 2,
+            RequestPriority.LOW: 3
+        }[priority]
+    
     def get_statistics(self) -> Dict[str, Any]:
         """Get API statistics."""
-        avg_latency = self.total_latency_ms / self.request_count if self.request_count > 0 else 0
+        avg_latency = (
+            self.metrics["total_latency_ms"] / self.metrics["completed_requests"]
+            if self.metrics["completed_requests"] > 0 else 0
+        )
+        
+        cache_hit_rate = (
+            self.metrics["cache_hits"] / (self.metrics["cache_hits"] + self.metrics["cache_misses"])
+            if (self.metrics["cache_hits"] + self.metrics["cache_misses"]) > 0 else 0
+        )
         
         return {
-            "total_requests": self.request_count,
+            "total_requests": self.metrics["total_requests"],
+            "completed_requests": self.metrics["completed_requests"],
+            "failed_requests": self.metrics["failed_requests"],
+            "queued_requests": self.request_queue.qsize(),
+            "active_requests": len(self.active_requests),
             "average_latency_ms": avg_latency,
-            "cache_size": len(self.result_cache),
-            "cache_hit_rate": 0.0  # Would need to track this
+            "cache_hit_rate": cache_hit_rate,
+            "cache_stats": self.result_cache.get_stats(),
+            "system_resources": {
+                "cpu_percent": psutil.cpu_percent(),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_usage_percent": psutil.disk_usage('/').percent
+            }
         }
+    
+    async def cleanup(self):
+        """Clean up resources."""
+        # Cancel workers
+        for worker in self.workers:
+            worker.cancel()
+        
+        await asyncio.gather(*self.workers, return_exceptions=True)
+        
+        # Shutdown executor
+        self.executor.shutdown(wait=True)
 
 
 # FastAPI app creation
@@ -841,9 +1333,11 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app."""
     # Startup
     logger.info("Starting Unified Verification API")
+    app.state.api_handler = UnifiedVerificationAPI()
     yield
     # Shutdown
     logger.info("Shutting down Unified Verification API")
+    await app.state.api_handler.cleanup()
 
 
 def create_app() -> FastAPI:
@@ -855,8 +1349,8 @@ def create_app() -> FastAPI:
     """
     app = FastAPI(
         title="Unified REV/HBT Verification API",
-        description="REST API for model verification with multiple modes",
-        version="1.0.0",
+        description="Intelligent verification API with automatic mode selection, queuing, and advanced features",
+        version="2.0.0",
         lifespan=lifespan
     )
     
@@ -869,44 +1363,163 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Initialize API handler
-    api_handler = UnifiedVerificationAPI()
-    
     @app.get("/health")
     async def health_check():
         """Health check endpoint."""
-        return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+        return {
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "version": "2.0.0"
+        }
     
     @app.post("/verify", response_model=VerificationResponse)
-    async def verify_models(request: VerificationRequest):
+    async def verify_models(
+        request: VerificationRequest,
+        background_tasks: BackgroundTasks
+    ):
         """
-        Verify model equivalence with selected mode.
+        Main verification endpoint with intelligent mode selection.
         
-        Supports three verification modes:
-        - fast: REV sequential testing for low latency
-        - robust: HBT Byzantine consensus for high accuracy
-        - hybrid: Combined approach for balanced performance
-        - auto: Automatic mode selection based on requirements
+        Features:
+        - Automatic mode selection based on requirements
+        - Request queuing and prioritization
+        - Async/sync execution
+        - Result caching
+        - ZK proof generation
+        - Contamination checking
         """
         try:
+            api_handler: UnifiedVerificationAPI = app.state.api_handler
             response = await api_handler.verify(request)
+            
+            # If async and callback URL provided, send result
+            if request.async_execution and request.callback_url:
+                background_tasks.add_task(
+                    send_webhook,
+                    request.callback_url,
+                    response.dict()
+                )
+            
             return response
         except Exception as e:
             logger.error(f"Verification error: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
     
+    @app.post("/batch", response_model=List[VerificationResponse])
+    async def batch_verify(batch_request: BatchVerificationRequest):
+        """
+        Batch verification endpoint.
+        
+        Process multiple verification requests in parallel or sequentially.
+        """
+        try:
+            api_handler: UnifiedVerificationAPI = app.state.api_handler
+            responses = await api_handler.batch_verify(batch_request)
+            return responses
+        except Exception as e:
+            logger.error(f"Batch verification error: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/status/{request_id}", response_model=VerificationResponse)
+    async def get_status(request_id: str):
+        """
+        Get status of a verification request.
+        
+        Returns current status and results if available.
+        """
+        api_handler: UnifiedVerificationAPI = app.state.api_handler
+        return await api_handler.get_status(request_id)
+    
+    @app.get("/results/{request_id}", response_model=VerificationResponse)
+    async def get_results(request_id: str):
+        """
+        Get results of a completed verification request.
+        
+        Returns full results or 404 if not found/not completed.
+        """
+        api_handler: UnifiedVerificationAPI = app.state.api_handler
+        response = await api_handler.get_status(request_id)
+        
+        if response.status != RequestStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_202_ACCEPTED,
+                detail=f"Request {request_id} is {response.status.value}"
+            )
+        
+        return response
+    
+    @app.get("/stream/{request_id}")
+    async def stream_results(request_id: str):
+        """
+        Stream verification results as they're generated.
+        
+        Returns Server-Sent Events stream.
+        """
+        async def event_generator():
+            api_handler: UnifiedVerificationAPI = app.state.api_handler
+            
+            while True:
+                try:
+                    response = await api_handler.get_status(request_id)
+                    
+                    # Send current status
+                    yield f"data: {json.dumps(response.dict())}\n\n"
+                    
+                    if response.status in [RequestStatus.COMPLETED, RequestStatus.FAILED]:
+                        break
+                    
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                    break
+        
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream"
+        )
+    
     @app.get("/stats")
     async def get_statistics():
-        """Get API usage statistics."""
+        """Get API usage statistics and performance metrics."""
+        api_handler: UnifiedVerificationAPI = app.state.api_handler
         return api_handler.get_statistics()
     
     @app.post("/clear_cache")
     async def clear_cache():
         """Clear result cache."""
-        api_handler.result_cache.clear()
-        return {"message": "Cache cleared", "timestamp": datetime.utcnow().isoformat()}
+        api_handler: UnifiedVerificationAPI = app.state.api_handler
+        api_handler.result_cache.cache.clear()
+        return {
+            "message": "Cache cleared",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    @app.get("/queue/status")
+    async def queue_status():
+        """Get queue status and statistics."""
+        api_handler: UnifiedVerificationAPI = app.state.api_handler
+        return {
+            "queue_size": api_handler.request_queue.qsize(),
+            "active_requests": len(api_handler.active_requests),
+            "max_workers": api_handler.max_workers,
+            "active_workers": sum(1 for w in api_handler.workers if not w.done())
+        }
     
     return app
+
+
+async def send_webhook(url: str, data: Dict[str, Any]):
+    """Send webhook notification with results."""
+    import aiohttp
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=data) as response:
+                if response.status != 200:
+                    logger.error(f"Webhook failed: {response.status}")
+    except Exception as e:
+        logger.error(f"Webhook error: {str(e)}")
 
 
 # Main entry point

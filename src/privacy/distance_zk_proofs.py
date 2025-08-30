@@ -447,3 +447,546 @@ class DistanceZKProof:
             level = next_level
         
         return level[0]
+
+
+class CommitmentScheme:
+    """
+    Cryptographic commitment scheme for REV privacy.
+    
+    Provides binding and hiding properties for vector commitments
+    used in zero-knowledge proofs.
+    """
+    
+    def __init__(self, security_bits: int = 128):
+        """
+        Initialize commitment scheme.
+        
+        Args:
+            security_bits: Security parameter in bits
+        """
+        self.security_bits = security_bits
+        self.hash_function = SHA256
+    
+    def commit(
+        self,
+        value: np.ndarray,
+        randomness: Optional[bytes] = None
+    ) -> Tuple[bytes, bytes]:
+        """
+        Create commitment to a value.
+        
+        Args:
+            value: Value to commit to
+            randomness: Random value (generated if None)
+            
+        Returns:
+            Tuple of (commitment, randomness)
+        """
+        if randomness is None:
+            randomness = get_random_bytes(self.security_bits // 8)
+        
+        # Serialize value
+        if isinstance(value, np.ndarray):
+            value_bytes = value.tobytes()
+        else:
+            value_bytes = str(value).encode()
+        
+        # Compute commitment: H(value || randomness)
+        hasher = self.hash_function.new()
+        hasher.update(value_bytes)
+        hasher.update(randomness)
+        commitment = hasher.digest()
+        
+        return commitment, randomness
+    
+    def verify_commitment(
+        self,
+        commitment: bytes,
+        value: np.ndarray,
+        randomness: bytes
+    ) -> bool:
+        """
+        Verify a commitment opening.
+        
+        Args:
+            commitment: Original commitment
+            value: Claimed value
+            randomness: Opening randomness
+            
+        Returns:
+            True if commitment is valid
+        """
+        expected_commitment, _ = self.commit(value, randomness)
+        return expected_commitment == commitment
+    
+    def batch_commit(
+        self,
+        values: List[np.ndarray]
+    ) -> Tuple[List[bytes], List[bytes]]:
+        """
+        Create batch commitments for multiple values.
+        
+        Args:
+            values: List of values to commit to
+            
+        Returns:
+            Tuple of (commitments, randomness_list)
+        """
+        commitments = []
+        randomness_list = []
+        
+        for value in values:
+            commitment, randomness = self.commit(value)
+            commitments.append(commitment)
+            randomness_list.append(randomness)
+        
+        return commitments, randomness_list
+
+
+class MerkleInclusionProof:
+    """
+    Merkle tree inclusion proofs for REV verification.
+    
+    Proves that a signature is included in a committed set
+    without revealing other signatures.
+    """
+    
+    def __init__(self, hash_function=SHA256):
+        """
+        Initialize Merkle proof system.
+        
+        Args:
+            hash_function: Hash function for tree construction
+        """
+        self.hash_function = hash_function
+    
+    def build_tree(self, leaves: List[bytes]) -> Dict[str, Any]:
+        """
+        Build Merkle tree from leaf values.
+        
+        Args:
+            leaves: List of leaf values (hashed signatures)
+            
+        Returns:
+            Tree structure with root and internal nodes
+        """
+        if not leaves:
+            raise ValueError("Cannot build tree from empty leaves")
+        
+        # Ensure even number of leaves by duplicating last leaf if needed
+        if len(leaves) % 2 == 1:
+            leaves = leaves + [leaves[-1]]
+        
+        tree = {"leaves": leaves, "levels": []}
+        current_level = leaves
+        
+        while len(current_level) > 1:
+            next_level = []
+            
+            for i in range(0, len(current_level), 2):
+                left = current_level[i]
+                right = current_level[i + 1]
+                
+                # Compute parent hash
+                hasher = self.hash_function.new()
+                hasher.update(left)
+                hasher.update(right)
+                parent = hasher.digest()
+                next_level.append(parent)
+            
+            tree["levels"].append(current_level)
+            current_level = next_level
+        
+        tree["root"] = current_level[0]
+        tree["levels"].append(current_level)
+        
+        return tree
+    
+    def generate_inclusion_proof(
+        self,
+        tree: Dict[str, Any],
+        leaf_index: int
+    ) -> List[Tuple[bytes, bool]]:
+        """
+        Generate inclusion proof for a specific leaf.
+        
+        Args:
+            tree: Merkle tree structure
+            leaf_index: Index of leaf to prove inclusion for
+            
+        Returns:
+            List of (sibling_hash, is_right) tuples for proof path
+        """
+        leaves = tree["leaves"]
+        levels = tree["levels"]
+        
+        if leaf_index >= len(leaves):
+            raise ValueError("Leaf index out of bounds")
+        
+        proof = []
+        current_index = leaf_index
+        
+        for level_idx, level in enumerate(levels[:-1]):  # Exclude root level
+            # Find sibling
+            if current_index % 2 == 0:
+                # Left child, sibling is right
+                sibling_index = current_index + 1
+                is_right = True
+            else:
+                # Right child, sibling is left
+                sibling_index = current_index - 1
+                is_right = False
+            
+            if sibling_index < len(level):
+                sibling_hash = level[sibling_index]
+            else:
+                # Handle case where we duplicated the last leaf
+                sibling_hash = level[current_index]
+            
+            proof.append((sibling_hash, is_right))
+            current_index = current_index // 2
+        
+        return proof
+    
+    def verify_inclusion_proof(
+        self,
+        root: bytes,
+        leaf: bytes,
+        proof: List[Tuple[bytes, bool]]
+    ) -> bool:
+        """
+        Verify Merkle inclusion proof.
+        
+        Args:
+            root: Merkle tree root
+            leaf: Leaf value to verify
+            proof: Inclusion proof path
+            
+        Returns:
+            True if proof is valid
+        """
+        current_hash = leaf
+        
+        for sibling_hash, is_right in proof:
+            hasher = self.hash_function.new()
+            
+            if is_right:
+                # Sibling is on the right
+                hasher.update(current_hash)
+                hasher.update(sibling_hash)
+            else:
+                # Sibling is on the left
+                hasher.update(sibling_hash)
+                hasher.update(current_hash)
+            
+            current_hash = hasher.digest()
+        
+        return current_hash == root
+    
+    def batch_inclusion_proofs(
+        self,
+        signatures: List[np.ndarray],
+        indices: List[int]
+    ) -> Dict[str, Any]:
+        """
+        Generate batch inclusion proofs for multiple signatures.
+        
+        Args:
+            signatures: List of signature vectors
+            indices: Indices of signatures to prove inclusion for
+            
+        Returns:
+            Batch proof structure
+        """
+        # Hash all signatures to create leaves
+        leaves = []
+        for sig in signatures:
+            hasher = self.hash_function.new()
+            hasher.update(sig.tobytes())
+            leaves.append(hasher.digest())
+        
+        # Build tree
+        tree = self.build_tree(leaves)
+        
+        # Generate proofs for specified indices
+        proofs = {}
+        for idx in indices:
+            proof = self.generate_inclusion_proof(tree, idx)
+            proofs[idx] = proof
+        
+        return {
+            "root": tree["root"],
+            "proofs": proofs,
+            "signature_hashes": [leaves[i] for i in indices],
+            "num_signatures": len(signatures)
+        }
+
+
+class EnhancedDistanceZKProof(DistanceZKProof):
+    """
+    Enhanced zero-knowledge proofs with commitment schemes and Merkle proofs.
+    
+    Extends the basic distance ZK proofs with additional privacy features
+    for REV verification systems.
+    """
+    
+    def __init__(self, security_bits: int = 128):
+        """
+        Initialize enhanced ZK proof system.
+        
+        Args:
+            security_bits: Security parameter in bits
+        """
+        super().__init__(security_bits)
+        self.commitment_scheme = CommitmentScheme(security_bits)
+        self.merkle_prover = MerkleInclusionProof()
+    
+    def prove_committed_distance(
+        self,
+        vec_a: np.ndarray,
+        vec_b: np.ndarray,
+        distance: float,
+        commitment_a: bytes,
+        commitment_b: bytes,
+        rand_a: bytes,
+        rand_b: bytes,
+        metric: str = "euclidean"
+    ) -> Dict[str, Any]:
+        """
+        Prove distance between committed vectors.
+        
+        Args:
+            vec_a: First vector
+            vec_b: Second vector
+            distance: Computed distance
+            commitment_a: Commitment to vector A
+            commitment_b: Commitment to vector B
+            rand_a: Randomness for commitment A
+            rand_b: Randomness for commitment B
+            metric: Distance metric
+            
+        Returns:
+            Zero-knowledge proof with commitments
+        """
+        # Verify commitments are valid
+        if not self.commitment_scheme.verify_commitment(commitment_a, vec_a, rand_a):
+            raise ValueError("Invalid commitment for vector A")
+        if not self.commitment_scheme.verify_commitment(commitment_b, vec_b, rand_b):
+            raise ValueError("Invalid commitment for vector B")
+        
+        # Generate basic distance proof
+        distance_proof = self.prove_distance(vec_a, vec_b, distance, metric)
+        
+        # Add commitment information
+        enhanced_proof = {
+            "commitment_a": commitment_a.hex(),
+            "commitment_b": commitment_b.hex(),
+            "distance_proof": {
+                "distance_commitment": distance_proof.distance_commitment.hex(),
+                "challenge": distance_proof.challenge.hex(),
+                "response": distance_proof.response,
+                "metadata": distance_proof.metadata
+            },
+            "metric": metric,
+            "proven_distance": distance
+        }
+        
+        return enhanced_proof
+    
+    def verify_committed_distance(
+        self,
+        proof: Dict[str, Any],
+        commitment_a: bytes,
+        commitment_b: bytes,
+        claimed_distance: float
+    ) -> bool:
+        """
+        Verify distance proof with commitments.
+        
+        Args:
+            proof: Enhanced distance proof
+            commitment_a: Commitment to vector A
+            commitment_b: Commitment to vector B
+            claimed_distance: Claimed distance value
+            
+        Returns:
+            True if proof is valid
+        """
+        # Check commitments match
+        if proof["commitment_a"] != commitment_a.hex():
+            return False
+        if proof["commitment_b"] != commitment_b.hex():
+            return False
+        
+        # Check distance matches
+        if abs(proof["proven_distance"] - claimed_distance) > 1e-6:
+            return False
+        
+        # Reconstruct distance proof
+        distance_proof_data = proof["distance_proof"]
+        distance_proof = DistanceProof(
+            commitment_a=commitment_a,
+            commitment_b=commitment_b,
+            distance_commitment=bytes.fromhex(distance_proof_data["distance_commitment"]),
+            challenge=bytes.fromhex(distance_proof_data["challenge"]),
+            response=distance_proof_data["response"],
+            metadata=distance_proof_data["metadata"]
+        )
+        
+        # Verify basic distance proof
+        return self.verify_distance(distance_proof, claimed_distance)
+    
+    def prove_signature_inclusion(
+        self,
+        signature: np.ndarray,
+        signature_set: List[np.ndarray],
+        signature_index: int
+    ) -> Dict[str, Any]:
+        """
+        Prove that a signature is included in a committed set.
+        
+        Args:
+            signature: Signature to prove inclusion for
+            signature_set: Full set of signatures
+            signature_index: Index of signature in set
+            
+        Returns:
+            Inclusion proof with Merkle authentication
+        """
+        if signature_index >= len(signature_set):
+            raise ValueError("Signature index out of bounds")
+        
+        # Verify signature matches
+        if not np.array_equal(signature, signature_set[signature_index]):
+            raise ValueError("Signature doesn't match claimed index")
+        
+        # Generate Merkle inclusion proof
+        batch_proof = self.merkle_prover.batch_inclusion_proofs(
+            signature_set, [signature_index]
+        )
+        
+        # Create commitment to the signature
+        commitment, randomness = self.commitment_scheme.commit(signature)
+        
+        return {
+            "signature_commitment": commitment.hex(),
+            "signature_randomness": randomness.hex(),
+            "merkle_root": batch_proof["root"].hex(),
+            "inclusion_proof": [
+                (sibling.hex(), is_right) 
+                for sibling, is_right in batch_proof["proofs"][signature_index]
+            ],
+            "signature_index": signature_index,
+            "set_size": len(signature_set)
+        }
+    
+    def verify_signature_inclusion(
+        self,
+        proof: Dict[str, Any],
+        signature: np.ndarray,
+        merkle_root: bytes
+    ) -> bool:
+        """
+        Verify signature inclusion proof.
+        
+        Args:
+            proof: Inclusion proof
+            signature: Claimed signature
+            merkle_root: Root of signature set Merkle tree
+            
+        Returns:
+            True if proof is valid
+        """
+        # Check Merkle root matches
+        if proof["merkle_root"] != merkle_root.hex():
+            return False
+        
+        # Verify commitment opening
+        commitment = bytes.fromhex(proof["signature_commitment"])
+        randomness = bytes.fromhex(proof["signature_randomness"])
+        
+        if not self.commitment_scheme.verify_commitment(commitment, signature, randomness):
+            return False
+        
+        # Hash signature for Merkle proof
+        hasher = self.hash_function.new()
+        hasher.update(signature.tobytes())
+        signature_hash = hasher.digest()
+        
+        # Reconstruct inclusion proof
+        inclusion_proof = [
+            (bytes.fromhex(sibling), is_right)
+            for sibling, is_right in proof["inclusion_proof"]
+        ]
+        
+        # Verify Merkle inclusion
+        return self.merkle_prover.verify_inclusion_proof(
+            merkle_root, signature_hash, inclusion_proof
+        )
+    
+    def prove_distance_threshold_with_privacy(
+        self,
+        vec_a: np.ndarray,
+        vec_b: np.ndarray,
+        threshold: float,
+        is_above: bool,
+        privacy_level: float = 0.1
+    ) -> Dict[str, Any]:
+        """
+        Prove distance threshold with additional privacy protection.
+        
+        Args:
+            vec_a: First vector
+            vec_b: Second vector
+            threshold: Distance threshold
+            is_above: True if proving distance > threshold
+            privacy_level: Additional privacy noise level
+            
+        Returns:
+            Privacy-enhanced threshold proof
+        """
+        # Compute actual distance
+        if len(vec_a) != len(vec_b):
+            raise ValueError("Vectors must have same dimension")
+        
+        distance = np.linalg.norm(vec_a - vec_b)
+        
+        # Check claim validity
+        if is_above and distance <= threshold:
+            raise ValueError("Cannot prove false claim (distance not above threshold)")
+        if not is_above and distance >= threshold:
+            raise ValueError("Cannot prove false claim (distance not below threshold)")
+        
+        # Add privacy noise to vectors before proof generation
+        noise_a = np.random.normal(0, privacy_level, vec_a.shape)
+        noise_b = np.random.normal(0, privacy_level, vec_b.shape)
+        
+        noisy_a = vec_a + noise_a
+        noisy_b = vec_b + noise_b
+        
+        # Compute noisy distance
+        noisy_distance = np.linalg.norm(noisy_a - noisy_b)
+        
+        # Generate commitments to noisy vectors
+        comm_a, rand_a = self.commitment_scheme.commit(noisy_a)
+        comm_b, rand_b = self.commitment_scheme.commit(noisy_b)
+        
+        # Create proof structure
+        proof = {
+            "commitment_a": comm_a.hex(),
+            "commitment_b": comm_b.hex(),
+            "threshold": threshold,
+            "is_above": is_above,
+            "privacy_level": privacy_level,
+            "noisy_distance": noisy_distance,
+            "claim_valid": (noisy_distance > threshold) if is_above else (noisy_distance < threshold)
+        }
+        
+        # Add challenge-response for verification
+        challenge_data = f"{comm_a.hex()}{comm_b.hex()}{threshold}{is_above}".encode()
+        challenge = hashlib.sha256(challenge_data).digest()
+        
+        proof["challenge"] = challenge.hex()
+        proof["dimension"] = len(vec_a)
+        
+        return proof

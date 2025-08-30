@@ -215,9 +215,46 @@ class DifferentialPrivacyMechanism:
         if not mechanisms:
             return (0.0, 0.0)
         
-        # Simple composition (can be improved with advanced composition)
-        total_epsilon = sum(eps for eps, _ in mechanisms)
-        total_delta = sum(delta for _, delta in mechanisms)
+        # Separate pure DP and approximate DP mechanisms
+        pure_dp = [(eps, d) for eps, d in mechanisms if d == 0]
+        approx_dp = [(eps, d) for eps, d in mechanisms if d > 0]
+        
+        # Simple composition for pure DP
+        pure_epsilon = sum(eps for eps, _ in pure_dp)
+        
+        # Advanced composition for approximate DP
+        if approx_dp:
+            epsilons = [eps for eps, _ in approx_dp]
+            deltas = [d for _, d in approx_dp]
+            
+            # Use advanced composition theorem
+            # For k mechanisms with (ε_i, δ_i)-DP:
+            # Total is (ε', kδ + δ')-DP where ε' is from advanced composition
+            k = len(approx_dp)
+            base_delta = sum(deltas)
+            
+            # Advanced composition bound
+            epsilon_sum = sum(epsilons)
+            epsilon_squared_sum = sum(e**2 for e in epsilons)
+            
+            # For any δ' > 0, the composition is (ε', kδ + δ')-DP where:
+            # ε' = sqrt(2k * ln(1/δ')) * max(ε_i) + sum(ε_i)
+            # We use δ' = min(deltas) for balance
+            delta_prime = min(deltas) if deltas else 1e-8
+            max_epsilon = max(epsilons)
+            
+            advanced_epsilon = (
+                np.sqrt(2 * k * np.log(1 / delta_prime)) * max_epsilon + 
+                epsilon_sum
+            )
+            
+            # Choose better of simple and advanced composition
+            simple_epsilon = epsilon_sum
+            total_epsilon = min(simple_epsilon, advanced_epsilon) + pure_epsilon
+            total_delta = base_delta + delta_prime
+        else:
+            total_epsilon = pure_epsilon
+            total_delta = 0.0
         
         return (total_epsilon, total_delta)
 
@@ -292,3 +329,304 @@ def estimate_utility_loss(
         relative_noise = scale * np.sqrt(data_dimension)
     
     return min(1.0, relative_noise)  # Cap at 100% loss
+
+
+class RenyiDifferentialPrivacy:
+    """
+    Rényi differential privacy for tighter composition bounds.
+    
+    Provides better composition properties than standard DP for
+    iterative algorithms like those in REV verification.
+    """
+    
+    def __init__(self, alpha: float = 2.0):
+        """
+        Initialize RDP mechanism.
+        
+        Args:
+            alpha: Rényi divergence order (alpha > 1)
+        """
+        if alpha <= 1:
+            raise ValueError("Alpha must be > 1 for RDP")
+        self.alpha = alpha
+    
+    def gaussian_rdp(self, sensitivity: float, sigma: float) -> float:
+        """
+        Compute RDP parameter for Gaussian mechanism.
+        
+        Args:
+            sensitivity: L2 sensitivity
+            sigma: Noise standard deviation
+            
+        Returns:
+            RDP epsilon at order alpha
+        """
+        return (self.alpha * sensitivity**2) / (2 * sigma**2)
+    
+    def compose_rdp(self, epsilons: List[float]) -> float:
+        """
+        Compose multiple RDP mechanisms.
+        
+        Args:
+            epsilons: List of RDP parameters at same order
+            
+        Returns:
+            Composed RDP parameter
+        """
+        return sum(epsilons)
+    
+    def rdp_to_dp(self, rdp_epsilon: float, delta: float) -> float:
+        """
+        Convert RDP to standard (epsilon, delta)-DP.
+        
+        Args:
+            rdp_epsilon: RDP parameter at order alpha
+            delta: Target delta for conversion
+            
+        Returns:
+            Standard DP epsilon
+        """
+        if delta <= 0 or delta >= 1:
+            raise ValueError("Delta must be in (0, 1)")
+        
+        # Conversion formula from RDP to DP
+        epsilon = rdp_epsilon + np.log(1 / delta) / (self.alpha - 1)
+        return epsilon
+    
+    def adaptive_noise_schedule(
+        self,
+        num_iterations: int,
+        total_epsilon: float,
+        total_delta: float,
+        sensitivity: float = 1.0
+    ) -> List[float]:
+        """
+        Compute adaptive noise schedule for iterative algorithms.
+        
+        Args:
+            num_iterations: Number of iterations
+            total_epsilon: Total privacy budget
+            total_delta: Total delta budget
+            sensitivity: Query sensitivity
+            
+        Returns:
+            List of noise scales for each iteration
+        """
+        # Convert total budget to RDP
+        rdp_budget = total_epsilon - np.log(1 / total_delta) * (self.alpha - 1)
+        
+        # Allocate budget per iteration (can be non-uniform)
+        # Use decreasing noise for later iterations (more accurate as we converge)
+        weights = np.array([1 / np.sqrt(i + 1) for i in range(num_iterations)])
+        weights = weights / weights.sum()
+        
+        rdp_per_iter = rdp_budget * weights
+        
+        # Convert to noise scales
+        noise_scales = []
+        for rdp_eps in rdp_per_iter:
+            # Solve for sigma: rdp_eps = (alpha * sensitivity^2) / (2 * sigma^2)
+            sigma = sensitivity * np.sqrt(self.alpha / (2 * rdp_eps))
+            noise_scales.append(sigma)
+        
+        return noise_scales
+
+
+class ConcentratedDifferentialPrivacy:
+    """
+    Concentrated Differential Privacy (CDP) for optimal composition.
+    
+    Provides near-optimal composition for homogeneous mechanisms,
+    particularly useful for REV's repeated similarity computations.
+    """
+    
+    def __init__(self, rho: float):
+        """
+        Initialize CDP mechanism.
+        
+        Args:
+            rho: CDP parameter (zero-concentrated DP)
+        """
+        self.rho = rho
+    
+    def gaussian_cdp(self, sensitivity: float, sigma: float) -> float:
+        """
+        Compute CDP parameter for Gaussian mechanism.
+        
+        Args:
+            sensitivity: L2 sensitivity
+            sigma: Noise standard deviation
+            
+        Returns:
+            CDP rho parameter
+        """
+        return (sensitivity**2) / (2 * sigma**2)
+    
+    def compose_cdp(self, rhos: List[float]) -> float:
+        """
+        Compose multiple CDP mechanisms.
+        
+        Args:
+            rhos: List of CDP parameters
+            
+        Returns:
+            Composed CDP parameter
+        """
+        return sum(rhos)
+    
+    def cdp_to_dp(self, rho: float, delta: float) -> float:
+        """
+        Convert CDP to (epsilon, delta)-DP.
+        
+        Args:
+            rho: CDP parameter
+            delta: Target delta
+            
+        Returns:
+            Standard DP epsilon
+        """
+        if delta <= 0 or delta >= 1:
+            raise ValueError("Delta must be in (0, 1)")
+        
+        # Conversion from zCDP to (ε, δ)-DP
+        epsilon = rho + 2 * np.sqrt(rho * np.log(1 / delta))
+        return epsilon
+
+
+class PrivacyAccountant:
+    """
+    Advanced privacy accounting for complex REV verification workflows.
+    
+    Tracks privacy consumption across different mechanisms and provides
+    optimal budget allocation strategies.
+    """
+    
+    def __init__(
+        self,
+        total_epsilon: float,
+        total_delta: float,
+        accounting_method: str = "rdp"
+    ):
+        """
+        Initialize privacy accountant.
+        
+        Args:
+            total_epsilon: Total privacy budget
+            total_delta: Total delta budget
+            accounting_method: "standard", "rdp", or "cdp"
+        """
+        self.total_epsilon = total_epsilon
+        self.total_delta = total_delta
+        self.accounting_method = accounting_method
+        
+        # Track consumed privacy
+        self.mechanisms: List[Dict[str, any]] = []
+        
+        # Initialize specialized accountants
+        if accounting_method == "rdp":
+            self.rdp = RenyiDifferentialPrivacy(alpha=2.0)
+            self.rdp_consumed = 0.0
+        elif accounting_method == "cdp":
+            self.cdp = ConcentratedDifferentialPrivacy(rho=0.0)
+            self.cdp_consumed = 0.0
+        else:
+            self.consumed_epsilon = 0.0
+            self.consumed_delta = 0.0
+    
+    def record_mechanism(
+        self,
+        mechanism_type: str,
+        epsilon: Optional[float] = None,
+        delta: Optional[float] = None,
+        sigma: Optional[float] = None,
+        sensitivity: float = 1.0
+    ) -> None:
+        """
+        Record a privacy mechanism usage.
+        
+        Args:
+            mechanism_type: Type of mechanism ("gaussian", "laplace", etc.)
+            epsilon: DP epsilon (if known)
+            delta: DP delta (if known)
+            sigma: Noise scale (for Gaussian)
+            sensitivity: Query sensitivity
+        """
+        mechanism = {
+            "type": mechanism_type,
+            "epsilon": epsilon,
+            "delta": delta,
+            "sigma": sigma,
+            "sensitivity": sensitivity,
+            "timestamp": np.random.rand()  # Placeholder for actual timestamp
+        }
+        
+        self.mechanisms.append(mechanism)
+        
+        # Update consumption based on accounting method
+        if self.accounting_method == "rdp" and sigma is not None:
+            rdp_eps = self.rdp.gaussian_rdp(sensitivity, sigma)
+            self.rdp_consumed += rdp_eps
+        elif self.accounting_method == "cdp" and sigma is not None:
+            cdp_rho = self.cdp.gaussian_cdp(sensitivity, sigma)
+            self.cdp_consumed += cdp_rho
+        else:
+            if epsilon is not None:
+                self.consumed_epsilon += epsilon
+            if delta is not None:
+                self.consumed_delta += delta
+    
+    def get_remaining_budget(self) -> Tuple[float, float]:
+        """
+        Get remaining privacy budget.
+        
+        Returns:
+            Tuple of (remaining_epsilon, remaining_delta)
+        """
+        if self.accounting_method == "rdp":
+            # Convert RDP to DP
+            consumed_eps = self.rdp.rdp_to_dp(self.rdp_consumed, self.total_delta)
+            remaining_eps = max(0, self.total_epsilon - consumed_eps)
+            remaining_delta = self.total_delta  # Delta doesn't compose in RDP
+        elif self.accounting_method == "cdp":
+            # Convert CDP to DP
+            consumed_eps = self.cdp.cdp_to_dp(self.cdp_consumed, self.total_delta)
+            remaining_eps = max(0, self.total_epsilon - consumed_eps)
+            remaining_delta = self.total_delta
+        else:
+            remaining_eps = max(0, self.total_epsilon - self.consumed_epsilon)
+            remaining_delta = max(0, self.total_delta - self.consumed_delta)
+        
+        return (remaining_eps, remaining_delta)
+    
+    def optimal_noise_for_remaining_queries(
+        self,
+        num_queries: int,
+        sensitivity: float = 1.0
+    ) -> float:
+        """
+        Compute optimal noise scale for remaining queries.
+        
+        Args:
+            num_queries: Number of remaining queries
+            sensitivity: Query sensitivity
+            
+        Returns:
+            Optimal noise standard deviation
+        """
+        remaining_eps, remaining_delta = self.get_remaining_budget()
+        
+        if remaining_eps <= 0:
+            return float('inf')  # No budget left
+        
+        # Allocate budget equally among remaining queries
+        eps_per_query = remaining_eps / num_queries
+        delta_per_query = remaining_delta / num_queries
+        
+        # Compute noise scale for Gaussian mechanism
+        if delta_per_query > 0:
+            sigma = np.sqrt(2 * np.log(1.25 / delta_per_query)) * sensitivity / eps_per_query
+        else:
+            # Use Laplace if no delta budget
+            sigma = sensitivity / eps_per_query
+        
+        return sigma

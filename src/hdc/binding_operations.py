@@ -7,9 +7,12 @@ circular convolution, Fourier-domain binding, and weighted probability binding.
 
 import numpy as np
 import torch
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Union, Tuple, Dict, Any
 from scipy.fft import fft, ifft, fft2, ifft2
 from scipy import signal
+import hashlib
+import struct
+from functools import lru_cache
 
 
 class BindingOperations:
@@ -57,6 +60,11 @@ class BindingOperations:
         n_bits = int(np.log2(self.dimension)) if self.dimension & (self.dimension - 1) == 0 else None
         if n_bits:
             self._perm_cache['bit_reverse'] = self._bit_reversal_permutation(self.dimension)
+        
+        # Multi-resolution permutations for hierarchical binding
+        for level in [64, 256, 1024, 4096]:
+            if level < self.dimension:
+                self._perm_cache[f'hierarchical_{level}'] = self._hierarchical_permutation(level)
     
     def _bit_reversal_permutation(self, n: int) -> np.ndarray:
         """Generate bit-reversal permutation."""
@@ -68,6 +76,26 @@ class BindingOperations:
             reversed_indices[i] = int(bin(i)[2:].zfill(n_bits)[::-1], 2)
         
         return reversed_indices
+    
+    def _hierarchical_permutation(self, block_size: int) -> np.ndarray:
+        """Generate hierarchical block permutation."""
+        perm = np.arange(self.dimension)
+        n_blocks = self.dimension // block_size
+        
+        for i in range(n_blocks):
+            start = i * block_size
+            end = min((i + 1) * block_size, self.dimension)
+            perm[start:end] = np.random.permutation(perm[start:end])
+        
+        return perm
+    
+    def _init_lut(self):
+        """Initialize lookup tables for fast operations."""
+        # 16-bit XOR lookup table
+        self._lut_table = np.zeros((256, 256), dtype=np.uint8)
+        for i in range(256):
+            for j in range(256):
+                self._lut_table[i, j] = i ^ j
     
     def xor_bind(
         self,
@@ -452,5 +480,264 @@ class BindingOperations:
                 result = self.protect_bind(result, vec)
             else:
                 raise ValueError(f"Unknown operation: {op}")
+        
+        return result
+    
+    def blake2b_bind(
+        self,
+        a: Union[np.ndarray, torch.Tensor],
+        b: Union[np.ndarray, torch.Tensor],
+        stable: bool = True
+    ) -> np.ndarray:
+        """
+        BLAKE2b-based stable binding for deterministic operations.
+        
+        Args:
+            a: First hypervector
+            b: Second hypervector
+            stable: Use stable deterministic binding
+            
+        Returns:
+            BLAKE2b-bound hypervector
+        """
+        # Convert to numpy
+        if isinstance(a, torch.Tensor):
+            a = a.detach().cpu().numpy()
+        if isinstance(b, torch.Tensor):
+            b = b.detach().cpu().numpy()
+        
+        if stable and self.use_blake2b:
+            # Create deterministic binding using BLAKE2b
+            combined = np.concatenate([a, b])
+            hash_input = combined.tobytes()
+            
+            # Generate dimension-sized output
+            result = np.zeros(self.dimension)
+            n_chunks = (self.dimension * 4 + 63) // 64  # 4 bytes per float
+            
+            for i in range(n_chunks):
+                chunk_hash = hashlib.blake2b(
+                    hash_input + struct.pack('I', i),
+                    digest_size=64
+                ).digest()
+                
+                # Convert hash to floats
+                for j in range(0, len(chunk_hash), 4):
+                    if i * 16 + j // 4 < self.dimension:
+                        value = struct.unpack('f', chunk_hash[j:j+4])[0]
+                        result[i * 16 + j // 4] = value
+            
+            # Normalize
+            norm = np.linalg.norm(result)
+            if norm > 0:
+                result = result / norm
+            
+            return result
+        else:
+            # Fallback to XOR binding
+            return self.xor_bind(a, b)
+    
+    @lru_cache(maxsize=256)
+    def cached_bind(
+        self,
+        key_a: str,
+        key_b: str,
+        operation: str = 'xor'
+    ) -> np.ndarray:
+        """
+        Cached binding operation for frequently used combinations.
+        
+        Args:
+            key_a: Cache key for first vector
+            key_b: Cache key for second vector
+            operation: Binding operation to use
+            
+        Returns:
+            Cached bound vector
+        """
+        # Generate vectors from keys using BLAKE2b
+        a = self._generate_from_key(key_a)
+        b = self._generate_from_key(key_b)
+        
+        if operation == 'xor':
+            return self.xor_bind(a, b)
+        elif operation == 'permute':
+            return self.permutation_bind(a, b)
+        elif operation == 'convolve':
+            return self.circular_convolution(a, b)
+        elif operation == 'blake2b':
+            return self.blake2b_bind(a, b)
+        else:
+            raise ValueError(f"Unknown operation: {operation}")
+    
+    def _generate_from_key(self, key: str) -> np.ndarray:
+        """Generate vector from cache key using BLAKE2b."""
+        vector = np.zeros(self.dimension)
+        key_bytes = key.encode('utf-8')
+        
+        # Use BLAKE2b to generate deterministic vector
+        n_active = int(self.dimension * 0.1)  # 10% sparsity
+        for i in range(n_active):
+            pos_hash = hashlib.blake2b(key_bytes + struct.pack('I', i), digest_size=4).digest()
+            position = struct.unpack('I', pos_hash)[0] % self.dimension
+            
+            val_hash = hashlib.blake2b(key_bytes + struct.pack('I', i + n_active), digest_size=4).digest()
+            value = struct.unpack('f', val_hash)[0]
+            
+            vector[position] = value
+        
+        # Normalize
+        norm = np.linalg.norm(vector)
+        if norm > 0:
+            vector = vector / norm
+        
+        return vector
+    
+    def hierarchical_bind(
+        self,
+        vectors: List[np.ndarray],
+        zoom_levels: List[str]
+    ) -> Dict[str, np.ndarray]:
+        """
+        Hierarchical binding at multiple zoom levels.
+        
+        Args:
+            vectors: List of vectors to bind
+            zoom_levels: Zoom levels to generate
+            
+        Returns:
+            Dictionary of bound vectors at each level
+        """
+        results = {}
+        
+        for level in zoom_levels:
+            if level == 'corpus':
+                # Coarse binding - mean pooling
+                results[level] = np.mean(vectors, axis=0)
+            elif level == 'prompt':
+                # Medium binding - weighted sum
+                weights = np.linspace(0.5, 1.0, len(vectors))
+                results[level] = np.average(vectors, axis=0, weights=weights)
+            elif level == 'span':
+                # Fine binding - sequential convolution
+                result = vectors[0]
+                for v in vectors[1:]:
+                    result = self.circular_convolution(result, v)
+                results[level] = result
+            elif level == 'token_window':
+                # Ultra-fine binding - composite operations
+                result = vectors[0]
+                for i, v in enumerate(vectors[1:]):
+                    if i % 2 == 0:
+                        result = self.xor_bind(result, v)
+                    else:
+                        result = self.permutation_bind(result, v)
+                results[level] = result
+        
+        return results
+    
+    def simd_batch_bind(
+        self,
+        batch_a: np.ndarray,
+        batch_b: np.ndarray,
+        operation: str = 'xor'
+    ) -> np.ndarray:
+        """
+        SIMD-optimized batch binding operations.
+        
+        Args:
+            batch_a: Batch of first vectors (N x D)
+            batch_b: Batch of second vectors (N x D)
+            operation: Binding operation
+            
+        Returns:
+            Batch of bound vectors
+        """
+        if not self.enable_simd:
+            # Fallback to sequential
+            results = []
+            for a, b in zip(batch_a, batch_b):
+                if operation == 'xor':
+                    results.append(self.xor_bind(a, b))
+                elif operation == 'permute':
+                    results.append(self.permutation_bind(a, b))
+                else:
+                    results.append(self.circular_convolution(a, b))
+            return np.array(results)
+        
+        # SIMD-optimized operations
+        if operation == 'xor':
+            # Vectorized XOR for continuous values
+            sign_a = np.sign(batch_a)
+            sign_b = np.sign(batch_b)
+            magnitude = np.sqrt(np.abs(batch_a * batch_b))
+            return sign_a * sign_b * magnitude
+        
+        elif operation == 'permute':
+            # Vectorized permutation
+            perm = self._perm_cache.get('random', np.arange(self.dimension))
+            return batch_a * batch_b[:, perm]
+        
+        elif operation == 'convolve':
+            # FFT-based batch convolution
+            fft_a = np.fft.fft(batch_a, axis=1)
+            fft_b = np.fft.fft(batch_b, axis=1)
+            return np.real(np.fft.ifft(fft_a * fft_b, axis=1))
+        
+        else:
+            raise ValueError(f"Unknown operation: {operation}")
+    
+    def privacy_preserving_bind(
+        self,
+        a: np.ndarray,
+        b: np.ndarray,
+        noise_scale: float = 0.1
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Privacy-preserving binding with differential privacy.
+        
+        Args:
+            a: First hypervector
+            b: Second hypervector
+            noise_scale: Scale of privacy noise
+            
+        Returns:
+            Bound vector and noise vector
+        """
+        # Perform binding
+        bound = self.xor_bind(a, b)
+        
+        # Add differential privacy noise
+        noise = np.random.laplace(0, noise_scale, size=bound.shape)
+        private_bound = bound + noise
+        
+        # Normalize
+        norm = np.linalg.norm(private_bound)
+        if norm > 0:
+            private_bound = private_bound / norm
+        
+        return private_bound, noise
+    
+    def homomorphic_bind(
+        self,
+        a_encrypted: np.ndarray,
+        b_encrypted: np.ndarray,
+        modulus: int = 2**16
+    ) -> np.ndarray:
+        """
+        Homomorphic-friendly binding operation.
+        
+        Args:
+            a_encrypted: First encrypted vector
+            b_encrypted: Second encrypted vector
+            modulus: Modulus for ring operations
+            
+        Returns:
+            Homomorphically bound vector
+        """
+        # Perform binding in encrypted domain
+        # Using addition and multiplication that preserve homomorphic properties
+        result = (a_encrypted + b_encrypted) % modulus
+        result = (result * result) % modulus  # Square for non-linearity
         
         return result

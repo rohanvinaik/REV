@@ -13,7 +13,7 @@ from enum import Enum
 import hashlib
 from scipy import stats
 
-from ..core.sequential import SPRTResult, SequentialState, sequential_verify
+from ..core.sequential import SequentialState, DualSequentialTest, sequential_decision
 from ..hypervector.similarity import AdvancedSimilarity, SimilarityMetric
 from .decision import Verdict, StepRecord
 
@@ -329,16 +329,34 @@ class DecisionAggregator:
         if not self.use_sequential_testing or not scores:
             return None
         
-        # Run sequential test
-        result = sequential_verify(
-            scores=scores,
+        # Create generator from scores for the new API
+        def score_generator():
+            for i, score in enumerate(scores):
+                # Convert score to match/distance format
+                yield {
+                    "I": 1 if score < 0.1 else 0,  # Match if score < threshold
+                    "d": score,
+                    "sample_id": i + 1
+                }
+        
+        # Run sequential test with new API
+        verdict, stopping_time, localization = sequential_decision(
+            stream=score_generator(),
             alpha=self.alpha,
             beta=self.beta,
-            delta=0.1,  # Effect size
-            state=self.sequential_state
+            d_thresh=0.1,  # Distance threshold
+            max_C=len(scores)
         )
         
-        return result
+        # Convert to expected result format (create a simple result object)
+        from dataclasses import dataclass
+        @dataclass
+        class TestResult:
+            verdict: str
+            stopping_time: int
+            localization: dict
+        
+        return TestResult(verdict, stopping_time, localization)
     
     def localize_first_divergence(
         self,

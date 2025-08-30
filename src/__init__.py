@@ -14,7 +14,16 @@ restriction enzyme verification techniques combined with:
 Components adapted from PoT_Experiments and GenomeVault for REV verification.
 """
 
-from .core.sequential import sequential_verify, SPRTResult, SequentialState
+from .core.sequential import (
+    SequentialState,
+    DualSequentialTest, 
+    HybridSequentialTest,
+    sequential_decision,
+    Verdict as SequentialVerdict,
+    TestType,
+    ConfidenceSequence,
+    PowerAnalysis
+)
 from .core.boundaries import SequentialTest, eb_radius
 from .challenges.prompt_generator import DeterministicPromptGenerator
 from .verifier.decision import EnhancedSequentialTester, Verdict
@@ -27,7 +36,9 @@ __version__ = "0.1.0"
 
 __all__ = [
     # Sequential testing
-    "sequential_verify", "SPRTResult", "SequentialState",
+    "SequentialState", "DualSequentialTest", "HybridSequentialTest",
+    "sequential_decision", "SequentialVerdict", "TestType", 
+    "ConfidenceSequence", "PowerAnalysis",
     "SequentialTest", "eb_radius",
     
     # Challenge generation

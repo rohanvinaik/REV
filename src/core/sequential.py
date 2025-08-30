@@ -1,813 +1,631 @@
-from typing import Iterable, Tuple, Literal, Dict, Any, List, Optional, Generator
-import numpy as np
-from math import log, sqrt, exp, erf
-from scipy import stats
+"""
+Enhanced Sequential Testing Framework for REV (Section 5.7)
+
+This module implements anytime-valid sequential testing with e-values,
+confidence sequences, and advanced statistical features for robust
+model comparison in the REV verification system.
+"""
+
+from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Optional, Dict, List, Tuple, Any, Union, Generator
+import numpy as np
+from collections import deque
+import math
+from scipy import stats
+from scipy.special import loggamma
 
-# Type aliases for cleaner function signatures
-Decision = Literal["continue", "accept_H0", "accept_H1"]
 
 class TestType(Enum):
     """Type of sequential test being performed."""
-    MATCH = "match"      # Bernoulli test for exact equality
-    DISTANCE = "distance" # Distance threshold test
-
-# Mathematical constants and formulas are documented in individual functions
-# For complete mathematical background, see docs/statistical_verification.md
-
-@dataclass
-class SequentialState:
-    """
-    Enhanced state for dual sequential hypothesis testing per Section 5.7.
-    
-    Maintains Welford's online algorithm for numerically stable computation
-    of mean and variance as samples arrive sequentially. Supports both
-    Bernoulli evidence (exact matches) and distance threshold testing.
-    
-    Reference: Section 5.7 of the paper for dual sequential testing framework
-    """
-    # Basic statistics
-    n: int = 0                      # Number of samples
-    sum_x: float = 0.0              # Sum of observations
-    sum_x2: float = 0.0             # Sum of squared observations
-    mean: float = 0.0               # Running mean
-    variance: float = 0.0           # Running variance estimate
-    M2: float = 0.0                 # Sum of squared deviations (Welford's algorithm)
-    
-    # Dual test statistics (Section 5.7)
-    n_match: int = 0                # Count of exact matches (Bernoulli evidence)
-    n_below_threshold: int = 0      # Count below distance threshold
-    
-    # Test configuration
-    test_type: TestType = TestType.DISTANCE
-    alpha: float = 0.05             # Type I error rate
-    beta: float = 0.10              # Type II error rate
-    
-    # Confidence sequences
-    log_likelihood_ratio: float = 0.0  # Log LR for SPRT
-    e_value: float = 1.0            # E-value for anytime validity
-    
-    # Localization tracking
-    first_divergence_site: Optional[int] = None
-    divergence_sites: List[int] = field(default_factory=list)
-    
-    def update(self, x: float, is_match: bool = False) -> None:
-        """
-        Update state with new observation using Welford's method.
-        
-        Enhanced to track both distance and match evidence per Section 5.7.
-        
-        Args:
-            x: New observation (should be in [0,1] for bounded distances)
-            is_match: Whether this observation is an exact match
-        """
-        self.n += 1
-        self.sum_x += x
-        self.sum_x2 += x * x
-        
-        # Welford's algorithm for stable variance computation
-        delta = x - self.mean
-        self.mean += delta / self.n
-        delta2 = x - self.mean
-        self.M2 += delta * delta2
-        
-        # Update variance (unbiased estimator)
-        if self.n > 1:
-            self.variance = self.M2 / (self.n - 1)
-        else:
-            self.variance = 0.0
-        
-        # Track match evidence (Section 5.7)
-        if is_match:
-            self.n_match += 1
-        
-        # Track first divergence
-        if not is_match and self.first_divergence_site is None:
-            self.first_divergence_site = self.n
-            
-        # Track all divergence sites
-        if not is_match:
-            self.divergence_sites.append(self.n)
-    
-    def update_distance(self, d: float, threshold: float) -> None:
-        """
-        Update distance test statistics per Section 5.7.
-        
-        Args:
-            d: Distance value
-            threshold: Distance threshold for test
-        """
-        self.update(d, is_match=(d == 0.0))
-        
-        # Track threshold crossings
-        if d <= threshold:
-            self.n_below_threshold += 1
-    
-    def get_match_rate(self) -> float:
-        """Get empirical match rate for Bernoulli test."""
-        if self.n == 0:
-            return 0.0
-        return self.n_match / self.n
-    
-    def get_below_threshold_rate(self) -> float:
-        """Get rate of observations below threshold."""
-        if self.n == 0:
-            return 0.0
-        return self.n_below_threshold / self.n
-    
-    def get_confidence(self) -> float:
-        """Get confidence level based on current evidence."""
-        if self.n < 2:
-            return 0.0
-        
-        # Use variance-stabilized confidence
-        if self.variance > 0:
-            z_score = sqrt(self.n) * abs(self.mean - 0.5) / sqrt(self.variance)
-            confidence = 1.0 - exp(-z_score**2 / 2)
-        else:
-            confidence = 1.0 if self.mean != 0.5 else 0.0
-        
-        return min(1.0, confidence)
-    
-    def get_decision(self) -> 'Verdict':
-        """Get current decision based on sequential test."""
-        from ..verifier.decision import Verdict
-        
-        if self.n < 10:  # Minimum samples
-            return Verdict.UNDECIDED
-        
-        # Check confidence bounds
-        radius = self.get_confidence_radius()
-        
-        if self.mean + radius <= 0.05:  # Very similar
-            return Verdict.SAME
-        elif self.mean - radius > 0.15:  # Clearly different
-            return Verdict.DIFFERENT
-        else:
-            return Verdict.UNDECIDED
-    
-    def get_confidence_radius(self) -> float:
-        """Get confidence radius for current state."""
-        if self.n <= 1:
-            return float('inf')
-        
-        # Empirical Bernstein radius
-        if self.variance > 0:
-            radius = sqrt(2 * self.variance * log(3 / self.alpha) / self.n) + \
-                    3 * log(3 / self.alpha) / self.n
-        else:
-            radius = 3 * log(3 / self.alpha) / self.n
-        
-        return radius
-    
-    def should_stop(self) -> bool:
-        """Check if sequential test should stop."""
-        if self.n < 10:  # Minimum samples
-            return False
-        
-        # Check if confidence interval excludes indifference region
-        radius = self.get_confidence_radius()
-        
-        # Stop if we can make a decision
-        if self.mean + radius <= 0.05 or self.mean - radius > 0.15:
-            return True
-        
-        # Stop if we've seen enough samples
-        if self.n >= 2000:
-            return True
-        
-        return False
-    
-    def copy(self) -> 'SequentialState':
-        """Create a copy of the current state."""
-        new_state = SequentialState(
-            n=self.n,
-            sum_x=self.sum_x,
-            sum_x2=self.sum_x2,
-            mean=self.mean,
-            variance=self.variance,
-            M2=self.M2,
-            n_match=self.n_match,
-            n_below_threshold=self.n_below_threshold,
-            test_type=self.test_type,
-            alpha=self.alpha,
-            beta=self.beta,
-            log_likelihood_ratio=self.log_likelihood_ratio,
-            e_value=self.e_value,
-            first_divergence_site=self.first_divergence_site,
-            divergence_sites=self.divergence_sites.copy()
-        )
-        return new_state
-
-@dataclass
-class SPRTResult:
-    """
-    Complete result of anytime-valid sequential hypothesis test.
-    
-    Contains the decision, stopping time, final statistics, and full
-    trajectory for audit and analysis purposes.
-    
-    Reference: §2.4 of the paper for sequential verification protocol
-    """
-    decision: str                              # 'H0', 'H1', or 'continue'
-    stopped_at: int                           # Sample number where test stopped
-    final_mean: float                         # Final empirical mean
-    final_variance: float                     # Final empirical variance
-    confidence_radius: float                  # Final EB confidence radius
-    trajectory: List[SequentialState]         # Complete state trajectory
-    p_value: Optional[float] = None          # Optional p-value if computed
-    confidence_interval: Tuple[float, float] = (0.0, 1.0)  # Final CI
-    forced_stop: bool = False                 # Whether stop was forced at max_samples
+    MATCH = "match"  # Bernoulli test for match/no-match
+    DISTANCE = "distance"  # Continuous test for distance metrics
+    HYBRID = "hybrid"  # Combined test using both types
 
 
-# ============================================================================
-# Numerical Stability Helper Functions
-# ============================================================================
-
-def welford_update(state: SequentialState, new_value: float) -> SequentialState:
-    """
-    Update state using Welford's online algorithm for numerically stable mean/variance.
-    
-    Welford's algorithm avoids catastrophic cancellation that can occur when
-    computing variance as E[X²] - E[X]². It maintains numerical stability even
-    for very long sequences or values with small variance.
-    
-    Reference: Welford, B.P. (1962). "Note on a method for calculating corrected 
-    sums of squares and products". Technometrics 4(3): 419-420.
-    
-    Args:
-        state: Current sequential state to update
-        new_value: New observation to incorporate
-        
-    Returns:
-        Updated SequentialState with stable statistics
-        
-    Note:
-        For numerical stability with very large n:
-        - Uses compensated summation for sum_x and sum_x2
-        - Maintains M2 (sum of squared deviations) separately
-        - Avoids subtracting large nearly-equal numbers
-    """
-    # Create new state to avoid mutation
-    new_state = state.copy()
-    
-    # Increment sample count
-    new_state.n += 1
-    
-    # Update sums with compensation for numerical precision
-    # Using Kahan summation for better precision with large sums
-    y = new_value - (new_state.sum_x - new_state.sum_x)  # Compensation
-    new_state.sum_x += y
-    
-    y2 = new_value * new_value - (new_state.sum_x2 - new_state.sum_x2)
-    new_state.sum_x2 += y2
-    
-    # Welford's algorithm for mean and M2
-    delta = new_value - new_state.mean
-    new_state.mean += delta / new_state.n
-    delta2 = new_value - new_state.mean
-    new_state.M2 += delta * delta2
-    
-    # Update variance estimate
-    if new_state.n > 1:
-        new_state.variance = new_state.M2 / (new_state.n - 1)
-    else:
-        new_state.variance = 0.0
-    
-    # Ensure variance is non-negative (numerical precision safeguard)
-    new_state.variance = max(0.0, new_state.variance)
-    
-    return new_state
-
-
-def compute_empirical_variance(state: SequentialState, bessel_correction: bool = True) -> float:
-    """
-    Compute empirical variance with optional Bessel correction for unbiased estimation.
-    
-    Mathematical Formula:
-        With Bessel correction (unbiased): σ̂² = M2/(n-1)
-        Without correction (biased): σ̂² = M2/n
-        
-        For bounded variables X ∈ [0,1], variance is capped at 0.25
-        (achieved when P(X=0) = P(X=1) = 0.5).
-    
-    Reference: §2.4 of the paper for variance estimation in EB bounds
-    
-    Args:
-        state: SequentialState with accumulated M2 statistic
-        bessel_correction: If True, use n-1 denominator for unbiased estimate
-        
-    Returns:
-        Empirical variance estimate, clipped to [0, 0.25] for bounded data
-    """
-    if state.n == 0:
-        return 0.0
-    
-    if state.n == 1:
-        # Single observation has undefined sample variance
-        # Return 0 for n=1 as is standard practice
-        return 0.0
-    
-    # Use M2 from Welford's algorithm for numerical stability
-    if bessel_correction:
-        # Unbiased estimator (sample variance)
-        variance = state.M2 / (state.n - 1)
-    else:
-        # Biased estimator (population variance)
-        variance = state.M2 / state.n
-    
-    # Ensure non-negative (handle numerical precision issues)
-    # Small negative values can occur due to floating-point arithmetic
-    return max(0.0, variance)
-
-
-def compute_anytime_p_value(state: SequentialState, tau: float) -> float:
-    """
-    Compute anytime-valid p-value using martingale-based correction.
-    
-    Mathematical Foundation:
-        The anytime-valid p-value uses the law of iterated logarithm to
-        maintain validity despite optional stopping:
-        
-        p_t = 2 · exp(-2t(μ̂_t - τ)²/σ̂²_t) · C_t
-        
-        where C_t = log(log(max(e, t))) is the anytime-validity correction.
-        
-        This ensures P(p_T ≤ α | H₀) ≤ α for any stopping time T.
-    
-    Args:
-        state: SequentialState with current test statistics
-        tau: Null hypothesis threshold H₀: μ ≤ τ
-        
-    Returns:
-        Anytime-valid p-value in [0, 1]
-    """
-    if state.n == 0:
-        return 1.0
-    
-    # Compute test statistic: standardized difference from tau
-    if state.variance > 0:
-        # Standardized test statistic
-        z = sqrt(state.n) * (state.mean - tau) / sqrt(state.variance)
-    else:
-        # Handle zero variance case
-        if abs(state.mean - tau) < 1e-10:
-            return 1.0
-        else:
-            # Infinite z-score, return extreme p-value
-            return 1e-10 if state.mean > tau else 1.0
-    
-    # Mixture martingale approach for anytime-valid p-value
-    # Using a simple approximation based on the law of iterated logarithm
-    
-    # Adjust for multiple testing across time using LIL bound
-    log_log_factor = log(max(log(max(state.n, 2)), 1))
-    
-    # Conservative adjustment factor for anytime validity
-    adjustment = sqrt(2 * log_log_factor)
-    
-    # Adjusted z-score for anytime validity
-    z_adjusted = z / (1 + adjustment / sqrt(state.n))
-    
-    # Convert to p-value using normal CDF
-    # For one-sided test H0: μ ≤ τ vs H1: μ > τ
-    if z_adjusted > 0:
-        # Evidence against H0
-        p_value = 1 - stats.norm.cdf(z_adjusted)
-    else:
-        # Evidence supporting H0
-        p_value = 1.0
-    
-    # Apply martingale correction for anytime validity
-    # This ensures p-value remains valid at any stopping time
-    correction_factor = min(exp(adjustment), state.n)
-    p_value_corrected = min(1.0, p_value * correction_factor)
-    
-    return p_value_corrected
-
-
-@dataclass
-class EBConfig:
-    """Configuration for Empirical Bernstein test"""
-    delta: float = 0.02     # ~ alpha+beta (confidence parameter)
-    B: float = 1.0          # known bound on distances
-    tau: float = 0.05       # threshold
-
-    def __post_init__(self):
-        assert 0 < self.tau < self.B, f"tau must be in (0, {self.B})"
-        assert 0 < self.delta < 1, "delta must be in (0,1)"
-
-
-def eb_radius(var: float, n: int, delta: float) -> float:
-    """
-    Compute anytime-valid confidence radius
-    
-    Args:
-        var: Sample variance
-        n: Number of observations
-        delta: Confidence parameter
-        
-    Returns:
-        Confidence radius
-    """
-    if n <= 1:
-        return float('inf')
-    return sqrt(2 * var * log(3 / delta) / n) + 3 * log(3 / delta) / n
-
-
-def sequential_verify(
-    stream: Iterable[float],
-    tau: float = 0.5,
-    alpha: float = 0.05,
-    beta: float = 0.05,
-    max_samples: int = 10000,
-    compute_p_value: bool = True
-) -> SPRTResult:
-    """
-    Anytime-valid sequential hypothesis test using Empirical-Bernstein bounds.
-    
-    Mathematical Framework:
-        Tests H₀: μ ≤ τ vs H₁: μ > τ for bounded distances X_t ∈ [0,1]
-        
-        Confidence Sequence (§2.4):
-            At time t, the (1-α) confidence interval is:
-            [X̄_t ± r_t(α)] where r_t(α) is the EB radius:
-            
-            r_t(α) = √(2σ̂²_t log(log(t)/α)/t) + c·log(log(t)/α)/t
-            
-        Stopping Rules:
-            - Accept H₀ (model verified) if X̄_t + r_t(α) < τ
-            - Reject H₀ (model different) if X̄_t - r_t(α) > τ  
-            - Continue sampling otherwise
-            
-        Anytime Validity:
-            P(Type I error) ≤ α uniformly over all stopping times
-            P(Type II error) ≤ β for effect sizes > δ
-    
-    Args:
-        stream: Iterator of distance values in [0,1] between model outputs
-        tau: Decision threshold τ (models identical if μ ≤ τ)
-        alpha: Type I error rate α - P(reject H₀ | H₀ true) ≤ α
-        beta: Type II error rate β - P(accept H₀ | H₁ true) ≤ β
-        max_samples: Upper bound on sample size (default 10000)
-        compute_p_value: Whether to compute anytime-valid p-value
-    
-    Returns:
-        SPRTResult containing decision, statistics, and full trajectory
-    """
-    # Initialize state and trajectory
-    state = SequentialState()
-    trajectory = []
-    
-    # Process stream
-    for t, x_raw in enumerate(stream, start=1):
-        # Clip values to [0,1] for bounded distances
-        x = max(0.0, min(1.0, float(x_raw)))
-        
-        # Update state using numerically stable Welford algorithm
-        state = welford_update(state, x)
-        
-        # Store trajectory snapshot
-        trajectory.append(state.copy())
-        
-        # Compute EB radius - simplified version for REV
-        if state.n > 1 and state.variance > 0:
-            radius = sqrt(2 * state.variance * log(3 / alpha) / state.n) + 3 * log(3 / alpha) / state.n
-        else:
-            radius = float('inf')
-        
-        # Check stopping condition
-        if radius != float('inf'):
-            if state.mean + radius <= tau:
-                # Accept H0 - models are equivalent
-                p_val = compute_anytime_p_value(state, tau) if compute_p_value else None
-                return SPRTResult(
-                    decision='H0',
-                    stopped_at=t,
-                    final_mean=state.mean,
-                    final_variance=compute_empirical_variance(state),
-                    confidence_radius=radius,
-                    trajectory=trajectory,
-                    confidence_interval=(max(0, state.mean - radius), 
-                                       min(1, state.mean + radius)),
-                    p_value=p_val,
-                    forced_stop=False
-                )
-            elif state.mean - radius > tau:
-                # Reject H0 - models are different
-                p_val = compute_anytime_p_value(state, tau) if compute_p_value else None
-                return SPRTResult(
-                    decision='H1',
-                    stopped_at=t,
-                    final_mean=state.mean,
-                    final_variance=compute_empirical_variance(state),
-                    confidence_radius=radius,
-                    trajectory=trajectory,
-                    confidence_interval=(max(0, state.mean - radius),
-                                       min(1, state.mean + radius)),
-                    p_value=p_val,
-                    forced_stop=False
-                )
-        
-        # Check if we've reached maximum samples
-        if t >= max_samples:
-            # Forced decision at maximum samples
-            if state.n > 1 and state.variance > 0:
-                radius = sqrt(2 * state.variance * log(3 / alpha) / state.n) + 3 * log(3 / alpha) / state.n
-            else:
-                radius = float('inf')
-            
-            # Use point estimate to decide
-            decision = 'H0' if state.mean <= tau else 'H1'
-            
-            # Compute p-value if requested
-            p_val = compute_anytime_p_value(state, tau) if compute_p_value else None
-            
-            return SPRTResult(
-                decision=decision,
-                stopped_at=t,
-                final_mean=state.mean,
-                final_variance=compute_empirical_variance(state),
-                confidence_radius=radius,
-                trajectory=trajectory,
-                confidence_interval=(max(0, state.mean - radius),
-                                   min(1, state.mean + radius)),
-                p_value=p_val,
-                forced_stop=True
-            )
-    
-    # Stream ended without reaching max_samples
-    # Return current state with 'continue' decision
-    if state.n > 0:
-        if state.n > 1 and state.variance > 0:
-            radius = sqrt(2 * state.variance * log(3 / alpha) / state.n) + 3 * log(3 / alpha) / state.n
-        else:
-            radius = float('inf')
-        
-        # Compute p-value if requested
-        p_val = compute_anytime_p_value(state, tau) if compute_p_value else None
-        
-        return SPRTResult(
-            decision='continue',
-            stopped_at=state.n,
-            final_mean=state.mean,
-            final_variance=compute_empirical_variance(state),
-            confidence_radius=radius,
-            trajectory=trajectory,
-            confidence_interval=(max(0, state.mean - radius),
-                               min(1, state.mean + radius)),
-            p_value=p_val,
-            forced_stop=False
-        )
-    else:
-        # No samples processed
-        return SPRTResult(
-            decision='continue',
-            stopped_at=0,
-            final_mean=0.0,
-            final_variance=0.0,
-            confidence_radius=float('inf'),
-            trajectory=[],
-            confidence_interval=(0.0, 1.0),
-            p_value=1.0 if compute_p_value else None,
-            forced_stop=False
-        )
-
-
-# ============================================================================
-# Dual Sequential Testing Framework (Section 5.7)
-# ============================================================================
-
-@dataclass 
-class DualSequentialTest:
-    """
-    Dual sequential test framework from Section 5.7.
-    
-    Combines two sequential tests:
-    - S_match: Bernoulli test for exact equality
-    - S_dist: Distance threshold test
-    """
-    S_match: SequentialState
-    S_dist: SequentialState
-    alpha: float = 0.01
-    beta: float = 0.01
-    d_thresh: float = 0.08
-    max_C: int = 2000
-    
-    def __post_init__(self):
-        """Initialize the two sequential tests."""
-        self.S_match.test_type = TestType.MATCH
-        self.S_match.alpha = self.alpha
-        self.S_match.beta = self.beta
-        
-        self.S_dist.test_type = TestType.DISTANCE
-        self.S_dist.alpha = self.alpha
-        self.S_dist.beta = self.beta
-
-
-def init_seq_test(alpha: float, test_type: TestType = TestType.DISTANCE) -> SequentialState:
-    """
-    Initialize a sequential test with given error rate.
-    
-    Args:
-        alpha: Type I error rate
-        test_type: Type of test (MATCH or DISTANCE)
-        
-    Returns:
-        Initialized SequentialState
-    """
-    return SequentialState(
-        test_type=test_type,
-        alpha=alpha,
-        beta=alpha  # Symmetric error rates by default
-    )
-
-
-def accept_same(S_match: SequentialState, S_dist: SequentialState) -> bool:
-    """
-    Check if we should accept that models are the SAME.
-    
-    Per Section 5.7: Accept SAME if both tests indicate similarity.
-    
-    Args:
-        S_match: Bernoulli match test state
-        S_dist: Distance threshold test state
-        
-    Returns:
-        True if models should be considered SAME
-    """
-    # High match rate indicates similarity
-    match_evidence = S_match.get_match_rate() > 0.9 and S_match.n >= 10
-    
-    # Low distance indicates similarity
-    dist_evidence = S_dist.mean < 0.05 and S_dist.get_confidence_radius() < 0.05
-    
-    return match_evidence or dist_evidence
-
-
-def accept_diff(S_match: SequentialState, S_dist: SequentialState) -> bool:
-    """
-    Check if we should accept that models are DIFFERENT.
-    
-    Per Section 5.7: Accept DIFFERENT if either test indicates difference.
-    
-    Args:
-        S_match: Bernoulli match test state
-        S_dist: Distance threshold test state
-        
-    Returns:
-        True if models should be considered DIFFERENT
-    """
-    # Low match rate indicates difference
-    match_evidence = S_match.get_match_rate() < 0.5 and S_match.n >= 20
-    
-    # High distance indicates difference
-    dist_evidence = S_dist.mean > 0.15 and S_dist.get_confidence_radius() < 0.05
-    
-    return match_evidence or dist_evidence
-
-
-def sequential_decision(
-    stream: Generator[Dict[str, Any], None, None],
-    alpha: float = 0.01,
-    beta: float = 0.01,
-    d_thresh: float = 0.08,
-    max_C: int = 2000
-) -> Tuple[str, int, Dict[str, Any]]:
-    """
-    Dual sequential decision framework from Section 5.7 pseudocode.
-    
-    Implements the exact algorithm:
-    ```
-    def sequential_decision(stream, alpha=0.01, beta=0.01, d_thresh=0.08, max_C=2000):
-        S_match = init_seq_test(alpha)
-        S_dist = init_seq_test(beta)
-        for t, r in enumerate(stream, 1):
-            update(S_match, r["I"])      # Bernoulli evidence
-            update(S_dist, r["d"], d_thresh)  # distance evidence
-            if accept_same(S_match, S_dist):
-                return "SAME", t
-            if accept_diff(S_match, S_dist):
-                return "DIFFERENT", t
-            if t >= max_C:
-                break
-        return "UNDECIDED", t
-    ```
-    
-    Args:
-        stream: Generator yielding dicts with "I" (indicator) and "d" (distance)
-        alpha: Type I error rate for match test
-        beta: Type I error rate for distance test
-        d_thresh: Distance threshold
-        max_C: Maximum number of comparisons
-        
-    Returns:
-        Tuple of (verdict, stopping_time, localization_info)
-    """
-    # Initialize dual sequential tests
-    S_match = init_seq_test(alpha, TestType.MATCH)
-    S_dist = init_seq_test(beta, TestType.DISTANCE)
-    
-    localization_info = {
-        "first_divergence": None,
-        "divergence_sites": [],
-        "match_trajectory": [],
-        "distance_trajectory": []
-    }
-    
-    # Process stream
-    for t, r in enumerate(stream, 1):
-        # Extract evidence from stream
-        I = r.get("I", 0)  # Bernoulli indicator (1 if match, 0 if not)
-        d = r.get("d", 0.0)  # Distance value
-        
-        # Update match test with Bernoulli evidence
-        S_match.update(float(I), is_match=(I == 1))
-        localization_info["match_trajectory"].append(S_match.get_match_rate())
-        
-        # Update distance test
-        S_dist.update_distance(d, d_thresh)
-        localization_info["distance_trajectory"].append(d)
-        
-        # Track first divergence
-        if I == 0 and localization_info["first_divergence"] is None:
-            localization_info["first_divergence"] = t
-            localization_info["divergence_sites"].append(t)
-        elif I == 0:
-            localization_info["divergence_sites"].append(t)
-        
-        # Check stopping conditions
-        if accept_same(S_match, S_dist):
-            localization_info["match_rate"] = S_match.mean if S_match.n > 0 else 0.0
-            localization_info["mean_distance"] = S_dist.mean if S_dist.n > 0 else 0.0
-            return "SAME", t, localization_info
-        
-        if accept_diff(S_match, S_dist):
-            localization_info["match_rate"] = S_match.mean if S_match.n > 0 else 0.0
-            localization_info["mean_distance"] = S_dist.mean if S_dist.n > 0 else 0.0
-            return "DIFFERENT", t, localization_info
-        
-        if t >= max_C:
-            break
-    
-    # Return undecided if we hit max samples
-    localization_info["match_rate"] = S_match.mean if S_match.n > 0 else 0.0
-    localization_info["mean_distance"] = S_dist.mean if S_dist.n > 0 else 0.0
-    return "UNDECIDED", t, localization_info
+class Verdict(Enum):
+    """Possible verdicts from sequential testing."""
+    SAME = "SAME"
+    DIFFERENT = "DIFFERENT"
+    UNCERTAIN = "UNCERTAIN"
+    UNDECIDED = "UNDECIDED"  # Not enough evidence yet
 
 
 @dataclass
 class ConfidenceSequence:
     """
-    Anytime-valid confidence sequence for sequential testing.
+    Anytime-valid confidence sequence using e-values.
     
-    Implements e-values and confidence sequences for multiple testing correction.
+    Implements the peeling method for multiple testing correction
+    and maintains confidence bounds that are valid at any stopping time.
     """
-    e_values: List[float] = field(default_factory=list)
+    peeling_factor: float = 1.1  # Factor for peeling (ρ in paper)
     confidence_levels: List[float] = field(default_factory=list)
-    peeling_factor: float = 1.1  # For peeling in multiple testing
+    e_values: List[float] = field(default_factory=list)
+    confidence_radii: List[float] = field(default_factory=list)
     
-    def update(self, e_value: float):
-        """Update with new e-value."""
+    def update(self, e_value: float) -> None:
+        """Update confidence sequence with new e-value."""
         self.e_values.append(e_value)
         
-        # Compute confidence level
+        # Compute confidence level using e-value
+        # CI_t = 1 - 1/E_t for anytime-valid confidence
         confidence = 1.0 - 1.0 / max(e_value, 1.0)
         self.confidence_levels.append(confidence)
+        
+        # Compute confidence radius using Ville's inequality
+        n = len(self.e_values)
+        radius = math.sqrt(2 * math.log(e_value) / n) if n > 0 and e_value > 1 else 1.0
+        self.confidence_radii.append(radius)
     
     def get_adjusted_confidence(self, k: int) -> float:
         """
-        Get adjusted confidence for k-th test with peeling.
+        Get adjusted confidence for k-th test (peeling).
         
         Args:
-            k: Test index
+            k: Index of test (0-based)
             
         Returns:
-            Adjusted confidence level
+            Adjusted confidence level accounting for multiple testing
         """
         if k >= len(self.confidence_levels):
             return 0.0
         
-        # Apply peeling adjustment
-        adjusted = self.confidence_levels[k] / (self.peeling_factor ** k)
-        return min(1.0, adjusted)
+        # Apply peeling correction: α_k = α * ρ^k
+        base_confidence = self.confidence_levels[k]
+        adjustment = self.peeling_factor ** k
+        
+        return min(base_confidence / adjustment, 1.0)
+    
+    def get_current_radius(self) -> float:
+        """Get current confidence radius."""
+        return self.confidence_radii[-1] if self.confidence_radii else 1.0
+    
+    def get_confidence_radius(self, alpha: float = 0.05) -> float:
+        """
+        Get confidence radius based on e-values.
+        
+        Args:
+            alpha: Significance level
+            
+        Returns:
+            Confidence radius
+        """
+        if self.n == 0:
+            return float('inf')
+        
+        # Use maximum e-value for tighter bounds
+        max_e = max(self.e_values) if self.e_values else 1.0
+        
+        # Ville's inequality based radius
+        if max_e > 1:
+            radius = math.sqrt(2 * math.log(max_e) / (self.n * alpha))
+        else:
+            radius = math.sqrt(2 * math.log(1/alpha) / self.n)
+        
+        return min(radius, 1.0)  # Cap at 1.0 for reasonable bounds
+
+
+@dataclass
+class PowerAnalysis:
+    """Power analysis utilities for sequential testing."""
+    
+    @staticmethod
+    def compute_expected_sample_size(
+        alpha: float,
+        beta: float,
+        effect_size: float,
+        test_type: TestType = TestType.MATCH
+    ) -> int:
+        """
+        Compute expected sample size for given power.
+        
+        Args:
+            alpha: Type I error rate
+            beta: Type II error rate
+            effect_size: Expected effect size (Cohen's d for continuous)
+            test_type: Type of test
+            
+        Returns:
+            Expected number of samples needed
+        """
+        if test_type == TestType.MATCH:
+            # For Bernoulli test, use Wald's approximation
+            p0 = 0.5  # Null hypothesis
+            p1 = 0.5 + effect_size  # Alternative
+            
+            # Log likelihood ratio components
+            if p1 <= p0 or p1 >= 1.0:
+                return 10000  # Maximum
+            
+            llr_1 = p1 * math.log(p1/p0) + (1-p1) * math.log((1-p1)/(1-p0))
+            llr_0 = p0 * math.log(p0/p1) + (1-p0) * math.log((1-p0)/(1-p1))
+            
+            # Wald's approximation
+            A = math.log((1-beta)/alpha)
+            B = math.log(beta/(1-alpha))
+            
+            n_1 = A / llr_1 if llr_1 > 1e-10 else 10000  # Expected size under H1
+            n_0 = B / llr_0 if abs(llr_0) > 1e-10 else 10000  # Expected size under H0
+            
+            result = (n_0 + n_1) / 2
+            return min(int(result) if not math.isinf(result) else 10000, 10000)  # Cap at 10000
+        
+        else:  # DISTANCE test
+            # Use standard power analysis for t-test
+            z_alpha = stats.norm.ppf(1 - alpha/2)
+            z_beta = stats.norm.ppf(1 - beta)
+            
+            n = ((z_alpha + z_beta) / effect_size) ** 2
+            return max(int(n), 5)
+    
+    @staticmethod
+    def compute_power(
+        n: int,
+        alpha: float,
+        effect_size: float,
+        test_type: TestType = TestType.MATCH
+    ) -> float:
+        """
+        Compute statistical power for given sample size.
+        
+        Args:
+            n: Sample size
+            alpha: Type I error rate
+            effect_size: Effect size
+            test_type: Type of test
+            
+        Returns:
+            Statistical power (1 - beta)
+        """
+        if n <= 0:
+            return 0.0
+        
+        if test_type == TestType.MATCH:
+            # Approximate power for binomial test
+            se = math.sqrt(0.25 / n)  # Standard error under null
+            z_alpha = stats.norm.ppf(1 - alpha/2)
+            
+            # Non-centrality parameter
+            ncp = effect_size * math.sqrt(n)
+            
+            # Power using normal approximation
+            power = stats.norm.cdf(ncp - z_alpha) + stats.norm.cdf(-ncp - z_alpha)
+            return min(power, 1.0)
+        
+        else:  # DISTANCE test
+            # Power for t-test
+            df = n - 1
+            ncp = effect_size * math.sqrt(n)
+            t_crit = stats.t.ppf(1 - alpha/2, df)
+            
+            # Non-central t-distribution
+            power = 1 - stats.nct.cdf(t_crit, df, ncp) + stats.nct.cdf(-t_crit, df, ncp)
+            return min(power, 1.0)
+
+
+class SequentialState:
+    """
+    Enhanced sequential state with e-value tracking and advanced features.
+    
+    Maintains running statistics, confidence sequences, and history
+    for anytime-valid sequential testing with optimal stopping.
+    """
+    
+    def __init__(
+        self,
+        test_type: TestType = TestType.MATCH,
+        alpha: float = 0.01,
+        beta: float = 0.01,
+        adaptive_threshold: bool = True,
+        history_size: int = 1000
+    ):
+        """
+        Initialize sequential state.
+        
+        Args:
+            test_type: Type of sequential test
+            alpha: Type I error rate (false positive)
+            beta: Type II error rate (false negative)
+            adaptive_threshold: Whether to adapt thresholds based on variance
+            history_size: Maximum history to maintain
+        """
+        self.test_type = test_type
+        self.alpha = alpha
+        self.beta = beta
+        self.adaptive_threshold = adaptive_threshold
+        
+        # Running statistics
+        self.n = 0
+        self.sum = 0.0
+        self.sum_sq = 0.0
+        self.mean = 0.0
+        self.variance = 0.0
+        self.std = 0.0
+        
+        # For Bernoulli test
+        self.n_matches = 0
+        self.n_mismatches = 0
+        
+        # For distance test
+        self.min_distance = float('inf')
+        self.max_distance = 0.0
+        self.below_threshold_count = 0
+        
+        # Confidence sequences
+        self.confidence_seq = ConfidenceSequence()
+        
+        # E-values and likelihood ratios
+        self.log_likelihood_ratio = 0.0
+        self.e_value_product = 1.0
+        self.e_values: List[float] = []
+        
+        # SPRT boundaries
+        self.upper_boundary = math.log((1 - beta) / alpha)
+        self.lower_boundary = math.log(beta / (1 - alpha))
+        
+        # History tracking
+        self.history = deque(maxlen=history_size)
+        self.decision_history: List[Tuple[int, Verdict]] = []
+        
+        # Localization tracking
+        self.first_divergence_site: Optional[int] = None
+        self.divergence_sites: List[int] = []
+        self.match_trajectory: List[float] = []
+        
+        # Adaptive threshold parameters
+        self.threshold_history: List[float] = []
+        self.current_threshold = 0.5  # Initial threshold
+        
+        # Confidence interval tracking
+        self.ci_lower: List[float] = []
+        self.ci_upper: List[float] = []
+    
+    def update(self, value: float, is_match: Optional[bool] = None) -> None:
+        """
+        Update state with new observation.
+        
+        Args:
+            value: Observed value (distance or match indicator)
+            is_match: Optional explicit match indicator for hybrid tests
+        """
+        self.n += 1
+        self.sum += value
+        self.sum_sq += value * value
+        
+        # Update running statistics (Welford's algorithm)
+        delta = value - self.mean
+        self.mean += delta / self.n
+        if self.n > 1:
+            self.variance = (self.sum_sq - self.sum * self.sum / self.n) / (self.n - 1)
+            self.std = math.sqrt(max(self.variance, 0))
+        
+        # Store in history
+        self.history.append(value)
+        
+        # Update test-specific statistics
+        if self.test_type == TestType.MATCH:
+            if is_match or value > 0.5:  # Treat as match
+                self.n_matches += 1
+            else:
+                self.n_mismatches += 1
+                if self.first_divergence_site is None:
+                    self.first_divergence_site = self.n
+                self.divergence_sites.append(self.n)
+            
+            # Update match trajectory
+            match_rate = self.n_matches / self.n
+            self.match_trajectory.append(match_rate)
+        
+        elif self.test_type == TestType.DISTANCE:
+            self.min_distance = min(self.min_distance, value)
+            self.max_distance = max(self.max_distance, value)
+            
+            # Track divergences based on adaptive threshold
+            if self.adaptive_threshold:
+                self._update_adaptive_threshold()
+            
+            if value < self.current_threshold:
+                self.below_threshold_count += 1
+            else:
+                if self.first_divergence_site is None:
+                    self.first_divergence_site = self.n
+                self.divergence_sites.append(self.n)
+        
+        # Compute e-value
+        e_val = self._compute_e_value(value)
+        self.e_values.append(e_val)
+        self.e_value_product *= e_val
+        
+        # Update confidence sequence
+        self.confidence_seq.update(e_val)
+        
+        # Update log-likelihood ratio for SPRT
+        self._update_llr(value)
+        
+        # Update confidence intervals
+        self._update_confidence_intervals()
+    
+    def update_distance(self, distance: float, threshold: float) -> None:
+        """
+        Update with distance observation.
+        
+        Args:
+            distance: Observed distance
+            threshold: Distance threshold for comparison
+        """
+        self.current_threshold = threshold
+        is_below = distance < threshold
+        self.update(distance, is_match=is_below)
+    
+    def _compute_e_value(self, value: float) -> float:
+        """
+        Compute e-value for current observation.
+        
+        E-values provide anytime-valid inference without requiring
+        a fixed sample size or stopping rule.
+        """
+        if self.n < 2:
+            return 1.0
+        
+        if self.test_type == TestType.MATCH:
+            # Binomial e-value
+            p_null = 0.5  # Null: random guessing
+            p_alt = self.mean  # Alternative: observed rate
+            
+            if p_alt <= 0 or p_alt >= 1:
+                return 1.0
+            
+            # Likelihood ratio e-value
+            if value > 0.5:  # Match
+                e_val = (p_alt / p_null) if p_alt > p_null else 1.0
+            else:  # Mismatch
+                e_val = ((1 - p_alt) / (1 - p_null)) if p_alt < p_null else 1.0
+            
+            return max(e_val, 1.0)
+        
+        else:  # DISTANCE test
+            # Gaussian e-value with empirical variance
+            if self.variance <= 0:
+                return 1.0
+            
+            # Null: high distance (different)
+            # Alt: low distance (same)
+            z_score = (self.current_threshold - value) / (self.std + 1e-10)
+            
+            # Convert to e-value using mixture approach
+            e_val = math.exp(z_score - z_score**2 / 2)
+            
+            return max(e_val, 1.0)
+    
+    def _update_llr(self, value: float) -> None:
+        """Update log-likelihood ratio for SPRT."""
+        if self.test_type == TestType.MATCH:
+            # Bernoulli LLR
+            p0 = 0.5  # Null
+            p1 = 0.9  # Alternative (high match rate for SAME)
+            
+            if value > 0.5:  # Match
+                llr_increment = math.log(p1 / p0)
+            else:
+                llr_increment = math.log((1 - p1) / (1 - p0))
+            
+            self.log_likelihood_ratio += llr_increment
+        
+        else:  # DISTANCE test
+            # Gaussian LLR with known variance
+            if self.variance <= 0:
+                return
+            
+            # H0: μ = threshold (different)
+            # H1: μ = 0 (same)
+            llr_increment = (value * self.current_threshold - self.current_threshold**2 / 2) / self.variance
+            self.log_likelihood_ratio += llr_increment
+    
+    def _update_adaptive_threshold(self) -> None:
+        """Update threshold adaptively based on observed variance."""
+        if not self.adaptive_threshold or self.n < 10:
+            return
+        
+        # Use empirical quantiles for robust threshold estimation
+        recent = list(self.history)[-100:]  # Last 100 observations
+        if len(recent) < 10:
+            return
+        
+        # Set threshold at empirical quantile
+        q25 = np.percentile(recent, 25)
+        q75 = np.percentile(recent, 75)
+        iqr = q75 - q25
+        
+        # Adaptive threshold: median + k * IQR
+        median = np.median(recent)
+        k = 0.5  # Tuning parameter
+        
+        new_threshold = median + k * iqr
+        
+        # Smooth update
+        alpha_smooth = 0.1
+        self.current_threshold = (1 - alpha_smooth) * self.current_threshold + alpha_smooth * new_threshold
+        self.threshold_history.append(self.current_threshold)
+    
+    def _update_confidence_intervals(self) -> None:
+        """Update confidence intervals for the mean."""
+        if self.n < 2:
+            self.ci_lower.append(0.0)
+            self.ci_upper.append(1.0)
+            return
+        
+        # Use t-distribution for small samples
+        confidence_level = 1 - self.alpha
+        
+        if self.n < 30:
+            # t-distribution
+            df = self.n - 1
+            t_crit = stats.t.ppf((1 + confidence_level) / 2, df)
+            margin = t_crit * self.std / math.sqrt(self.n)
+        else:
+            # Normal approximation
+            z_crit = stats.norm.ppf((1 + confidence_level) / 2)
+            margin = z_crit * self.std / math.sqrt(self.n)
+        
+        # Anytime-valid adjustment using e-values
+        radius = self.confidence_seq.get_current_radius()
+        margin = min(margin, radius)
+        
+        self.ci_lower.append(max(self.mean - margin, 0))
+        self.ci_upper.append(min(self.mean + margin, 1))
+    
+    def get_confidence(self) -> float:
+        """Get current confidence level."""
+        if not self.confidence_seq.confidence_levels:
+            return 0.0
+        return self.confidence_seq.confidence_levels[-1]
+    
+    def get_confidence_interval(self) -> Tuple[float, float]:
+        """Get current confidence interval for the mean."""
+        if not self.ci_lower:
+            return (0.0, 1.0)
+        return (self.ci_lower[-1], self.ci_upper[-1])
+    
+    def get_confidence_radius(self) -> float:
+        """Get current confidence radius."""
+        return self.confidence_seq.get_current_radius()
+    
+    def get_match_rate(self) -> float:
+        """Get current match rate (for MATCH test)."""
+        if self.n == 0:
+            return 0.5
+        return self.n_matches / self.n
+    
+    def get_below_threshold_rate(self) -> float:
+        """Get rate of observations below threshold (for DISTANCE test)."""
+        if self.n == 0:
+            return 0.5
+        return self.below_threshold_count / self.n
+    
+    def should_stop(self) -> bool:
+        """Check if we should stop based on SPRT boundaries."""
+        return (self.log_likelihood_ratio >= self.upper_boundary or 
+                self.log_likelihood_ratio <= self.lower_boundary)
+    
+    def get_decision(self) -> Verdict:
+        """
+        Get current decision based on accumulated evidence.
+        
+        Returns:
+            Current verdict (SAME/DIFFERENT/UNCERTAIN/UNDECIDED)
+        """
+        # Check SPRT boundaries
+        if self.log_likelihood_ratio >= self.upper_boundary:
+            verdict = Verdict.SAME
+        elif self.log_likelihood_ratio <= self.lower_boundary:
+            verdict = Verdict.DIFFERENT
+        elif self.n < 10:
+            verdict = Verdict.UNDECIDED
+        else:
+            # Use confidence intervals for uncertain region
+            ci_lower, ci_upper = self.get_confidence_interval()
+            
+            if self.test_type == TestType.MATCH:
+                if ci_lower > 0.7:  # High match rate
+                    verdict = Verdict.SAME
+                elif ci_upper < 0.3:  # Low match rate
+                    verdict = Verdict.DIFFERENT
+                else:
+                    verdict = Verdict.UNCERTAIN
+            else:  # DISTANCE
+                if ci_upper < self.current_threshold * 0.5:  # Very low distance
+                    verdict = Verdict.SAME
+                elif ci_lower > self.current_threshold * 1.5:  # Very high distance
+                    verdict = Verdict.DIFFERENT
+                else:
+                    verdict = Verdict.UNCERTAIN
+        
+        # Track decision history
+        if self.n > 0 and (not self.decision_history or 
+                           self.decision_history[-1][1] != verdict):
+            self.decision_history.append((self.n, verdict))
+        
+        return verdict
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get comprehensive summary of current state."""
+        return {
+            "n": self.n,
+            "mean": self.mean,
+            "variance": self.variance,
+            "std": self.std,
+            "confidence": self.get_confidence(),
+            "confidence_interval": self.get_confidence_interval(),
+            "log_likelihood_ratio": self.log_likelihood_ratio,
+            "e_value_product": self.e_value_product,
+            "verdict": self.get_decision().value,
+            "match_rate": self.get_match_rate() if self.test_type == TestType.MATCH else None,
+            "below_threshold_rate": self.get_below_threshold_rate() if self.test_type == TestType.DISTANCE else None,
+            "first_divergence": self.first_divergence_site,
+            "num_divergences": len(self.divergence_sites),
+            "current_threshold": self.current_threshold,
+            "should_stop": self.should_stop()
+        }
+
+
+@dataclass
+class DualSequentialTest:
+    """
+    Dual sequential test combining Bernoulli and distance evidence.
+    
+    Implements the algorithm from Section 5.7 with both S_match and S_dist tests.
+    """
+    S_match: SequentialState  # Bernoulli test
+    S_dist: SequentialState   # Distance test
+    combined_verdict: Verdict = Verdict.UNDECIDED
+    stopping_time: Optional[int] = None
+    
+    def update(self, match_indicator: float, distance: float, threshold: float) -> None:
+        """Update both tests with new observation."""
+        self.S_match.update(match_indicator, is_match=match_indicator > 0.5)
+        self.S_dist.update_distance(distance, threshold)
+        
+        # Update combined verdict
+        self._update_combined_verdict()
+    
+    def _update_combined_verdict(self) -> None:
+        """Combine evidence from both tests."""
+        match_verdict = self.S_match.get_decision()
+        dist_verdict = self.S_dist.get_decision()
+        
+        # Conservative combination: both must agree
+        if match_verdict == Verdict.SAME and dist_verdict == Verdict.SAME:
+            self.combined_verdict = Verdict.SAME
+            if self.stopping_time is None:
+                self.stopping_time = self.S_match.n
+        elif match_verdict == Verdict.DIFFERENT or dist_verdict == Verdict.DIFFERENT:
+            self.combined_verdict = Verdict.DIFFERENT
+            if self.stopping_time is None:
+                self.stopping_time = self.S_match.n
+        elif match_verdict == Verdict.UNDECIDED or dist_verdict == Verdict.UNDECIDED:
+            self.combined_verdict = Verdict.UNDECIDED
+        else:
+            self.combined_verdict = Verdict.UNCERTAIN
+    
+    def should_stop(self) -> bool:
+        """Check if either test has reached a stopping boundary."""
+        return self.S_match.should_stop() or self.S_dist.should_stop()
 
 
 def compute_e_value(
     state: SequentialState,
     null_mean: float = 0.5,
-    alt_mean: float = 0.3
+    alt_mean: Optional[float] = None
 ) -> float:
     """
-    Compute e-value for anytime-valid inference.
-    
-    E-values are non-negative random variables with E[E] ≤ 1 under null.
+    Compute e-value for given state.
     
     Args:
         state: Current sequential state
         null_mean: Mean under null hypothesis
-        alt_mean: Mean under alternative hypothesis
+        alt_mean: Mean under alternative (uses observed if None)
         
     Returns:
         E-value for current evidence
@@ -815,40 +633,431 @@ def compute_e_value(
     if state.n == 0:
         return 1.0
     
-    # Compute likelihood ratio
-    if state.variance > 0:
-        # Normal approximation
-        null_ll = -state.n * ((state.mean - null_mean)**2) / (2 * state.variance)
-        alt_ll = -state.n * ((state.mean - alt_mean)**2) / (2 * state.variance)
-        
-        # E-value is likelihood ratio
-        e_value = exp(alt_ll - null_ll)
-    else:
-        # Degenerate case
-        if abs(state.mean - alt_mean) < abs(state.mean - null_mean):
-            e_value = float('inf')
-        else:
-            e_value = 0.0
+    if alt_mean is None:
+        alt_mean = state.mean
     
-    return max(0.0, e_value)
+    if state.test_type == TestType.MATCH:
+        # Binomial e-value
+        n_success = state.n_matches
+        n_fail = state.n_mismatches
+        
+        # Likelihood under alternative
+        l_alt = (alt_mean ** n_success) * ((1 - alt_mean) ** n_fail)
+        
+        # Likelihood under null
+        l_null = (null_mean ** n_success) * ((1 - null_mean) ** n_fail)
+        
+        if l_null <= 0:
+            return float('inf')
+        
+        return l_alt / l_null
+    
+    else:  # DISTANCE
+        # Gaussian e-value
+        if state.variance <= 0:
+            return 1.0
+        
+        # Standardized difference
+        z = (null_mean - alt_mean) * math.sqrt(state.n) / state.std
+        
+        # E-value using mixture method
+        e_val = math.exp(z * state.mean * math.sqrt(state.n) / state.std - z**2 / 2)
+        
+        return max(e_val, 1.0)
 
 
-# Export list for the module
-__all__ = [
-    "SequentialState",
-    "SPRTResult",
-    "EBConfig",
-    "TestType",
-    "DualSequentialTest",
-    "ConfidenceSequence",
-    "sequential_verify",
-    "sequential_decision",
-    "init_seq_test",
-    "accept_same",
-    "accept_diff",
-    "welford_update",
-    "compute_empirical_variance",
-    "compute_anytime_p_value",
-    "compute_e_value",
-    "eb_radius"
-]
+def init_seq_test(
+    alpha: float = 0.01,
+    test_type: TestType = TestType.MATCH,
+    adaptive: bool = True
+) -> SequentialState:
+    """
+    Initialize sequential test with given parameters.
+    
+    Args:
+        alpha: Significance level
+        test_type: Type of test
+        adaptive: Whether to use adaptive thresholds
+        
+    Returns:
+        Initialized sequential state
+    """
+    return SequentialState(
+        test_type=test_type,
+        alpha=alpha,
+        beta=alpha,  # Symmetric error rates
+        adaptive_threshold=adaptive
+    )
+
+
+def accept_same(S_match: SequentialState, S_dist: SequentialState) -> bool:
+    """
+    Check if we should accept SAME hypothesis.
+    
+    Args:
+        S_match: Bernoulli test state
+        S_dist: Distance test state
+        
+    Returns:
+        True if evidence supports SAME verdict
+    """
+    # Check if sufficient evidence
+    if S_match.n < 5:
+        return False
+    
+    match_same = S_match.log_likelihood_ratio >= S_match.upper_boundary
+    dist_same = S_dist.log_likelihood_ratio >= S_dist.upper_boundary
+    
+    # Check: both tests should indicate SAME or strong evidence
+    high_match_rate = S_match.get_match_rate() > 0.85
+    low_distance = S_dist.mean < S_dist.current_threshold * 0.8
+    
+    return (match_same and dist_same) or (match_same and low_distance) or (dist_same and high_match_rate)
+
+
+def accept_diff(S_match: SequentialState, S_dist: SequentialState) -> bool:
+    """
+    Check if we should accept DIFFERENT hypothesis.
+    
+    Args:
+        S_match: Bernoulli test state
+        S_dist: Distance test state
+        
+    Returns:
+        True if evidence supports DIFFERENT verdict
+    """
+    # Check if sufficient evidence
+    if S_match.n < 5:
+        return False
+        
+    match_diff = S_match.log_likelihood_ratio <= S_match.lower_boundary
+    dist_diff = S_dist.log_likelihood_ratio <= S_dist.lower_boundary
+    
+    # More stringent check for DIFFERENT: need strong evidence
+    very_low_match = S_match.get_match_rate() < 0.2
+    very_high_dist = S_dist.mean > S_dist.current_threshold * 2.0
+    
+    return (match_diff and dist_diff) or (very_low_match and very_high_dist)
+
+
+def sequential_decision(
+    stream: Generator[Dict[str, Any], None, None],
+    alpha: float = 0.01,
+    beta: float = 0.01,
+    d_thresh: float = 0.08,
+    max_C: int = 2000,
+    adaptive: bool = True,
+    return_full_state: bool = False
+) -> Union[Tuple[str, int, Dict], Tuple[str, int, Dict, DualSequentialTest]]:
+    """
+    Main sequential decision function from Section 5.7.
+    
+    Implements the dual sequential test with both Bernoulli (S_match)
+    and distance (S_dist) components for robust model comparison.
+    
+    Args:
+        stream: Generator yielding dicts with "I" (indicator) and "d" (distance)
+        alpha: Type I error rate
+        beta: Type II error rate
+        d_thresh: Distance threshold
+        max_C: Maximum number of comparisons
+        adaptive: Whether to use adaptive thresholds
+        return_full_state: Whether to return the full test state
+        
+    Returns:
+        Tuple of (verdict, stopping_time, localization_info, [optional: test_state])
+    """
+    # Initialize dual sequential test
+    S_match = init_seq_test(alpha, TestType.MATCH, adaptive)
+    S_dist = init_seq_test(beta, TestType.DISTANCE, adaptive)
+    
+    dual_test = DualSequentialTest(S_match, S_dist)
+    
+    # Process stream
+    t = 0
+    verdict = "UNDECIDED"
+    
+    for t, r in enumerate(stream, 1):
+        # Extract match indicator and distance
+        I = r.get("I", 0)
+        d = r.get("d", 1.0)
+        
+        # Update both tests
+        dual_test.update(I, d, d_thresh)
+        
+        # Check stopping conditions
+        if accept_same(S_match, S_dist):
+            verdict = "SAME"
+            break
+        
+        if accept_diff(S_match, S_dist):
+            verdict = "DIFFERENT"
+            break
+        
+        if t >= max_C:
+            verdict = "UNDECIDED"
+            break
+    
+    # Handle empty stream
+    if t == 0:
+        t = 1  # Minimum stopping time
+    
+    # Prepare localization info
+    localization_info = {
+        "first_divergence": S_match.first_divergence_site or S_dist.first_divergence_site,
+        "divergence_sites": sorted(set(S_match.divergence_sites + S_dist.divergence_sites))[:10],
+        "match_trajectory": S_match.match_trajectory[-10:] if S_match.match_trajectory else [],
+        "match_rate": S_match.get_match_rate(),
+        "mean_distance": S_dist.mean,
+        "confidence_match": S_match.get_confidence(),
+        "confidence_dist": S_dist.get_confidence(),
+        "samples_used": t
+    }
+    
+    if return_full_state:
+        return verdict, t, localization_info, dual_test
+    else:
+        return verdict, t, localization_info
+
+
+class HybridSequentialTest:
+    """
+    Advanced hybrid sequential test combining multiple evidence types.
+    
+    Supports multi-hypothesis testing with uncertain regions and
+    provides comprehensive analysis capabilities.
+    """
+    
+    def __init__(
+        self,
+        alpha: float = 0.01,
+        beta: float = 0.01,
+        enable_multi_hypothesis: bool = True,
+        power_analysis: bool = True
+    ):
+        """
+        Initialize hybrid sequential test.
+        
+        Args:
+            alpha: Type I error rate
+            beta: Type II error rate
+            enable_multi_hypothesis: Support for UNCERTAIN verdict
+            power_analysis: Enable power analysis features
+        """
+        self.alpha = alpha
+        self.beta = beta
+        self.enable_multi_hypothesis = enable_multi_hypothesis
+        
+        # Initialize component tests
+        self.match_test = SequentialState(TestType.MATCH, alpha, beta)
+        self.distance_test = SequentialState(TestType.DISTANCE, alpha, beta)
+        
+        # Power analysis
+        self.power_analyzer = PowerAnalysis() if power_analysis else None
+        self.expected_n = None
+        self.current_power = 0.0
+        
+        # Multi-hypothesis boundaries
+        self.uncertain_lower = -math.log(2)  # Log(0.5)
+        self.uncertain_upper = math.log(2)   # Log(2)
+        
+        # Results tracking
+        self.verdict_history: List[Tuple[int, Verdict]] = []
+        self.confidence_history: List[float] = []
+    
+    def update(
+        self,
+        match_indicator: float,
+        distance: float,
+        threshold: float = 0.1
+    ) -> Verdict:
+        """
+        Update with new observation and return current verdict.
+        
+        Args:
+            match_indicator: Binary match indicator (0 or 1)
+            distance: Continuous distance measure
+            threshold: Distance threshold
+            
+        Returns:
+            Current verdict
+        """
+        # Update component tests
+        self.match_test.update(match_indicator, is_match=match_indicator > 0.5)
+        self.distance_test.update_distance(distance, threshold)
+        
+        # Update power analysis
+        if self.power_analyzer:
+            self._update_power_analysis()
+        
+        # Get combined verdict
+        verdict = self._get_combined_verdict()
+        
+        # Track history
+        n = self.match_test.n
+        if not self.verdict_history or self.verdict_history[-1][1] != verdict:
+            self.verdict_history.append((n, verdict))
+        
+        confidence = (self.match_test.get_confidence() + 
+                     self.distance_test.get_confidence()) / 2
+        self.confidence_history.append(confidence)
+        
+        return verdict
+    
+    def _get_combined_verdict(self) -> Verdict:
+        """Get combined verdict with multi-hypothesis support."""
+        match_llr = self.match_test.log_likelihood_ratio
+        dist_llr = self.distance_test.log_likelihood_ratio
+        
+        # Combined log-likelihood ratio (weighted average)
+        weight_match = 0.6  # Can be tuned
+        weight_dist = 0.4
+        combined_llr = weight_match * match_llr + weight_dist * dist_llr
+        
+        # Multi-hypothesis testing
+        if self.enable_multi_hypothesis:
+            if combined_llr >= self.match_test.upper_boundary:
+                return Verdict.SAME
+            elif combined_llr <= self.match_test.lower_boundary:
+                return Verdict.DIFFERENT
+            elif self.uncertain_lower <= combined_llr <= self.uncertain_upper:
+                return Verdict.UNCERTAIN
+            else:
+                return Verdict.UNDECIDED
+        else:
+            # Standard binary decision
+            if combined_llr >= self.match_test.upper_boundary:
+                return Verdict.SAME
+            elif combined_llr <= self.match_test.lower_boundary:
+                return Verdict.DIFFERENT
+            else:
+                return Verdict.UNDECIDED
+    
+    def _update_power_analysis(self) -> None:
+        """Update power analysis based on observed effect size."""
+        if self.match_test.n < 10:
+            return
+        
+        # Estimate effect size from data
+        match_effect = abs(self.match_test.mean - 0.5)
+        dist_effect = abs(self.distance_test.mean - self.distance_test.current_threshold) / (
+            self.distance_test.std + 1e-10)
+        
+        avg_effect = (match_effect + dist_effect) / 2
+        
+        # Update expected sample size
+        self.expected_n = self.power_analyzer.compute_expected_sample_size(
+            self.alpha, self.beta, avg_effect, TestType.HYBRID
+        )
+        
+        # Update current power
+        self.current_power = self.power_analyzer.compute_power(
+            self.match_test.n, self.alpha, avg_effect, TestType.HYBRID
+        )
+    
+    def get_analysis(self) -> Dict[str, Any]:
+        """Get comprehensive analysis of current state."""
+        analysis = {
+            "verdict": self._get_combined_verdict().value,
+            "n_samples": self.match_test.n,
+            "match_summary": self.match_test.get_summary(),
+            "distance_summary": self.distance_test.get_summary(),
+            "verdict_history": [
+                {"n": n, "verdict": v.value} 
+                for n, v in self.verdict_history
+            ],
+            "average_confidence": np.mean(self.confidence_history) if self.confidence_history else 0.0
+        }
+        
+        # Add power analysis if enabled
+        if self.power_analyzer:
+            analysis["power_analysis"] = {
+                "expected_n": self.expected_n,
+                "current_power": self.current_power,
+                "efficiency": self.match_test.n / self.expected_n if self.expected_n else None
+            }
+        
+        return analysis
+    
+    def should_stop(self) -> bool:
+        """Check if test should stop."""
+        verdict = self._get_combined_verdict()
+        return verdict in [Verdict.SAME, Verdict.DIFFERENT]
+    
+    def reset(self) -> None:
+        """Reset test state for new comparison."""
+        self.match_test = SequentialState(TestType.MATCH, self.alpha, self.beta)
+        self.distance_test = SequentialState(TestType.DISTANCE, self.alpha, self.beta)
+        self.verdict_history.clear()
+        self.confidence_history.clear()
+        self.expected_n = None
+        self.current_power = 0.0
+
+
+# Utility functions for integration
+
+def create_sequential_tester(
+    test_type: str = "dual",
+    alpha: float = 0.01,
+    beta: float = 0.01,
+    **kwargs
+) -> Union[SequentialState, DualSequentialTest, HybridSequentialTest]:
+    """
+    Factory function to create appropriate sequential tester.
+    
+    Args:
+        test_type: Type of test ("single", "dual", "hybrid")
+        alpha: Type I error rate
+        beta: Type II error rate
+        **kwargs: Additional parameters
+        
+    Returns:
+        Configured sequential tester
+    """
+    if test_type == "single":
+        return SequentialState(
+            test_type=kwargs.get("evidence_type", TestType.MATCH),
+            alpha=alpha,
+            beta=beta,
+            adaptive_threshold=kwargs.get("adaptive", True)
+        )
+    elif test_type == "dual":
+        S_match = init_seq_test(alpha, TestType.MATCH, kwargs.get("adaptive", True))
+        S_dist = init_seq_test(beta, TestType.DISTANCE, kwargs.get("adaptive", True))
+        return DualSequentialTest(S_match, S_dist)
+    elif test_type == "hybrid":
+        return HybridSequentialTest(
+            alpha=alpha,
+            beta=beta,
+            enable_multi_hypothesis=kwargs.get("multi_hypothesis", True),
+            power_analysis=kwargs.get("power_analysis", True)
+        )
+    else:
+        raise ValueError(f"Unknown test type: {test_type}")
+
+
+def analyze_sequential_results(
+    test: Union[SequentialState, DualSequentialTest, HybridSequentialTest]
+) -> Dict[str, Any]:
+    """
+    Analyze results from sequential testing.
+    
+    Args:
+        test: Completed sequential test
+        
+    Returns:
+        Comprehensive analysis dictionary
+    """
+    if isinstance(test, SequentialState):
+        return test.get_summary()
+    elif isinstance(test, DualSequentialTest):
+        return {
+            "verdict": test.combined_verdict.value,
+            "stopping_time": test.stopping_time,
+            "match_analysis": test.S_match.get_summary(),
+            "distance_analysis": test.S_dist.get_summary()
+        }
+    elif isinstance(test, HybridSequentialTest):
+        return test.get_analysis()
+    else:
+        return {"error": "Unknown test type"}

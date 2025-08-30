@@ -12,9 +12,9 @@ from .streaming_consensus import (
 )
 from .contamination import (
     UnifiedContaminationDetector,
-    ContaminationResult,
+    ContaminationReport,
     ContaminationType,
-    ModelSignature
+    DetectionMode
 )
 
 __all__ = [
@@ -35,7 +35,7 @@ __all__ = [
     "StreamingVerificationState",
     "ConsensusMode",
     "UnifiedContaminationDetector",
-    "ContaminationResult",
+    "ContaminationReport",
     "ContaminationType",
-    "ModelSignature"
+    "DetectionMode"
 ]

@@ -2,76 +2,186 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    monitor: 'rev-hbt-monitor'
-    environment: 'production'
+    cluster: 'rev-production'
+    environment: 'prod'
 
-# Alertmanager configuration
+# Alert rules configuration
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# AlertManager configuration
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
-
-# Load rules once and periodically evaluate them
-rule_files:
-  - "alerts.yml"
+        - targets:
+            - alertmanager:9093
+      timeout: 10s
+      api_version: v2
 
 # Scrape configurations
 scrape_configs:
-  # Unified Coordinator metrics
-  - job_name: 'unified-coordinator'
-    static_configs:
-      - targets: 
-        - 'unified-coordinator:8000'
-        - 'unified-coordinator:8009'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-  # REV Verifier metrics
-  - job_name: 'rev-verifier'
-    static_configs:
-      - targets:
-        - 'rev-verifier:8001'
-        - 'rev-verifier:8002'
-        - 'rev-verifier:8003'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-  # HBT Consensus metrics
-  - job_name: 'hbt-consensus'
-    static_configs:
-      - targets:
-        - 'hbt-consensus:8004'
-        - 'hbt-consensus:8005'
-        - 'hbt-consensus:8006'
-        - 'hbt-consensus:8007'
-        - 'hbt-consensus:8008'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-  # Redis metrics
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-
-  # Nginx metrics (if nginx-prometheus-exporter is added)
-  - job_name: 'nginx'
-    static_configs:
-      - targets: ['nginx:9113']
-    scrape_interval: 10s
-
-  # Node exporter for system metrics (optional)
-  - job_name: 'node'
-    static_configs:
-      - targets: ['node-exporter:9100']
-    scrape_interval: 15s
-
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+
+  # REV Verifier services
+  - job_name: 'rev-verifier'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['rev-verifier']
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_node]
+        target_label: node
+      - source_labels: [__meta_consul_tags]
+        regex: '.*,version=([^,]+),.*'
+        target_label: version
+    metrics_path: '/metrics'
     scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # REV Executor services
+  - job_name: 'rev-executor'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['rev-executor']
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_node]
+        target_label: node
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # REV HDC Encoder services
+  - job_name: 'rev-hdc'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['rev-hdc']
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_node]
+        target_label: node
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # REV Consensus nodes
+  - job_name: 'rev-consensus'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['rev-consensus']
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_node]
+        target_label: node
+      - source_labels: [__meta_consul_service_id]
+        target_label: consensus_node_id
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Cache services
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:9121']  # Redis exporter
+        labels:
+          service: 'redis'
+          component: 'cache'
+
+  # Database services
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+          component: 'database'
+
+  # Message queue
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']  # RabbitMQ Prometheus endpoint
+        labels:
+          service: 'rabbitmq'
+          component: 'messaging'
+
+  # Traefik metrics
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8082']
+        labels:
+          service: 'traefik'
+          component: 'load-balancer'
+
+  # Node exporter for system metrics
+  - job_name: 'node'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['node-exporter']
+    relabel_configs:
+      - source_labels: [__meta_consul_node]
+        target_label: node
+      - source_labels: [__meta_consul_dc]
+        target_label: datacenter
+
+  # Cadvisor for container metrics
+  - job_name: 'cadvisor'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['cadvisor']
+    relabel_configs:
+      - source_labels: [__meta_consul_node]
+        target_label: node
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # GPU metrics (NVIDIA DCGM)
+  - job_name: 'gpu'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['dcgm-exporter']
+    relabel_configs:
+      - source_labels: [__meta_consul_node]
+        target_label: node
+      - source_labels: [__meta_consul_tags]
+        regex: '.*,gpu_id=([^,]+),.*'
+        target_label: gpu_id
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Jaeger tracing metrics
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger-query:16687']
+        labels:
+          service: 'jaeger'
+          component: 'tracing'
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+          component: 'visualization'
+
+  # AlertManager metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          service: 'alertmanager'
+          component: 'alerting'
+
+  # Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+        labels:
+          service: 'loki'
+          component: 'logging'
