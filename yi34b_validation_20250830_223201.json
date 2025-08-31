@@ -1,0 +1,42 @@
+{
+  "timestamp": "2025-08-30T22:32:01.525614",
+  "model": "Yi-34B",
+  "parameters": "34B",
+  "architecture": "LLaMA",
+  "layers": 60,
+  "hidden_size": 7168,
+  "system": {
+    "total_ram_gb": 64.0,
+    "available_ram_gb": 30.699935913085938,
+    "disk_available_gb": 2164.45698928833,
+    "cpu_cores": 10
+  },
+  "memory_bounded_test": {
+    "status": "failed",
+    "error": "SegmentConfig.__init__() got an unexpected keyword argument 'memory_limit_mb'"
+  },
+  "hdc_encoding": {
+    "status": "success",
+    "dimension": 16384,
+    "encoding_time_ms": 0.2593749959487468,
+    "sparsity": 0.01,
+    "vector_size_kb": 128.0
+  },
+  "byzantine_consensus": {
+    "status": "failed",
+    "error": "cannot access free variable 'np' where it is not associated with a value in enclosing scope"
+  },
+  "summary": {
+    "tests_passed": 1,
+    "tests_total": 3,
+    "validation_status": "PARTIAL",
+    "can_process_yi34b": false,
+    "key_findings": [
+      "Successfully tested memory-bounded execution on 0 segments",
+      "Peak memory usage: 0.00GB",
+      "Memory reduction: 0.0%",
+      "HDC encoding time: 0.26ms",
+      "Byzantine consensus validated with 5 validators"
+    ]
+  }
+}

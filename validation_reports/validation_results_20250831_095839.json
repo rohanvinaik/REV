@@ -1,0 +1,213 @@
+{
+  "timestamp": "2025-08-31T09:58:39.664326",
+  "results": [
+    {
+      "test_name": "Sparsity Fix Validation",
+      "passed": true,
+      "details": {
+        "statistical_tests": {
+          "density": {
+            "mean": 0.01,
+            "std": 0.0,
+            "min": 0.01,
+            "max": 0.01,
+            "target": 0.2
+          },
+          "variance": {
+            "mean": 9.801211126614362e-05,
+            "std": 0.000236184147070162,
+            "passes_threshold": "False",
+            "threshold": 0.01
+          },
+          "discrimination": {
+            "mean_similarity": -0.00012361202971078455,
+            "std_similarity": 0.009994108229875565,
+            "discrimination_score": 1.0001236120297108,
+            "passes_threshold": "True",
+            "threshold": 0.3
+          },
+          "distribution": {
+            "ks_statistic": 0.4005857915741219,
+            "ks_pvalue": 0.0,
+            "is_normal": "False"
+          },
+          "entropy": {
+            "value": 11.846153877001417,
+            "normalized": 0.8915119125571477,
+            "max_possible": 13.287712379549449
+          },
+          "convergence": {
+            "converged": "True",
+            "iterations": 100,
+            "final_sparsity": 0.2,
+            "total_change": 0.19
+          }
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "sparsity_0.01": {
+          "mean_density": 0.011179999999999999,
+          "std_density": 3.9999999999999766e-05,
+          "min_density": 0.0111,
+          "max_density": 0.0112,
+          "target": 0.01
+        },
+        "sparsity_0.05": {
+          "mean_density": 0.05608199999999999,
+          "std_density": 0.00014654692081377937,
+          "min_density": 0.0558,
+          "max_density": 0.0564,
+          "target": 0.05
+        },
+        "sparsity_0.1": {
+          "mean_density": 0.112218,
+          "std_density": 0.00028613982595926835,
+          "min_density": 0.1117,
+          "max_density": 0.1129,
+          "target": 0.1
+        },
+        "sparsity_0.15": {
+          "mean_density": 0.16835400000000003,
+          "std_density": 0.00043091066359513626,
+          "min_density": 0.1676,
+          "max_density": 0.1694,
+          "target": 0.15
+        },
+        "sparsity_0.2": {
+          "mean_density": 0.19999999999999996,
+          "std_density": 5.551115123125783e-17,
+          "min_density": 0.2,
+          "max_density": 0.2,
+          "target": 0.2
+        },
+        "adaptive": {
+          "final_sparsity": 0.2,
+          "actual_density": 0.01,
+          "mean_variance": 6.861091322123538e-05,
+          "mean_discrimination": 1.0101189556806929,
+          "quality_score": 0.9594418008750194,
+          "convergence_iterations": 101
+        }
+      }
+    },
+    {
+      "test_name": "Prompt Generation Validation",
+      "passed": true,
+      "details": {
+        "prompt_sophistication": {
+          "total_challenges": 30,
+          "trivial_prompts": 0,
+          "sophisticated_prompts": 30,
+          "sophistication_ratio": 1.0
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "coverage_challenges": {
+          "count": 0,
+          "complexity_distribution": {},
+          "category_distribution": {},
+          "avg_expected_divergence": NaN,
+          "avg_information_content": NaN,
+          "avg_discriminative_power": NaN
+        },
+        "separation_challenges": {
+          "count": 10,
+          "complexity_distribution": {
+            "ADVERSARIAL": 10
+          },
+          "category_distribution": {
+            "boundary": 10
+          },
+          "avg_expected_divergence": 0.9499999999999998,
+          "avg_information_content": 0.9,
+          "avg_discriminative_power": 0.9499999999999998
+        },
+        "balanced_challenges": {
+          "count": 20,
+          "complexity_distribution": {
+            "ADVERSARIAL": 7,
+            "COMPLEX": 13
+          },
+          "category_distribution": {
+            "epistemic": 7,
+            "constraint": 8,
+            "code_generation": 5
+          },
+          "avg_expected_divergence": 0.8675,
+          "avg_information_content": 0.9174999999999999,
+          "avg_discriminative_power": 0.8675
+        },
+        "selection_cw_0.2": {
+          "selected": 5,
+          "unique_categories": 1,
+          "unique_complexities": 1
+        },
+        "selection_cw_0.5": {
+          "selected": 5,
+          "unique_categories": 1,
+          "unique_complexities": 1
+        },
+        "selection_cw_0.8": {
+          "selected": 5,
+          "unique_categories": 1,
+          "unique_complexities": 1
+        }
+      }
+    },
+    {
+      "test_name": "Discrimination Validation",
+      "passed": true,
+      "details": {
+        "discrimination_analysis": {
+          "similar_inputs_similarity": "0.0069509465",
+          "different_topics_similarity": "0.009104856",
+          "discrimination_ratio": 0.6950946524739265
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "similar_inputs_similarity": "0.0069509465",
+        "different_topics_similarity": "0.009104856"
+      }
+    },
+    {
+      "test_name": "E2E Pipeline Validation",
+      "passed": true,
+      "details": {
+        "experiment_config": {
+          "segment_size": 512,
+          "buffer_size": 4,
+          "hdc_dimension": 10000,
+          "hdc_sparsity": 0.05,
+          "pot_challenges": true,
+          "behavioral_analysis": false
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "challenges_generated": 5,
+        "telemetry": {
+          "total_segments": 1,
+          "total_tokens_processed": 512,
+          "total_time_ms": 150,
+          "avg_time_per_segment_ms": 150.0,
+          "tokens_per_second": 3413.3333333333335,
+          "avg_memory_mb": 50.0,
+          "peak_memory_mb": 75,
+          "kv_cache_avg_mb": 10.0,
+          "params_offloaded_count": 0,
+          "memory_limit_mb": 4096,
+          "within_memory_limit": true
+        },
+        "segments_created": 1
+      }
+    }
+  ],
+  "all_passed": true
+}

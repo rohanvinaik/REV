@@ -56,7 +56,7 @@ class HypervectorConfig:
     dimension: int = DEFAULT_DIMENSION
     encoding_mode: EncodingMode = "rev"
     projection_type: ProjectionType = ProjectionType.SPARSE_RANDOM
-    sparsity: float = 0.1
+    sparsity: float = 0.15  # Increased default for better semantic fingerprinting
     seed: Optional[int] = None
     normalize: bool = True
     quantize: bool = False
@@ -138,20 +138,30 @@ class HypervectorEncoder:
             self._create_orthogonal_projection()
 
     def _create_sparse_projection(self) -> None:
-        """Create sparse random projection matrix"""
-        # Create sparse projection for efficiency
-        n_nonzero = int(self.config.dimension * self.config.sparsity)
-        projection = torch.zeros(self.config.dimension)
+        """Create sparse random projection matrix with guaranteed sparsity"""
+        # Create truly sparse projection
+        n_nonzero = max(1, int(self.config.dimension * self.config.sparsity))
         
-        # Randomly select positions for non-zero elements
+        # Store sparse representation to maintain sparsity
         indices = torch.randperm(self.config.dimension)[:n_nonzero]
         values = torch.randn(n_nonzero)
-        projection[indices] = values
         
         if self.config.normalize:
-            projection = projection / torch.norm(projection)
-            
-        self._projection_cache["base"] = projection
+            values = values / torch.norm(values)
+        
+        # Store as sparse tensor to maintain sparsity
+        projection = torch.sparse_coo_tensor(
+            indices.unsqueeze(0),
+            values,
+            (self.config.dimension,),
+            dtype=torch.float32
+        )
+        
+        # Also store dense version for compatibility
+        self._projection_cache["base"] = projection.to_dense()
+        self._projection_cache["sparse_indices"] = indices
+        self._projection_cache["sparse_values"] = values
+        self._projection_cache["n_nonzero"] = n_nonzero
 
     def _create_gaussian_projection(self) -> None:
         """Create Gaussian random projection matrix"""
@@ -260,43 +270,113 @@ class HypervectorEncoder:
     @lru_cache(maxsize=1024)
     def encode_feature(self, feature: str, zoom_level: ZoomLevel = "token_window") -> np.ndarray:
         """
-        Encode a feature using BLAKE2b hashing for stability.
+        Encode a feature using BLAKE2b hashing for stability with proper sparsity control.
         
         Args:
             feature: Feature string to encode
             zoom_level: Hierarchical zoom level
             
         Returns:
-            High-dimensional feature vector
+            High-dimensional sparse feature vector
         """
+        # Calculate feature complexity for dynamic sparsity
+        feature_bytes = feature.encode('utf-8')
+        entropy = self._calculate_entropy(feature_bytes)
+        
+        # Dynamic sparsity: 0.5% to 20% based on complexity for better semantic fingerprinting
+        min_sparsity = 0.005
+        max_sparsity = 0.20  # Increased from 5% to 20% for complex features
+        base_sparsity = self.config.sparsity if hasattr(self.config, 'sparsity') else 0.01
+        
+        # Scale sparsity based on entropy (higher entropy = more complex = more active dimensions)
+        # Use controlled scaling: entropy typically ranges 0-8, scale by 0-25% max
+        entropy_factor = min(0.25, entropy / 32.0)  # More conservative scaling
+        dynamic_sparsity = min(max_sparsity, max(min_sparsity, base_sparsity * (1 + entropy_factor)))
+        
         # Generate stable hash
         feature_hash = self.blake2b_hash(f"{feature}:{zoom_level}")
         
-        # Convert hash to vector indices
-        vector = np.zeros(self.config.dimension)
+        # Initialize sparse vector
+        vector = np.zeros(self.config.dimension, dtype=np.float32)
         
-        # Use hash to deterministically set sparse features
-        n_active = int(self.config.dimension * self.config.sparsity)
-        for i in range(n_active):
-            # Get position from hash
-            pos_bytes = self.blake2b_hash(feature_hash + struct.pack('I', i), 4)
+        # Calculate number of active positions
+        n_active = max(1, int(self.config.dimension * dynamic_sparsity))
+        
+        # Use set to ensure unique positions (no collisions)
+        used_positions = set()
+        attempt = 0
+        max_attempts = n_active * 10  # Prevent infinite loop
+        
+        while len(used_positions) < n_active and attempt < max_attempts:
+            # Generate position deterministically
+            pos_bytes = self.blake2b_hash(feature_hash + struct.pack('I', attempt), 4)
             position = struct.unpack('I', pos_bytes)[0] % self.config.dimension
             
-            # Get value from hash (binary or continuous)
-            val_bytes = self.blake2b_hash(feature_hash + struct.pack('I', i + n_active), 4)
-            if self.config.quantize:
-                value = 1.0 if struct.unpack('I', val_bytes)[0] % 2 == 0 else -1.0
-            else:
-                value = struct.unpack('f', val_bytes)[0]
+            if position not in used_positions:
+                used_positions.add(position)
+                
+                # Generate value
+                val_bytes = self.blake2b_hash(feature_hash + struct.pack('I', attempt + n_active), 4)
+                if self.config.quantize:
+                    value = 1.0 if struct.unpack('I', val_bytes)[0] % 2 == 0 else -1.0
+                else:
+                    # Use Gaussian-like distribution for values
+                    uniform_val = struct.unpack('I', val_bytes)[0] / (2**32)
+                    # Box-Muller transform for Gaussian distribution
+                    value = np.sqrt(-2 * np.log(max(uniform_val, 1e-10))) * np.cos(2 * np.pi * uniform_val)
+                    value = np.clip(value, -3.0, 3.0)  # Clip to reasonable range
+                
+                vector[position] = value
             
-            vector[position] = value
+            attempt += 1
         
-        if self.config.normalize:
+        # Verify sparsity
+        actual_nonzero = np.count_nonzero(vector)
+        actual_density = actual_nonzero / len(vector)
+        
+        if actual_density > dynamic_sparsity * 1.1:  # Allow 10% tolerance
+            logger.warning(f"Vector density {actual_density:.3%} exceeds target {dynamic_sparsity:.3%}")
+        
+        # Log sparsity for debugging
+        if hasattr(self, '_sparsity_stats'):
+            self._sparsity_stats.append(actual_density)
+        else:
+            self._sparsity_stats = [actual_density]
+            
+        if self.config.normalize and actual_nonzero > 0:
             norm = np.linalg.norm(vector)
             if norm > 0:
                 vector = vector / norm
         
         return vector
+    
+    def _calculate_entropy(self, data: bytes) -> float:
+        """
+        Calculate Shannon entropy of data.
+        
+        Args:
+            data: Input bytes to analyze
+            
+        Returns:
+            Entropy value (0-8 bits)
+        """
+        if not data:
+            return 0.0
+            
+        # Count byte frequencies
+        freq = {}
+        for byte in data:
+            freq[byte] = freq.get(byte, 0) + 1
+        
+        # Calculate entropy
+        entropy = 0.0
+        total = len(data)
+        for count in freq.values():
+            if count > 0:
+                p = count / total
+                entropy -= p * np.log2(p)
+        
+        return entropy
     
     def encode_hierarchical(
         self,
@@ -568,7 +648,7 @@ class HypervectorEncoder:
 
     def encode_sequence(self, sequence: List[float], sequence_id: str = "default") -> torch.Tensor:
         """
-        Encode a sequence of values into a hypervector for REV.
+        Encode a sequence of values into a SPARSE hypervector for REV.
         
         This is suitable for encoding model activations or logit sequences
         for comparison in the REV verification protocol.
@@ -578,41 +658,43 @@ class HypervectorEncoder:
             sequence_id: Identifier for the sequence (for caching)
             
         Returns:
-            Hyperdimensional vector representation
+            Sparse hyperdimensional vector representation
         """
         if not sequence:
             return torch.zeros(self.config.dimension)
         
-        # Get or create projection for this sequence type
-        projection_key = f"{sequence_id}_projection"
-        if projection_key not in self._projection_cache:
-            self._projection_cache[projection_key] = self._projection_cache["base"].clone()
+        # For sparse encoding, use feature-based approach
+        # Convert sequence to a string representation
+        feature_str = f"{sequence_id}:" + ":".join([f"{v:.6f}" for v in sequence[:100]])  # Limit to first 100 values
         
-        projection = self._projection_cache[projection_key]
+        # Use the sparse encode_feature method
+        sparse_vector = self.encode_feature(feature_str)
         
-        # Encode sequence by binding position and value hypervectors
-        result = torch.zeros(self.config.dimension)
-        
-        for i, value in enumerate(sequence):
-            # Create position hypervector
-            position_hv = self._create_position_hypervector(i)
+        # Convert numpy to torch if needed
+        if isinstance(sparse_vector, np.ndarray):
+            sparse_vector = torch.from_numpy(sparse_vector).float()
             
-            # Create value hypervector
-            value_hv = self._create_value_hypervector(value)
-            
-            # Bind position and value (element-wise multiplication)
-            bound_hv = position_hv * value_hv
-            
-            # Bundle into result (addition)
-            result += bound_hv
+        # Ensure sparsity is maintained
+        n_nonzero = torch.sum(sparse_vector != 0).item()
+        actual_sparsity = n_nonzero / len(sparse_vector)
         
-        if self.config.normalize:
-            result = result / torch.norm(result)
+        # If vector became too dense, re-sparsify it
+        if actual_sparsity > self.config.sparsity * 2:
+            # Keep only top-k values by magnitude
+            target_nonzero = max(1, int(self.config.dimension * self.config.sparsity))
+            topk_vals, topk_indices = torch.topk(torch.abs(sparse_vector), target_nonzero)
+            
+            new_sparse = torch.zeros_like(sparse_vector)
+            new_sparse[topk_indices] = sparse_vector[topk_indices]
+            sparse_vector = new_sparse
+        
+        if self.config.normalize and torch.sum(sparse_vector != 0) > 0:
+            sparse_vector = sparse_vector / torch.norm(sparse_vector)
         
         if self.config.quantize:
-            result = self._quantize_vector(result)
+            sparse_vector = self._quantize_vector(sparse_vector)
             
-        return result
+        return sparse_vector
 
     def _create_position_hypervector(self, position: int) -> torch.Tensor:
         """Create hypervector for a position"""
@@ -626,15 +708,25 @@ class HypervectorEncoder:
         return self._projection_cache[cache_key]
 
     def _create_value_hypervector(self, value: float) -> torch.Tensor:
-        """Create hypervector for a value"""
+        """Create sparse hypervector for a value"""
         # Quantize value for discrete representation
         quantized_value = int(value * 1000) % 10000  # Simple quantization
         
         cache_key = f"val_{quantized_value}"
         if cache_key not in self._projection_cache:
-            # Create deterministic hypervector for this value
+            # Create deterministic SPARSE hypervector for this value
             torch.manual_seed(self.config.seed + quantized_value)
-            hv = torch.randn(self.config.dimension)
+            
+            # Create sparse vector with configured sparsity
+            hv = torch.zeros(self.config.dimension)
+            n_nonzero = max(1, int(self.config.dimension * self.config.sparsity))
+            
+            # Randomly select positions
+            indices = torch.randperm(self.config.dimension)[:n_nonzero]
+            values = torch.randn(n_nonzero)
+            
+            hv[indices] = values
+            
             if self.config.normalize:
                 hv = hv / torch.norm(hv)
             self._projection_cache[cache_key] = hv

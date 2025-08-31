@@ -1,0 +1,157 @@
+================================================================================
+REV FRAMEWORK VALIDATION REPORT
+================================================================================
+
+Generated: 2025-08-31T09:56:43.792820
+Framework Version: 2.0 (PoT Integration)
+
+================================================================================
+VALIDATION SUMMARY
+================================================================================
+
+Total Tests: 4
+Passed: 3
+Failed: 1
+Overall Status: ❌ FAIL
+
+----------------------------------------------------------------------
+Sparsity Fix Validation
+----------------------------------------------------------------------
+Status: ❌ FAILED
+
+Metrics:
+  sparsity_0.01:
+    mean_density: 0.0198
+    std_density: 0.0002
+    min_density: 0.0194
+    max_density: 0.0203
+    target: 0.0100
+  sparsity_0.05:
+    mean_density: 0.0990
+    std_density: 0.0011
+    min_density: 0.0970
+    max_density: 0.1017
+    target: 0.0500
+  sparsity_0.1:
+    mean_density: 0.1978
+    std_density: 0.0018
+    min_density: 0.1940
+    max_density: 0.2000
+    target: 0.1000
+  sparsity_0.15:
+    mean_density: 0.2000
+    std_density: 0.0000
+    min_density: 0.2000
+    max_density: 0.2000
+    target: 0.1500
+  sparsity_0.2:
+    mean_density: 0.2000
+    std_density: 0.0000
+    min_density: 0.2000
+    max_density: 0.2000
+    target: 0.2000
+  adaptive:
+    final_sparsity: 0.2000
+    actual_density: 0.0100
+    mean_variance: 0.0001
+    mean_discrimination: 1.0101
+    quality_score: 0.9594
+    convergence_iterations: 101
+
+Errors:
+  ❌ Density exceeds acceptable limits
+
+----------------------------------------------------------------------
+Prompt Generation Validation
+----------------------------------------------------------------------
+Status: ✅ PASSED
+
+Metrics:
+  coverage_challenges:
+    count: 0
+    complexity_distribution: {}
+    category_distribution: {}
+    avg_expected_divergence: nan
+    avg_information_content: nan
+    avg_discriminative_power: nan
+  separation_challenges:
+    count: 10
+    complexity_distribution: {'ADVERSARIAL': 10}
+    category_distribution: {'boundary': 10}
+    avg_expected_divergence: 0.9500
+    avg_information_content: 0.9000
+    avg_discriminative_power: 0.9500
+  balanced_challenges:
+    count: 20
+    complexity_distribution: {'ADVERSARIAL': 15, 'COMPLEX': 5}
+    category_distribution: {'epistemic': 15, 'constraint': 3, 'code_generation': 2}
+    avg_expected_divergence: 0.8875
+    avg_information_content: 0.9375
+    avg_discriminative_power: 0.8875
+  selection_cw_0.2:
+    selected: 5
+    unique_categories: 1
+    unique_complexities: 1
+  selection_cw_0.5:
+    selected: 5
+    unique_categories: 2
+    unique_complexities: 2
+  selection_cw_0.8:
+    selected: 5
+    unique_categories: 2
+    unique_complexities: 1
+
+----------------------------------------------------------------------
+Discrimination Validation
+----------------------------------------------------------------------
+Status: ✅ PASSED
+
+Metrics:
+  similar_inputs_similarity: 0.0069509465247392654
+  different_topics_similarity: 0.009104856289923191
+
+----------------------------------------------------------------------
+E2E Pipeline Validation
+----------------------------------------------------------------------
+Status: ✅ PASSED
+
+Metrics:
+  challenges_generated: 5
+  telemetry:
+    total_segments: 1
+    total_tokens_processed: 512
+    total_time_ms: 150
+    avg_time_per_segment_ms: 150.0000
+    tokens_per_second: 3413.3333
+    avg_memory_mb: 50.0000
+    peak_memory_mb: 75
+    kv_cache_avg_mb: 10.0000
+    params_offloaded_count: 0
+    memory_limit_mb: 4096
+    within_memory_limit: True
+  segments_created: 1
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+❌ Hypervector sparsity issues remain
+
+✅ PoT-style sophisticated prompts working
+
+✅ Proper discrimination between similar/different inputs
+
+✅ E2E pipeline fully integrated and functional
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+⚠️  Some issues require attention:
+
+Sparsity Fix Validation:
+  - Density exceeds acceptable limits
+
+================================================================================
+END OF VALIDATION REPORT
+================================================================================

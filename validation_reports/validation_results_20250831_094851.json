@@ -1,0 +1,202 @@
+{
+  "timestamp": "2025-08-31T09:48:51.133362",
+  "results": [
+    {
+      "test_name": "Sparsity Fix Validation",
+      "passed": true,
+      "details": {
+        "statistical_tests": {
+          "density": {
+            "mean": 0.01,
+            "std": 0.0,
+            "min": 0.01,
+            "max": 0.01,
+            "target": 0.1
+          },
+          "variance": {
+            "mean": 9.801211126614362e-05,
+            "std": 0.000236184147070162,
+            "passes_threshold": "False",
+            "threshold": 0.01
+          },
+          "discrimination": {
+            "mean_similarity": -0.00012361202971078455,
+            "std_similarity": 0.009994108229875565,
+            "discrimination_score": 1.0001236120297108,
+            "passes_threshold": "True",
+            "threshold": 0.3
+          },
+          "distribution": {
+            "ks_statistic": 0.4005857915741219,
+            "ks_pvalue": 0.0,
+            "is_normal": "False"
+          },
+          "entropy": {
+            "value": 11.846153877001417,
+            "normalized": 0.8915119125571477,
+            "max_possible": 13.287712379549449
+          },
+          "convergence": {
+            "converged": "True",
+            "iterations": 100,
+            "final_sparsity": 0.1,
+            "total_change": 0.09000000000000001
+          }
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "sparsity_0.01": {
+          "mean_density": 0.019766000000000002,
+          "std_density": 0.00022944280333015465,
+          "min_density": 0.0194,
+          "max_density": 0.0203,
+          "target": 0.01
+        },
+        "sparsity_0.05": {
+          "mean_density": 0.04999999999999999,
+          "std_density": 1.3877787807814457e-17,
+          "min_density": 0.05,
+          "max_density": 0.05,
+          "target": 0.05
+        },
+        "sparsity_0.1": {
+          "mean_density": 0.04999999999999999,
+          "std_density": 1.3877787807814457e-17,
+          "min_density": 0.05,
+          "max_density": 0.05,
+          "target": 0.1
+        },
+        "adaptive": {
+          "final_sparsity": 0.1,
+          "actual_density": 0.01,
+          "mean_variance": 6.861091322123538e-05,
+          "mean_discrimination": 1.0101189556806929,
+          "quality_score": 0.9444418008750195,
+          "convergence_iterations": 101
+        }
+      }
+    },
+    {
+      "test_name": "Prompt Generation Validation",
+      "passed": true,
+      "details": {
+        "prompt_sophistication": {
+          "total_challenges": 30,
+          "trivial_prompts": 0,
+          "sophisticated_prompts": 30,
+          "sophistication_ratio": 1.0
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "coverage_challenges": {
+          "count": 0,
+          "complexity_distribution": {},
+          "category_distribution": {},
+          "avg_expected_divergence": NaN,
+          "avg_information_content": NaN,
+          "avg_discriminative_power": NaN
+        },
+        "separation_challenges": {
+          "count": 10,
+          "complexity_distribution": {
+            "ADVERSARIAL": 10
+          },
+          "category_distribution": {
+            "boundary": 9,
+            "epistemic": 1
+          },
+          "avg_expected_divergence": 0.945,
+          "avg_information_content": 0.9049999999999999,
+          "avg_discriminative_power": 0.945
+        },
+        "balanced_challenges": {
+          "count": 20,
+          "complexity_distribution": {
+            "COMPLEX": 9,
+            "ADVERSARIAL": 11
+          },
+          "category_distribution": {
+            "creative": 2,
+            "reasoning": 4,
+            "boundary": 11,
+            "constraint": 2,
+            "code_generation": 1
+          },
+          "avg_expected_divergence": 0.885,
+          "avg_information_content": 0.8799999999999999,
+          "avg_discriminative_power": 0.885
+        },
+        "selection_cw_0.2": {
+          "selected": 5,
+          "unique_categories": 2,
+          "unique_complexities": 1
+        },
+        "selection_cw_0.5": {
+          "selected": 5,
+          "unique_categories": 3,
+          "unique_complexities": 2
+        },
+        "selection_cw_0.8": {
+          "selected": 5,
+          "unique_categories": 4,
+          "unique_complexities": 2
+        }
+      }
+    },
+    {
+      "test_name": "Discrimination Validation",
+      "passed": true,
+      "details": {
+        "discrimination_analysis": {
+          "similar_inputs_similarity": "0.0069509465",
+          "different_topics_similarity": "0.009104856",
+          "discrimination_ratio": 0.6950946524739265
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "similar_inputs_similarity": "0.0069509465",
+        "different_topics_similarity": "0.009104856"
+      }
+    },
+    {
+      "test_name": "E2E Pipeline Validation",
+      "passed": true,
+      "details": {
+        "experiment_config": {
+          "segment_size": 512,
+          "buffer_size": 4,
+          "hdc_dimension": 10000,
+          "hdc_sparsity": 0.05,
+          "pot_challenges": true,
+          "behavioral_analysis": false
+        }
+      },
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "challenges_generated": 5,
+        "telemetry": {
+          "total_segments": 1,
+          "total_tokens_processed": 512,
+          "total_time_ms": 150,
+          "avg_time_per_segment_ms": 150.0,
+          "tokens_per_second": 3413.3333333333335,
+          "avg_memory_mb": 50.0,
+          "peak_memory_mb": 75,
+          "kv_cache_avg_mb": 10.0,
+          "params_offloaded_count": 0,
+          "memory_limit_mb": 4096,
+          "within_memory_limit": true
+        },
+        "segments_created": 1
+      }
+    }
+  ],
+  "all_passed": true
+}

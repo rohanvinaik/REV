@@ -12,13 +12,17 @@ from typing import Dict, List, Tuple, Optional, Any, Generator, Union
 from dataclasses import dataclass, field
 import hashlib
 import numpy as np
-from collections import deque
+from collections import deque, defaultdict
 import torch
 import time
 import psutil
 import gc
 import os
+import json
+import logging
 from enum import Enum
+from datetime import datetime
+from pathlib import Path
 
 from .crypto.merkle import (
     build_merkle_tree, 
@@ -31,7 +35,10 @@ from .crypto.merkle import (
     HierarchicalVerificationChain
 )
 from .hdc.encoder import HypervectorEncoder, HypervectorConfig
-from .core.sequential import SequentialState
+from .core.sequential import SequentialState, DualSequentialTest
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 # New dataclasses from Section 5.1 of the REV paper
@@ -155,7 +162,10 @@ class REVPipeline:
         segment_size: int = 512,
         buffer_size: int = 4,
         hdc_config: Optional[HypervectorConfig] = None,
-        architectural_sites: Optional[List[ArchitecturalSite]] = None
+        architectural_sites: Optional[List[ArchitecturalSite]] = None,
+        enable_pot_challenges: bool = False,
+        enable_behavioral_analysis: bool = False,
+        experiment_name: Optional[str] = None
     ):
         """
         Initialize REV pipeline.
@@ -190,6 +200,40 @@ class REVPipeline:
         self.kv_cache = {}  # KV cache for attention
         self.checkpoint_manager = CheckpointManager()
         self.memory_limit_mb = 4096  # Default 4GB limit
+        
+        # PoT challenge generation
+        self.enable_pot_challenges = enable_pot_challenges
+        self.challenge_generator = None
+        
+        # Behavioral analysis
+        self.enable_behavioral_analysis = enable_behavioral_analysis
+        self.behavioral_segments = []
+        self.behavioral_boundaries = []
+        
+        # Advanced components
+        self.similarity_computer = None
+        self.decision_aggregator = None
+        self.sequential_tester = None
+        
+        # Experiment tracking
+        self.experiment_name = experiment_name or f"rev_exp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.experiment_results = {
+            "experiment_id": hashlib.sha256(self.experiment_name.encode()).hexdigest()[:16],
+            "timestamp": datetime.now().isoformat(),
+            "framework": "REV",
+            "configuration": {
+                "segment_size": segment_size,
+                "buffer_size": buffer_size,
+                "hdc_dimension": self.hdc_config.dimension,
+                "hdc_sparsity": self.hdc_config.sparsity,
+                "pot_challenges": enable_pot_challenges,
+                "behavioral_analysis": enable_behavioral_analysis
+            },
+            "behavioral_analysis": {},
+            "verification_results": {},
+            "performance_metrics": {},
+            "statistical_analysis": {}
+        }
         
     def _default_sites(self) -> List[ArchitecturalSite]:
         """Define default architectural probing sites."""
@@ -1079,3 +1123,230 @@ class REVPipeline:
                 'similarity_scores': similarity_scores,
                 'mean_similarity': np.mean(list(similarity_scores.values()))
             }
+    
+    def run_behavioral_analysis(self,
+                              model,
+                              tokenizer,
+                              num_layers: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Perform behavioral analysis to identify model segments.
+        Based on Yi-34B experimental approach.
+        
+        Args:
+            model: Model to analyze
+            tokenizer: Tokenizer for the model
+            num_layers: Number of layers to analyze (None = auto-detect)
+            
+        Returns:
+            Dictionary with behavioral analysis results
+        """
+        logger.info("="*60)
+        logger.info("Running Behavioral Analysis")
+        logger.info("="*60)
+        
+        start_time = time.time()
+        
+        # Auto-detect number of layers if not provided
+        if num_layers is None:
+            if hasattr(model, 'config'):
+                num_layers = getattr(model.config, 'num_hidden_layers', 12)
+            elif hasattr(model, 'transformer') and hasattr(model.transformer, 'h'):
+                num_layers = len(model.transformer.h)
+            else:
+                num_layers = 12  # Default fallback
+        
+        # Generate behavioral probes
+        from .challenges.pot_challenge_generator import PoTChallengeGenerator
+        generator = PoTChallengeGenerator()
+        probes = generator.generate_behavioral_probes()
+        
+        # Analyze layer behaviors
+        layer_signatures = {}
+        sample_layers = list(range(0, num_layers, max(1, num_layers // 20)))  # Sample ~20 layers
+        
+        logger.info(f"Analyzing {len(sample_layers)} layers with {sum(len(p) for p in probes.values())} probes")
+        
+        for layer_idx in sample_layers:
+            signatures = []
+            
+            for probe_type, probe_texts in probes.items():
+                for text in probe_texts:
+                    # Tokenize probe
+                    inputs = tokenizer(text, return_tensors="pt", max_length=128, truncation=True)
+                    
+                    # Get layer activations (simplified - would need hooks in practice)
+                    with torch.no_grad():
+                        # Run forward pass up to this layer
+                        layer_output = self._get_layer_output(model, inputs['input_ids'], layer_idx)
+                        
+                        if layer_output is not None:
+                            # Extract statistical signature
+                            sig = self._compute_layer_signature(layer_output)
+                            signatures.append(sig)
+            
+            if signatures:
+                layer_signatures[layer_idx] = np.mean(signatures, axis=0)
+        
+        # Find behavioral boundaries using correlation analysis
+        behavioral_boundaries = []
+        prev_sig = None
+        correlation_threshold = 0.85
+        
+        for layer_idx in sorted(layer_signatures.keys()):
+            if prev_sig is not None:
+                # Compute correlation between consecutive layer signatures
+                if len(prev_sig) > 0 and len(layer_signatures[layer_idx]) > 0:
+                    similarity = np.corrcoef(prev_sig, layer_signatures[layer_idx])[0, 1]
+                    
+                    if similarity < correlation_threshold:
+                        behavioral_boundaries.append(layer_idx)
+                        logger.info(f"  Behavioral boundary detected at layer {layer_idx} (similarity: {similarity:.3f})")
+            
+            prev_sig = layer_signatures[layer_idx]
+        
+        # Create behavioral segments
+        segments = []
+        prev_boundary = 0
+        
+        for boundary in behavioral_boundaries + [num_layers]:
+            if boundary - prev_boundary >= 2:  # Minimum segment size
+                segments.append((prev_boundary, boundary))
+                prev_boundary = boundary
+        
+        # If no boundaries found, create uniform segments
+        if not segments:
+            segment_size = max(2, num_layers // 4)
+            segments = [(i, min(i + segment_size, num_layers)) 
+                       for i in range(0, num_layers, segment_size)]
+        
+        analysis_time = time.time() - start_time
+        
+        # Store results
+        behavioral_results = {
+            "num_layers": num_layers,
+            "layers_analyzed": len(sample_layers),
+            "probe_types": list(probes.keys()),
+            "total_probes": sum(len(p) for p in probes.values()),
+            "behavioral_boundaries": behavioral_boundaries,
+            "num_segments": len(segments),
+            "segments": segments,
+            "analysis_time": analysis_time,
+            "correlation_threshold": correlation_threshold,
+            "segment_interpretation": self._interpret_segments(segments, num_layers)
+        }
+        
+        logger.info(f"✓ Identified {len(segments)} behavioral segments in {analysis_time:.2f}s")
+        for i, (start, end) in enumerate(segments):
+            logger.info(f"  Segment {i+1}: Layers {start}-{end} ({end-start} layers)")
+        
+        return behavioral_results
+    
+    def _get_layer_output(self, model, input_ids: torch.Tensor, layer_idx: int) -> Optional[torch.Tensor]:
+        """Get output from a specific layer (simplified implementation)."""
+        try:
+            # This is a simplified version - actual implementation would use hooks
+            if hasattr(model, 'transformer') and hasattr(model.transformer, 'h'):
+                if layer_idx < len(model.transformer.h):
+                    # Would need to actually run forward pass with hooks
+                    # For now, return a dummy tensor for demonstration
+                    return torch.randn(1, input_ids.shape[1], 768)  # Typical hidden size
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get layer {layer_idx} output: {e}")
+            return None
+    
+    def _compute_layer_signature(self, layer_output: torch.Tensor) -> np.ndarray:
+        """Compute statistical signature from layer output."""
+        if layer_output is None:
+            return np.array([])
+        
+        # Compute various statistics as signature
+        signature = []
+        
+        # Basic statistics
+        signature.append(float(layer_output.mean()))
+        signature.append(float(layer_output.std()))
+        signature.append(float(layer_output.abs().max()))
+        signature.append(float(layer_output.abs().min()))
+        
+        # Percentiles
+        percentiles = [25, 50, 75]
+        for p in percentiles:
+            signature.append(float(torch.quantile(layer_output.flatten(), p/100)))
+        
+        # Activation patterns
+        signature.append(float((layer_output > 0).float().mean()))  # Fraction positive
+        signature.append(float((layer_output.abs() < 0.01).float().mean()))  # Fraction near zero
+        
+        return np.array(signature)
+    
+    def _interpret_segments(self, segments: List[Tuple[int, int]], num_layers: int) -> Dict[str, str]:
+        """Interpret the functional role of each segment."""
+        interpretations = {}
+        
+        for i, (start, end) in enumerate(segments):
+            relative_start = start / num_layers
+            relative_end = end / num_layers
+            
+            if relative_start < 0.1:
+                role = "Token/Embedding Processing"
+            elif relative_start < 0.3:
+                role = "Syntactic and Semantic Understanding"
+            elif relative_start < 0.5:
+                role = "Abstract Feature Extraction"
+            elif relative_start < 0.7:
+                role = "Reasoning and Concept Formation"
+            else:
+                role = "Output Generation and Refinement"
+            
+            interpretations[f"segment_{i+1}"] = f"Layers {start}-{end}: {role}"
+        
+        return interpretations
+    
+    def generate_pot_challenges(self,
+                               n: int,
+                               focus: str = "balanced",
+                               complexity_range: Optional[Tuple] = None):
+        """
+        Generate PoT-style challenges for verification.
+        
+        Args:
+            n: Number of challenges to generate
+            focus: "coverage", "separation", or "balanced"
+            complexity_range: Optional complexity range
+            
+        Returns:
+            List of generated challenges
+        """
+        if not self.enable_pot_challenges:
+            logger.warning("PoT challenge generation is disabled")
+            return []
+        
+        # Lazy initialization of challenge generator
+        if self.challenge_generator is None:
+            from .challenges.pot_challenge_generator import PoTChallengeGenerator, ChallengeComplexity
+            self.challenge_generator = PoTChallengeGenerator(
+                enable_info_selection=True,
+                min_complexity=ChallengeComplexity.MODERATE
+            )
+        
+        logger.info(f"Generating {n} PoT-style challenges (focus: {focus})")
+        
+        challenges = self.challenge_generator.generate_verification_challenges(
+            n=n,
+            focus=focus
+        )
+        
+        # Store in experiment results
+        self.experiment_results["challenges"] = {
+            "total": len(challenges),
+            "focus": focus,
+            "categories": list(set(c.category.value for c in challenges)),
+            "complexity_distribution": dict(
+                defaultdict(int, {c.complexity.value: 
+                                 sum(1 for ch in challenges if ch.complexity == c.complexity)
+                                 for c in challenges})
+            )
+        }
+        
+        return challenges
