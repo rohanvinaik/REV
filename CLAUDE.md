@@ -1,5 +1,24 @@
 # REV - Restriction Enzyme Verification System
 
+## 🎯 CORE PURPOSE OF THIS EXPERIMENT
+
+**THE WHOLE POINT**: REV enables verification of massive LLMs (like Yi-34B with 68GB memory footprint) that EXCEED available device memory through intelligent segmented execution. This is NOT about avoiding loading the model - it's about making it POSSIBLE to run and verify models that wouldn't otherwise fit in memory AT ALL.
+
+### Why This Matters
+- **Problem**: Modern LLMs (70B, 175B parameters) require 140GB-350GB+ RAM
+- **Solution**: REV segments execution to verify these models with only 8-16GB active RAM
+- **Validation**: Yi-34B (68GB) successfully runs on 64GB system with only 2-3GB active memory per segment
+
+### Key Innovation
+REV treats transformer models like DNA sequences that can be "cut" at restriction sites (attention boundaries, layer transitions) and processed segment-by-segment while maintaining cryptographic verification of the complete computation through Merkle trees.
+
+### What We're Testing with Yi-34B
+1. **Memory-Bounded Execution**: Process 68GB model with <4GB active memory
+2. **Behavioral Segmentation**: Automatically discover model's processing regions
+3. **Cryptographic Integrity**: Generate Merkle proofs for all segments
+4. **Semantic Fingerprinting**: Create hyperdimensional vectors for model behavior
+5. **Statistical Verification**: Use SPRT for efficient model comparison
+
 ## Project Overview
 REV is a comprehensive framework for memory-bounded, black-box LLM comparison using restriction enzyme verification techniques combined with hyperdimensional computing and privacy-preserving infrastructure.
 
