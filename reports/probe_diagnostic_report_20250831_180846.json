@@ -1,0 +1,103 @@
+{
+  "summary": {
+    "timestamp": "2025-08-31T18:08:46.990026",
+    "session_duration_minutes": 0.016088766666666667,
+    "total_executions": 7,
+    "successful_executions": 5,
+    "failed_executions": 2,
+    "success_rate": 0.7142857142857143,
+    "fallback_count": 2,
+    "using_behavioral_probing": false
+  },
+  "performance": {
+    "average_execution_time_ms": 261.2,
+    "median_execution_time_ms": 262.0,
+    "max_execution_time_ms": 306.0,
+    "min_execution_time_ms": 214.0
+  },
+  "divergence_analysis": {
+    "total_scores": 5,
+    "mean_divergence": 0.556,
+    "std_divergence": 0.16131955864060626,
+    "min_divergence": 0.32,
+    "max_divergence": 0.78,
+    "divergence_distribution": {
+      "low_count": 0,
+      "medium_count": 4,
+      "high_count": 1
+    }
+  },
+  "layer_statistics": {
+    "25": {
+      "executions": 5,
+      "success_rate": 1.0,
+      "average_time_ms": 261.2,
+      "average_divergence": 0.556,
+      "divergence_variance": 0.026024000000000002
+    },
+    "35": {
+      "executions": 2,
+      "success_rate": 0.0,
+      "average_time_ms": 85.0,
+      "average_divergence": 0,
+      "divergence_variance": 0
+    }
+  },
+  "device_statistics": {
+    "cpu": 5,
+    "cuda": 2
+  },
+  "probe_type_statistics": {
+    "mathematical": {
+      "count": 3,
+      "average_divergence": 0.615,
+      "divergence_std": 0.165
+    },
+    "reasoning": {
+      "count": 1,
+      "average_divergence": 0.67,
+      "divergence_std": 0
+    },
+    "linguistic": {
+      "count": 1,
+      "average_divergence": 0.32,
+      "divergence_std": 0
+    },
+    "creative": {
+      "count": 1,
+      "average_divergence": 0.56,
+      "divergence_std": 0
+    },
+    "general": {
+      "count": 1,
+      "average_divergence": 0,
+      "divergence_std": 0
+    }
+  },
+  "fallback_events": [
+    {
+      "timestamp": "2025-08-31T18:08:46.764128",
+      "reason": "Insufficient behavioral profiles: 2 < 3",
+      "layer_idx": 12,
+      "probe_count": 3,
+      "failed_probes": [
+        "math probe",
+        "reasoning probe"
+      ]
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.877591",
+      "reason": "Discovery pipeline exception: CUDA device assertion failed",
+      "layer_idx": 28,
+      "probe_count": 5,
+      "failed_probes": [
+        "complex probe 1",
+        "complex probe 2",
+        "complex probe 3"
+      ]
+    }
+  ],
+  "recommendations": [
+    "Tensor shape errors detected - check model input dimensions"
+  ]
+}

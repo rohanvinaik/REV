@@ -1,0 +1,17 @@
+{
+  "timestamp": 1756670879.886241,
+  "model_path": "/Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct",
+  "model_size_gb": 131.4165982156992,
+  "device": "MPS (Metal)",
+  "test_results": {
+    "pot_challenges": "\u2705 PASSED",
+    "true_execution": "\u274c FAILED: Placeholder storage has not been allocated on MPS device!",
+    "hypervectors": "\u274c FAILED: AdaptiveSparsityEncoder.__init__() got an unexpected keyword argument 'base_sparsity'",
+    "memory_bounded": "\u2705 PASSED",
+    "e2e_pipeline": "\u274c FAILED: BlackBoxVerifier.__init__() missing 1 required positional argument: 'configs'"
+  },
+  "memory_usage": {
+    "peak_rss_gb": 1.2278594970703125,
+    "system_used_gb": 29.3104248046875
+  }
+}

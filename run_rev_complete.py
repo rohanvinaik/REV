@@ -10,12 +10,20 @@ import time
 import torch
 import numpy as np
 import logging
+import sys
+import os
+import psutil
+import traceback
+import gc
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional
 
 # REV components
 from src.models.large_model_inference import LargeModelInference, LargeModelConfig
+from src.models.metal_accelerated_inference import MetalAcceleratedInference, get_optimal_device
+from src.models.unified_inference import UnifiedInferenceManager
+from src.models.api_only_inference import APIOnlyInference, APIOnlyConfig
 from src.rev_pipeline import REVPipeline
 from src.hdc.encoder import HypervectorEncoder, HypervectorConfig
 from src.hdc.adaptive_encoder import AdaptiveSparsityEncoder, AdjustmentStrategy
@@ -23,25 +31,69 @@ from src.challenges.pot_challenge_generator import PoTChallengeGenerator
 from src.hypervector.hamming import HammingDistanceOptimized
 from src.core.sequential import SequentialState, TestType
 from src.hypervector.similarity import AdvancedSimilarity
+from src.diagnostics.probe_monitor import get_probe_monitor, reset_probe_monitor
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+# Enhanced logging setup
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('llama3.3_debug.log')
+    ]
+)
 logger = logging.getLogger(__name__)
+
+def log_memory_usage(stage: str):
+    """Log current memory usage."""
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    mem_gb = mem_info.rss / (1024 ** 3)
+    
+    # System memory
+    sys_mem = psutil.virtual_memory()
+    sys_used_gb = sys_mem.used / (1024 ** 3)
+    sys_total_gb = sys_mem.total / (1024 ** 3)
+    sys_percent = sys_mem.percent
+    
+    logger.info(f"[MEMORY] {stage}: Process={mem_gb:.2f}GB, System={sys_used_gb:.1f}/{sys_total_gb:.1f}GB ({sys_percent:.1f}%)")
+    
+    # Log GPU memory if available
+    if torch.cuda.is_available():
+        gpu_mem = torch.cuda.memory_allocated() / (1024 ** 3)
+        gpu_max = torch.cuda.max_memory_allocated() / (1024 ** 3)
+        logger.info(f"[GPU MEMORY] {stage}: Allocated={gpu_mem:.2f}GB, Max={gpu_max:.2f}GB")
+    
+    return mem_gb
 
 
 class REVComplete:
     """Complete REV pipeline with all capabilities integrated."""
     
-    def __init__(self, enable_paper_validation: bool = True):
+    def __init__(self, enable_paper_validation: bool = True, debug_mode: bool = False):
         """Initialize REV complete pipeline.
         
         Args:
             enable_paper_validation: Whether to validate paper claims during execution
+            debug_mode: Enable comprehensive diagnostic logging
         """
         self.results = {}
         self.hypervectors = {}
         self.models_processed = []
         self.enable_paper_validation = enable_paper_validation
         self.paper_claims_validated = {}
+        self.debug_mode = debug_mode
+        
+        # Initialize probe monitor for diagnostics
+        self.probe_monitor = get_probe_monitor()
+        
+        if self.debug_mode:
+            logger.info("🔬" * 20)
+            logger.info("🔬 REV PIPELINE DEBUG MODE ENABLED")
+            logger.info("🔬" * 20)
+            logger.info(f"📊 Diagnostic reports will be saved to: reports/")
+            logger.info(f"📊 Fallback diagnostics will be saved to: diagnostics/")
+            logger.info("🔬" * 20)
         
         # Initialize HDC components
         self.hdc_config = HypervectorConfig(
@@ -69,6 +121,10 @@ class REVComplete:
             enable_behavioral_analysis=True
         )
         
+        # Enable debug mode if requested
+        if self.debug_mode:
+            self.pipeline.enable_debug_mode()
+        
         # Store inference managers for cleanup
         self.inference_managers = {}
     
@@ -78,7 +134,8 @@ class REVComplete:
                      quantize: str = "none",
                      challenges: int = 2,
                      max_new_tokens: int = 50,
-                     challenge_focus: str = "balanced") -> Dict[str, Any]:
+                     challenge_focus: str = "balanced",
+                     api_only: bool = False) -> Dict[str, Any]:
         """
         Process a single model through the complete pipeline.
         
@@ -89,6 +146,7 @@ class REVComplete:
             challenges: Number of PoT challenges to generate
             max_new_tokens: Maximum tokens to generate
             challenge_focus: Focus for challenge generation (coverage/separation/balanced)
+            api_only: Use API-only mode without loading models locally
             
         Returns:
             Dictionary with comprehensive processing results
@@ -97,6 +155,10 @@ class REVComplete:
         print(f"\n{'='*80}")
         print(f"Processing Model: {model_name}")
         print(f"{'='*80}")
+        
+        logger.info(f"[START] Processing model: {model_path}")
+        logger.info(f"[CONFIG] Device: {device}, Quantize: {quantize}, Challenges: {challenges}")
+        log_memory_usage("Initial")
         
         result = {
             "model": model_path,
@@ -107,34 +169,76 @@ class REVComplete:
         
         # Stage 1: Load Model
         print(f"\n[Stage 1/6] Loading model...")
+        logger.info("[STAGE 1] Starting model loading")
         start = time.time()
         
-        config = LargeModelConfig(
-            model_path=model_path,
-            device=device,
-            load_in_8bit=(quantize == "8bit"),
-            load_in_4bit=(quantize == "4bit"),
-            low_cpu_mem_usage=True,
-            max_new_tokens=max_new_tokens,
-            do_sample=False
-        )
-        
-        inference = LargeModelInference(model_path, config)
-        success, message = inference.load_model()
-        
-        if not success:
-            print(f"❌ Failed to load model: {message}")
-            result["error"] = message
+        try:
+            if api_only:
+                # API-only mode - no local model loading
+                logger.info("[API-ONLY] Using API-only mode without local model loading")
+                print("📡 Using API-only mode (no local model loading)")
+                
+                api_config = APIOnlyConfig(
+                    provider=os.environ.get("CLOUD_PROVIDER", "huggingface"),
+                    api_key=os.environ.get("HF_TOKEN") or os.environ.get("CLOUD_API_KEY"),
+                    model_id=model_path,
+                    max_tokens=max_new_tokens
+                )
+                
+                inference = APIOnlyInference(model_path, api_config)
+            else:
+                # Auto-detect optimal device if not specified
+                if device == "auto":
+                    optimal_device = get_optimal_device()
+                    logger.info(f"[DEVICE] Auto-detected optimal device: {optimal_device}")
+                    device = optimal_device
+                
+                config = LargeModelConfig(
+                    model_path=model_path,
+                    device=device,
+                    load_in_8bit=(quantize == "8bit"),
+                    load_in_4bit=(quantize == "4bit"),
+                    low_cpu_mem_usage=True,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False
+                )
+                
+                # Use unified inference manager for automatic backend selection
+                logger.info("[UNIFIED] Creating unified inference manager")
+                inference = UnifiedInferenceManager(
+                    model_path=model_path,
+                    config=config,
+                    prefer_cloud=False,  # Can be made configurable
+                    cloud_provider=os.environ.get("CLOUD_PROVIDER"),
+                    cloud_api_key=os.environ.get("CLOUD_API_KEY")
+                )
+            logger.info("[LOADING] Created inference manager, starting model load")
+            log_memory_usage("Pre-load")
+            
+            success, message = inference.load_model()
+            
+            if not success:
+                logger.error(f"[ERROR] Failed to load model: {message}")
+                print(f"❌ Failed to load model: {message}")
+                result["error"] = message
+                return result
+            
+            self.inference_managers[model_name] = inference
+            
+            logger.info(f"[SUCCESS] Model loaded: {message}")
+            log_memory_usage("Post-load")
+            print(f"✅ {message}")
+            
+            result["stages"]["loading"] = {
+                "success": True,
+                "time": time.time() - start,
+                "model_info": inference.model_info
+            }
+        except Exception as e:
+            logger.error(f"[EXCEPTION] Loading failed: {str(e)}")
+            logger.error(traceback.format_exc())
+            result["error"] = str(e)
             return result
-        
-        self.inference_managers[model_name] = inference
-        
-        print(f"✅ {message}")
-        result["stages"]["loading"] = {
-            "success": True,
-            "time": time.time() - start,
-            "model_info": inference.model_info
-        }
         
         # Stage 2: Generate PoT Challenges
         print(f"\n[Stage 2/6] Generating PoT Challenges...")
@@ -150,6 +254,7 @@ class REVComplete:
         
         # Stage 3: Process Challenges and Generate Hypervectors
         print(f"\n[Stage 3/6] Processing Challenges & Generating Hypervectors...")
+        logger.info("[STAGE 3] Starting challenge processing")
         start = time.time()
         
         hypervectors = []
@@ -157,21 +262,31 @@ class REVComplete:
         
         for i, challenge in enumerate(challenges_list, 1):
             print(f"  Processing challenge {i}/{len(challenges_list)}...", end='')
+            logger.info(f"[CHALLENGE {i}] Processing: {challenge.prompt[:100]}...")
+            log_memory_usage(f"Pre-challenge-{i}")
             
-            # Process with REV
-            rev_result = inference.process_for_rev(
-                prompt=challenge.prompt,
-                extract_activations=True,
-                hdc_encoder=self.encoder,
-                adaptive_encoder=self.adaptive_encoder
-            )
-            
-            if rev_result["success"]:
-                responses.append(rev_result.get("response", ""))
-                if "hypervector" in rev_result:
-                    hypervectors.append(rev_result["hypervector"])
-                print(" ✓")
-            else:
+            try:
+                # Process with REV
+                rev_result = inference.process_for_rev(
+                    prompt=challenge.prompt,
+                    extract_activations=True,
+                    hdc_encoder=self.encoder,
+                    adaptive_encoder=self.adaptive_encoder
+                )
+                
+                if rev_result["success"]:
+                    responses.append(rev_result.get("response", ""))
+                    if "hypervector" in rev_result:
+                        hypervectors.append(rev_result["hypervector"])
+                    logger.info(f"[CHALLENGE {i}] Success")
+                    log_memory_usage(f"Post-challenge-{i}")
+                    print(" ✓")
+                else:
+                    logger.warning(f"[CHALLENGE {i}] Failed: {rev_result.get('error', 'Unknown error')}")
+                    print(" ✗")
+            except Exception as e:
+                logger.error(f"[CHALLENGE {i}] Exception: {str(e)}")
+                logger.error(traceback.format_exc())
                 print(" ✗")
         
         # Combine hypervectors
@@ -243,6 +358,36 @@ class REVComplete:
         
         self.models_processed.append(model_name)
         self.results[model_name] = result
+        
+        # Generate diagnostic report if debug mode is enabled
+        if self.debug_mode and self.probe_monitor:
+            print(f"\n[Stage 7/6] Generating Diagnostic Report...")
+            diagnostic_report = self.probe_monitor.generate_report()
+            
+            # Check if behavioral probing is working
+            if diagnostic_report['summary']['using_behavioral_probing']:
+                print(f"✅ BEHAVIORAL PROBING: Working correctly")
+                print(f"   Success rate: {diagnostic_report['summary']['success_rate']:.1%}")
+                print(f"   Total executions: {diagnostic_report['summary']['total_executions']}")
+            else:
+                print(f"⚠️  BEHAVIORAL PROBING: Using hardcoded fallback!")
+                print(f"   Fallback count: {diagnostic_report['summary']['fallback_count']}")
+                print(f"   Success rate: {diagnostic_report['summary']['success_rate']:.1%}")
+                if diagnostic_report['recommendations']:
+                    print(f"   Recommendations:")
+                    for rec in diagnostic_report['recommendations'][:3]:
+                        print(f"     • {rec}")
+            
+            # Save diagnostic report
+            report_path = self.probe_monitor.save_report(f"diagnostic_{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+            print(f"📊 Diagnostic report saved: {report_path}")
+            
+            result["diagnostics"] = {
+                "using_behavioral_probing": diagnostic_report['summary']['using_behavioral_probing'],
+                "success_rate": diagnostic_report['summary']['success_rate'],
+                "fallback_count": diagnostic_report['summary']['fallback_count'],
+                "report_path": str(report_path)
+            }
         
         return result
     
@@ -541,22 +686,31 @@ def main():
                        help="Skip paper claims validation")
     parser.add_argument("--challenge-focus", choices=["coverage", "separation", "balanced"],
                        default="balanced", help="PoT challenge generation focus")
+    parser.add_argument("--local-loading", action="store_true",
+                       help="Load models locally instead of using API-only mode (API-only is default)")
+    parser.add_argument("--debug", action="store_true",
+                       help="Enable comprehensive diagnostic logging for behavioral probing")
     
     args = parser.parse_args()
     
     print("="*80)
     print("REV FRAMEWORK - COMPLETE E2E PIPELINE v1.0")
     print("="*80)
+    # API-only is default now
+    api_only = not args.local_loading
+    
     print(f"Models: {', '.join(args.models)}")
-    print(f"Device: {args.device}")
-    print(f"Quantization: {args.quantize}")
+    print(f"Mode: {'Local loading' if args.local_loading else 'API-only (no local loading)'}")
+    if args.local_loading:
+        print(f"Device: {args.device}")
+        print(f"Quantization: {args.quantize}")
     print(f"Challenges: {args.challenges} ({args.challenge_focus} focus)")
     print(f"Paper validation: {'Enabled' if not args.no_validation else 'Disabled'}")
     print(f"Timestamp: {datetime.now().isoformat()}")
     print("="*80)
     
     # Initialize pipeline with options
-    rev = REVComplete(enable_paper_validation=not args.no_validation)
+    rev = REVComplete(enable_paper_validation=not args.no_validation, debug_mode=args.debug)
     
     # Process each model
     for model_path in args.models:
@@ -567,7 +721,8 @@ def main():
                 quantize=args.quantize,
                 challenges=args.challenges,
                 max_new_tokens=args.max_tokens,
-                challenge_focus=args.challenge_focus
+                challenge_focus=args.challenge_focus,
+                api_only=api_only
             )
             
             if "error" not in result:

@@ -533,6 +533,39 @@ class AdaptiveSparsityEncoder:
         self.failure_count = 0
         self._position_cache.clear()
         
+    def encode_tokens(self, tokens: List[str]) -> np.ndarray:
+        """
+        Encode a list of tokens into a hypervector.
+        
+        Args:
+            tokens: List of tokens to encode
+            
+        Returns:
+            Hypervector representation
+        """
+        # Create a combined feature vector from tokens
+        # Use hash of each token to create deterministic features
+        hypervector = np.zeros(self.dimension)
+        
+        for token in tokens:
+            # Hash token to get deterministic indices
+            token_hash = hash(token)
+            np.random.seed(abs(token_hash) % (2**32))
+            
+            # Select random dimensions to activate
+            num_active = int(self.dimension * self.current_sparsity)
+            active_dims = np.random.choice(self.dimension, num_active, replace=False)
+            
+            # Add contribution from this token
+            for dim in active_dims:
+                hypervector[dim] += np.random.randn()
+        
+        # Normalize
+        if np.linalg.norm(hypervector) > 0:
+            hypervector = hypervector / np.linalg.norm(hypervector)
+        
+        return hypervector
+    
     def get_summary(self) -> Dict[str, Any]:
         """Get summary of encoder state and history."""
         return {

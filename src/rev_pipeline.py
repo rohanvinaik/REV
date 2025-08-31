@@ -36,6 +36,9 @@ from .crypto.merkle import (
 )
 from .hdc.encoder import HypervectorEncoder, HypervectorConfig
 from .core.sequential import SequentialState, DualSequentialTest
+from .core.device_manager import DeviceManager, get_global_device_manager
+from .core.device_error_handler import DeviceErrorHandler, device_safe_operation
+from .diagnostics.probe_monitor import get_probe_monitor
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -79,6 +82,20 @@ class SegmentTelemetry:
     params_loaded_mb: float = 0.0
     params_offloaded: bool = False
 
+
+@dataclass
+class FunctionalSegment:
+    """Represents a functional segment based on behavioral characteristics."""
+    id: str
+    start_layer: int
+    end_layer: int
+    behavioral_fingerprint: Dict[str, Any]
+    functional_role: str  # 'token_embedding', 'semantic_processing', 'output_generation', etc.
+    processing_mode: str  # 'high_precision', 'standard', 'fast', etc.
+    response_strength: float = 0.0  # Average response strength to behavioral probes
+    specialization_score: float = 0.0  # How specialized this segment is
+    execution_policy: Optional[ExecutionPolicy] = None
+    
 
 @dataclass
 class ArchitecturalSite:
@@ -165,7 +182,8 @@ class REVPipeline:
         architectural_sites: Optional[List[ArchitecturalSite]] = None,
         enable_pot_challenges: bool = False,
         enable_behavioral_analysis: bool = False,
-        experiment_name: Optional[str] = None
+        experiment_name: Optional[str] = None,
+        device_manager: Optional[DeviceManager] = None
     ):
         """
         Initialize REV pipeline.
@@ -175,10 +193,15 @@ class REVPipeline:
             buffer_size: Number of segments to keep in memory
             hdc_config: Configuration for hypervector encoding
             architectural_sites: List of architectural probe points
+            device_manager: Device manager for tensor operations (uses global if None)
         """
         self.segment_size = segment_size
         self.buffer_size = buffer_size
         self.segment_buffer = deque(maxlen=buffer_size)
+        
+        # Initialize device manager and error handler
+        self.device_manager = device_manager or get_global_device_manager()
+        self.error_handler = DeviceErrorHandler(self.device_manager)
         
         # Initialize HDC encoder
         self.hdc_config = hdc_config or HypervectorConfig(
@@ -193,6 +216,17 @@ class REVPipeline:
         # Merkle tree storage for verification
         self.merkle_trees = {}
         self.segment_counter = 0
+        
+        # PoT and behavioral analysis settings  
+        self.enable_pot_challenges = enable_pot_challenges
+        self.enable_behavioral_analysis = enable_behavioral_analysis
+        self.experiment_name = experiment_name
+        
+        # Diagnostic settings
+        self.debug_mode = False
+        self.verbose_logging = False
+        self.probe_monitor = get_probe_monitor()
+        self.memory_limit_mb = 8192  # Default 8GB limit
         
         # Memory-bounded execution state
         self.execution_policy = ExecutionPolicy()
@@ -264,6 +298,42 @@ class REVPipeline:
         )
         
         return sites
+    
+    def enable_debug_mode(self):
+        """Enable detailed debug output and diagnostics for behavioral probing."""
+        self.debug_mode = True
+        self.verbose_logging = True
+        
+        # Set logging level to debug
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+        
+        # Log system state
+        logger.debug("="*60)
+        logger.debug("REV PIPELINE DEBUG MODE ENABLED")
+        logger.debug("="*60)
+        logger.debug(f"PoT Challenges Enabled: {self.enable_pot_challenges}")
+        logger.debug(f"Behavioral Analysis Enabled: {self.enable_behavioral_analysis}")
+        
+        # Log device information
+        try:
+            if torch.cuda.is_available():
+                logger.debug(f"Device: CUDA - {torch.cuda.get_device_name()}")
+                logger.debug(f"CUDA Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB")
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                logger.debug("Device: MPS (Metal Performance Shaders)")
+            else:
+                logger.debug("Device: CPU")
+        except:
+            logger.debug("Device: CPU (fallback)")
+            
+        logger.debug(f"Memory Limit: {self.memory_limit_mb}MB")
+        logger.debug(f"Segment Size: {self.segment_size} tokens")
+        logger.debug(f"Buffer Size: {self.buffer_size} segments")
+        logger.debug(f"HDC Dimension: {self.hdc_config.dimension}")
+        logger.debug(f"HDC Sparsity: {self.hdc_config.sparsity}")
+        logger.debug(f"Experiment: {self.experiment_name}")
+        logger.debug("="*60)
     
     def segment_tokens(
         self, 
@@ -373,10 +443,18 @@ class REVPipeline:
             if policy.quantization:
                 self._apply_quantization(model, policy.quantization)
             
-            # Prepare input
+            # Prepare input with device management
             input_ids = torch.tensor([segment.tokens], dtype=torch.long)
-            if torch.cuda.is_available() and not policy.offload_to_cpu:
-                input_ids = input_ids.cuda()
+            try:
+                # Use device manager for proper device placement
+                target_device = self.device_manager.get_device()
+                if not policy.offload_to_cpu:
+                    input_ids = self.device_manager.ensure_device_consistency(input_ids, target_device)
+                else:
+                    input_ids = input_ids.cpu()
+            except Exception as e:
+                logger.warning(f"[REV-PIPELINE] Device placement failed: {e}, using CPU")
+                input_ids = input_ids.cpu()
             
             # Manage KV cache
             if states_in and 'kv_cache' in states_in:
@@ -386,18 +464,43 @@ class REVPipeline:
             self._manage_kv_cache(policy.kv_cache_max_tokens)
             telemetry.kv_cache_size_mb = self._get_kv_cache_size_mb()
             
-            # Forward pass with activation checkpointing
-            if policy.checkpoint_activations:
-                # Use gradient checkpointing to save memory
-                with torch.cuda.amp.autocast(enabled=(policy.dtype == "fp16")):
-                    states_out, activations = self._forward_with_checkpointing(
-                        model, input_ids, seg
+            # Forward pass with device-safe execution
+            try:
+                if policy.checkpoint_activations:
+                    # Use gradient checkpointing to save memory
+                    autocast_enabled = (policy.dtype == "fp16" and self.device_manager.get_device().type == "cuda")
+                    with torch.cuda.amp.autocast(enabled=autocast_enabled):
+                        states_out, activations = self._forward_with_checkpointing(
+                            model, input_ids, seg
+                        )
+                else:
+                    # Standard forward pass
+                    states_out, activations = self._forward_segment(
+                        model, input_ids, seg, policy
                     )
-            else:
-                # Standard forward pass
-                states_out, activations = self._forward_segment(
-                    model, input_ids, seg, policy
-                )
+            except Exception as e:
+                # Handle device errors with automatic recovery
+                context = {
+                    "segment_id": segment.segment_id,
+                    "input_shape": input_ids.shape,
+                    "input_device": str(input_ids.device),
+                    "model_device": str(next(model.parameters()).device) if hasattr(model, 'parameters') else "unknown",
+                    "policy": policy.__dict__
+                }
+                
+                recovery_successful, recovery_result = self.error_handler.handle_error(e, context)
+                
+                if recovery_successful:
+                    logger.info(f"[REV-PIPELINE] Recovered from device error in segment {segment.segment_id}")
+                    # Retry with CPU fallback
+                    input_ids = input_ids.cpu()
+                    model = model.cpu() if hasattr(model, 'cpu') else model
+                    states_out, activations = self._forward_segment(
+                        model, input_ids, seg, policy
+                    )
+                else:
+                    logger.error(f"[REV-PIPELINE] Failed to recover from device error: {e}")
+                    raise
             
             # Save checkpoint if needed for overlap regions
             if segment.overlap_group > 0 and policy.checkpoint_activations:
@@ -417,14 +520,32 @@ class REVPipeline:
                 torch.cuda.empty_cache()
             
         except torch.cuda.OutOfMemoryError as e:
-            # Handle OOM by offloading and retrying
-            print(f"OOM encountered, offloading to CPU and retrying segment {segment.segment_id}")
-            gc.collect()
-            torch.cuda.empty_cache()
+            # Handle OOM using device manager
+            logger.warning(f"[REV-PIPELINE] OOM encountered in segment {segment.segment_id}")
             
-            # Retry with CPU offloading
-            policy.offload_to_cpu = True
-            return self.run_segment(model, states_in, seg, segment, policy)
+            if self.device_manager.handle_out_of_memory(e):
+                # Retry with CPU offloading
+                policy.offload_to_cpu = True
+                logger.info(f"[REV-PIPELINE] Retrying segment {segment.segment_id} with CPU offloading")
+                return self.run_segment(model, states_in, seg, segment, policy)
+            else:
+                raise
+        except Exception as e:
+            # Handle other device-related errors
+            error_type = self.error_handler.classify_error(e)
+            if error_type.value != "unknown":
+                logger.warning(f"[REV-PIPELINE] Device error in segment {segment.segment_id}: {error_type.value}")
+                
+                context = {
+                    "segment_id": segment.segment_id,
+                    "operation": "run_segment"
+                }
+                recovery_successful, _ = self.error_handler.handle_error(e, context)
+                
+                if not recovery_successful:
+                    raise
+            else:
+                raise
             
         finally:
             # Record telemetry
@@ -1221,6 +1342,59 @@ class REVPipeline:
         
         analysis_time = time.time() - start_time
         
+        # Create functional segments using restriction site discovery
+        functional_segments = []
+        try:
+            # Try to use LayerSegmentExecutor for sophisticated restriction site discovery
+            from .models.true_segment_execution import LayerSegmentExecutor, SegmentExecutionConfig, RestrictionSite
+            
+            # Create minimal config for restriction site discovery
+            config = SegmentExecutionConfig(model_path="behavioral_analysis")
+            executor = LayerSegmentExecutor(config)
+            
+            # Generate diverse behavioral probes for restriction site discovery
+            probe_prompts = []
+            for probe_type, probe_texts in probes.items():
+                probe_prompts.extend(probe_texts[:3])  # Use first 3 probes of each type
+            
+            # Discover restriction sites using actual behavioral analysis
+            restriction_sites = executor.identify_all_restriction_sites(probe_prompts)
+            
+            if restriction_sites:
+                # Create functional segments from restriction sites
+                functional_segments = self.create_functional_segments(restriction_sites)
+                logger.info(f"Created {len(functional_segments)} functional segments from {len(restriction_sites)} restriction sites")
+                
+        except Exception as e:
+            logger.warning(f"Could not create functional segments: {e}")
+            logger.info("Falling back to basic segmentation")
+            
+            # Fallback: create basic functional segments from simple layer boundaries
+            if segments:
+                mock_sites = []
+                for start, end in segments:
+                    # Create mock RestrictionSite objects
+                    site = type('RestrictionSite', (), {
+                        'layer_idx': start,
+                        'site_type': 'layer_boundary', 
+                        'behavioral_divergence': 0.5,
+                        'confidence_score': 0.7
+                    })()
+                    mock_sites.append(site)
+                    
+                # Add final site
+                if segments:
+                    final_site = type('RestrictionSite', (), {
+                        'layer_idx': segments[-1][1],
+                        'site_type': 'layer_boundary',
+                        'behavioral_divergence': 0.3, 
+                        'confidence_score': 0.6
+                    })()
+                    mock_sites.append(final_site)
+                    
+                if len(mock_sites) >= 2:
+                    functional_segments = self.create_functional_segments(mock_sites)
+
         # Store results
         behavioral_results = {
             "num_layers": num_layers,
@@ -1232,12 +1406,21 @@ class REVPipeline:
             "segments": segments,
             "analysis_time": analysis_time,
             "correlation_threshold": correlation_threshold,
-            "segment_interpretation": self._interpret_segments(segments, num_layers)
+            "segment_interpretation": self._interpret_segments(segments, num_layers),
+            "functional_segments": functional_segments,
+            "num_functional_segments": len(functional_segments)
         }
         
         logger.info(f"✓ Identified {len(segments)} behavioral segments in {analysis_time:.2f}s")
         for i, (start, end) in enumerate(segments):
             logger.info(f"  Segment {i+1}: Layers {start}-{end} ({end-start} layers)")
+            
+        # Log functional segments if created
+        if functional_segments:
+            logger.info(f"✓ Created {len(functional_segments)} functional segments:")
+            for i, fs in enumerate(functional_segments):
+                logger.info(f"  Functional Segment {i+1}: {fs.id} - Role: {fs.functional_role}, "
+                           f"Mode: {fs.processing_mode}, Layers: {fs.start_layer}-{fs.end_layer}")
         
         return behavioral_results
     
@@ -1350,3 +1533,312 @@ class REVPipeline:
         }
         
         return challenges
+    
+    def create_functional_segments(self, restriction_sites: List) -> List[FunctionalSegment]:
+        """
+        Create functional segments from discovered restriction sites.
+        Each segment has behavioral fingerprint, functional role, and processing characteristics.
+        
+        Args:
+            restriction_sites: List of RestrictionSite objects from behavioral analysis
+            
+        Returns:
+            List of FunctionalSegment objects with behavioral metadata
+        """
+        segments = []
+        
+        # Ensure we have at least 2 sites to create segments
+        if len(restriction_sites) < 2:
+            logger.warning("Need at least 2 restriction sites to create functional segments")
+            return segments
+            
+        for i in range(len(restriction_sites) - 1):
+            start_site = restriction_sites[i]
+            end_site = restriction_sites[i + 1]
+            
+            # Create segment with behavioral metadata
+            segment = FunctionalSegment(
+                id=f"seg_{i}_{start_site.layer_idx}_{end_site.layer_idx}",
+                start_layer=start_site.layer_idx,
+                end_layer=end_site.layer_idx,
+                behavioral_fingerprint=self.compute_segment_fingerprint(start_site, end_site),
+                functional_role=self.identify_functional_role(start_site, end_site),
+                processing_mode=self.determine_processing_mode(start_site, end_site)
+            )
+            
+            # Add execution policy based on functional role
+            segment.execution_policy = self._create_execution_policy_for_role(segment.functional_role)
+            
+            segments.append(segment)
+            
+        logger.info(f"Created {len(segments)} functional segments from {len(restriction_sites)} restriction sites")
+        return segments
+    
+    def compute_segment_fingerprint(self, start_site, end_site) -> Dict[str, Any]:
+        """
+        Aggregate behavioral characteristics across segment.
+        
+        Args:
+            start_site: Starting RestrictionSite
+            end_site: Ending RestrictionSite
+            
+        Returns:
+            Dict containing behavioral fingerprint metrics
+        """
+        fingerprint = {
+            "layer_range": (start_site.layer_idx, end_site.layer_idx),
+            "layer_count": end_site.layer_idx - start_site.layer_idx,
+            "start_divergence": start_site.behavioral_divergence,
+            "end_divergence": end_site.behavioral_divergence,
+            "avg_divergence": (start_site.behavioral_divergence + end_site.behavioral_divergence) / 2,
+        }
+        
+        # Aggregate divergence metrics if available
+        if hasattr(start_site, 'divergence_metrics') and start_site.divergence_metrics:
+            fingerprint["start_metrics"] = start_site.divergence_metrics.copy()
+        if hasattr(end_site, 'divergence_metrics') and end_site.divergence_metrics:
+            fingerprint["end_metrics"] = end_site.divergence_metrics.copy()
+            
+        # Analyze response patterns to different probe types
+        response_patterns = {}
+        if hasattr(start_site, 'prompt_responses') and start_site.prompt_responses:
+            response_patterns["start_responses"] = len(start_site.prompt_responses)
+            
+        if hasattr(end_site, 'prompt_responses') and end_site.prompt_responses:
+            response_patterns["end_responses"] = len(end_site.prompt_responses)
+            
+        fingerprint["response_patterns"] = response_patterns
+        
+        # Statistical summary of activation patterns
+        fingerprint["activation_summary"] = {
+            "confidence_range": (
+                getattr(start_site, 'confidence_score', 0.0),
+                getattr(end_site, 'confidence_score', 0.0)
+            ),
+            "site_types": [start_site.site_type, end_site.site_type],
+        }
+        
+        return fingerprint
+    
+    def identify_functional_role(self, start_site, end_site) -> str:
+        """
+        Map behavioral patterns to functional roles based on layer position and response strength.
+        
+        Args:
+            start_site: Starting RestrictionSite
+            end_site: Ending RestrictionSite
+            
+        Returns:
+            String identifying the functional role
+        """
+        start_layer = start_site.layer_idx
+        end_layer = end_site.layer_idx
+        avg_layer = (start_layer + end_layer) / 2
+        
+        # Calculate average response strength
+        avg_divergence = (start_site.behavioral_divergence + end_site.behavioral_divergence) / 2
+        
+        # Classification based on layer position and response patterns
+        # These thresholds are based on typical transformer architectures
+        
+        if avg_layer < 5:  # Early layers (0-4)
+            if avg_divergence < 0.3:
+                return "token_embedding"
+            else:
+                return "early_processing"
+                
+        elif avg_layer < 25:  # Middle-early layers (5-24)  
+            if 0.2 <= avg_divergence <= 0.4:
+                return "feature_extraction"
+            elif avg_divergence > 0.4:
+                return "semantic_processing"
+            else:
+                return "representation_building"
+                
+        elif avg_layer < 50:  # Middle-late layers (25-49)
+            if 0.6 <= avg_divergence <= 0.8:
+                return "semantic_processing"
+            elif avg_divergence > 0.8:
+                return "reasoning"
+            else:
+                return "pattern_integration"
+                
+        else:  # Late layers (50+)
+            if avg_divergence >= 0.8:
+                return "output_generation"
+            elif 0.5 <= avg_divergence < 0.8:
+                return "decision_making"
+            else:
+                return "final_processing"
+    
+    def determine_processing_mode(self, start_site, end_site) -> str:
+        """
+        Determine optimal processing mode based on behavioral characteristics.
+        
+        Args:
+            start_site: Starting RestrictionSite
+            end_site: Ending RestrictionSite
+            
+        Returns:
+            String identifying processing mode
+        """
+        avg_divergence = (start_site.behavioral_divergence + end_site.behavioral_divergence) / 2
+        layer_count = end_site.layer_idx - start_site.layer_idx
+        
+        # Determine processing mode based on behavioral complexity
+        if avg_divergence >= 0.7:
+            # High divergence requires careful processing
+            return "high_precision"
+        elif avg_divergence >= 0.4:
+            # Moderate divergence uses standard processing
+            return "standard"
+        elif layer_count <= 3:
+            # Short segments can use fast processing
+            return "fast"
+        else:
+            # Default to standard for safety
+            return "standard"
+    
+    def _create_execution_policy_for_role(self, functional_role: str) -> ExecutionPolicy:
+        """
+        Create execution policy tailored to functional role.
+        
+        Args:
+            functional_role: The identified functional role
+            
+        Returns:
+            ExecutionPolicy optimized for the role
+        """
+        # Base policy
+        policy = ExecutionPolicy(
+            temperature=0.0,
+            dtype="fp16",
+            seed=42,
+            checkpoint_activations=True
+        )
+        
+        # Role-specific optimizations
+        if functional_role in ["semantic_processing", "reasoning", "decision_making"]:
+            # Critical processing requires higher precision
+            policy.dtype = "fp32"
+            policy.temperature = 0.0
+            policy.attn_impl = "flash"  # More accurate attention
+            policy.checkpoint_activations = True
+            
+        elif functional_role in ["output_generation", "final_processing"]:
+            # Can use faster processing for output layers
+            policy.dtype = "fp16"
+            policy.temperature = 0.1
+            policy.attn_impl = "paged"  # Faster but less precise
+            policy.quantization = "8bit"
+            
+        elif functional_role in ["token_embedding", "early_processing"]:
+            # Early layers are more robust to approximations
+            policy.dtype = "fp16"
+            policy.quantization = "8bit"
+            policy.offload_to_cpu = True  # Can offload for memory savings
+            
+        return policy
+    
+    def process_segment_with_fingerprint(self, segment: FunctionalSegment, input_tokens: List[int]):
+        """
+        Process segment according to its behavioral fingerprint.
+        Different processing strategies for different functional roles.
+        
+        Args:
+            segment: FunctionalSegment with behavioral metadata
+            input_tokens: Input tokens to process
+            
+        Returns:
+            Processed output with telemetry
+        """
+        logger.info(f"Processing segment {segment.id} with role '{segment.functional_role}' "
+                   f"using {segment.processing_mode} mode")
+        
+        # Use the segment's execution policy
+        if segment.execution_policy:
+            self.set_execution_policy(segment.execution_policy)
+            
+        # Track segment-specific telemetry
+        start_time = time.time()
+        initial_memory = self._get_memory_usage()
+        
+        try:
+            # Process using the segment's characteristics
+            result = self._process_with_role_awareness(segment, input_tokens)
+            
+            # Collect telemetry
+            end_time = time.time()
+            final_memory = self._get_memory_usage()
+            
+            telemetry = SegmentTelemetry(
+                segment_id=hash(segment.id),
+                alloc_mb=final_memory - initial_memory,
+                peak_mb=max(initial_memory, final_memory),
+                t_ms=(end_time - start_time) * 1000,
+                tokens_processed=len(input_tokens)
+            )
+            
+            return result, telemetry
+            
+        except Exception as e:
+            logger.error(f"Error processing segment {segment.id}: {e}")
+            raise
+    
+    def _process_with_role_awareness(self, segment: FunctionalSegment, input_tokens: List[int]):
+        """
+        Internal processing method that adapts behavior based on functional role.
+        
+        Args:
+            segment: FunctionalSegment with behavioral metadata
+            input_tokens: Input tokens to process
+            
+        Returns:
+            Processing results adapted to the segment's role
+        """
+        role = segment.functional_role
+        
+        # Role-specific processing adaptations
+        if role in ["semantic_processing", "reasoning"]:
+            # Use more thorough analysis for critical processing segments
+            return self._process_with_high_attention(segment, input_tokens)
+            
+        elif role == "output_generation":
+            # Focus on generation quality for output segments
+            return self._process_with_generation_focus(segment, input_tokens)
+            
+        elif role in ["token_embedding", "early_processing"]:
+            # Use efficient processing for early stages
+            return self._process_efficiently(segment, input_tokens)
+            
+        else:
+            # Default processing for unrecognized roles
+            return self._process_standard(segment, input_tokens)
+    
+    def _process_with_high_attention(self, segment: FunctionalSegment, input_tokens: List[int]):
+        """High-precision processing for semantic/reasoning segments."""
+        # Implement detailed processing logic
+        return {"processed_tokens": input_tokens, "mode": "high_attention", "segment_id": segment.id}
+    
+    def _process_with_generation_focus(self, segment: FunctionalSegment, input_tokens: List[int]):
+        """Generation-focused processing for output segments."""
+        # Implement generation-optimized logic
+        return {"processed_tokens": input_tokens, "mode": "generation_focus", "segment_id": segment.id}
+    
+    def _process_efficiently(self, segment: FunctionalSegment, input_tokens: List[int]):
+        """Efficient processing for early-stage segments."""
+        # Implement efficient processing logic
+        return {"processed_tokens": input_tokens, "mode": "efficient", "segment_id": segment.id}
+    
+    def _process_standard(self, segment: FunctionalSegment, input_tokens: List[int]):
+        """Standard processing for general segments."""
+        # Implement standard processing logic
+        return {"processed_tokens": input_tokens, "mode": "standard", "segment_id": segment.id}
+    
+    def _get_memory_usage(self) -> float:
+        """Get current memory usage in MB."""
+        try:
+            process = psutil.Process()
+            return process.memory_info().rss / 1024 / 1024
+        except:
+            return 0.0

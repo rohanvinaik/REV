@@ -1,0 +1,131 @@
+{
+  "fallback_event": {
+    "timestamp": "2025-08-31T18:08:46.877591",
+    "reason": "Discovery pipeline exception: CUDA device assertion failed",
+    "layer_idx": 28,
+    "probe_count": 5,
+    "failed_probes": [
+      "complex probe 1",
+      "complex probe 2",
+      "complex probe 3"
+    ]
+  },
+  "recent_executions": [
+    {
+      "timestamp": "2025-08-31T18:08:46.024873",
+      "probe_text": "Calculate 2+2*3",
+      "layer_idx": 25,
+      "execution_time_ms": 240.0,
+      "device": "cpu",
+      "dtype": "float32",
+      "success": true,
+      "error_message": "",
+      "divergence_score": 0.45,
+      "tensor_shapes": {
+        "hidden_states": "(1, 8, 4096)",
+        "attention": "(1, 32, 8, 8)"
+      },
+      "memory_usage_mb": 3.85
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.130139",
+      "probe_text": "Explain quantum mechanics",
+      "layer_idx": 25,
+      "execution_time_ms": 284.0,
+      "device": "cpu",
+      "dtype": "float32",
+      "success": true,
+      "error_message": "",
+      "divergence_score": 0.67,
+      "tensor_shapes": {
+        "hidden_states": "(1, 8, 4096)",
+        "attention": "(1, 32, 8, 8)"
+      },
+      "memory_usage_mb": 4.51
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.235382",
+      "probe_text": "Translate hello to French",
+      "layer_idx": 25,
+      "execution_time_ms": 214.0,
+      "device": "cpu",
+      "dtype": "float32",
+      "success": true,
+      "error_message": "",
+      "divergence_score": 0.32,
+      "tensor_shapes": {
+        "hidden_states": "(1, 8, 4096)",
+        "attention": "(1, 32, 8, 8)"
+      },
+      "memory_usage_mb": 3.46
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.340646",
+      "probe_text": "Solve logic puzzle",
+      "layer_idx": 25,
+      "execution_time_ms": 306.0,
+      "device": "cpu",
+      "dtype": "float32",
+      "success": true,
+      "error_message": "",
+      "divergence_score": 0.78,
+      "tensor_shapes": {
+        "hidden_states": "(1, 8, 4096)",
+        "attention": "(1, 32, 8, 8)"
+      },
+      "memory_usage_mb": 4.84
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.445803",
+      "probe_text": "Generate creative story",
+      "layer_idx": 25,
+      "execution_time_ms": 262.0,
+      "device": "cpu",
+      "dtype": "float32",
+      "success": true,
+      "error_message": "",
+      "divergence_score": 0.56,
+      "tensor_shapes": {
+        "hidden_states": "(1, 8, 4096)",
+        "attention": "(1, 32, 8, 8)"
+      },
+      "memory_usage_mb": 4.18
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.552352",
+      "probe_text": "Complex mathematical proof",
+      "layer_idx": 35,
+      "execution_time_ms": 85.0,
+      "device": "cuda",
+      "dtype": "float16",
+      "success": false,
+      "error_message": "CUDA out of memory",
+      "divergence_score": 0.0,
+      "tensor_shapes": {},
+      "memory_usage_mb": 1.2
+    },
+    {
+      "timestamp": "2025-08-31T18:08:46.658308",
+      "probe_text": "Multi-step reasoning chain",
+      "layer_idx": 35,
+      "execution_time_ms": 85.0,
+      "device": "cuda",
+      "dtype": "float16",
+      "success": false,
+      "error_message": "Tensor shape mismatch: expected [1, 8, 4096], got [1, 10, 4096]",
+      "divergence_score": 0.0,
+      "tensor_shapes": {},
+      "memory_usage_mb": 1.2
+    }
+  ],
+  "system_stats": {
+    "total_executions": 7,
+    "success_count": 5,
+    "fallback_count": 2,
+    "success_rate": 0.7142857142857143,
+    "is_using_behavioral_probing": false
+  },
+  "recommendations": [
+    "Tensor shape errors detected - check model input dimensions"
+  ]
+}

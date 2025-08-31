@@ -7,6 +7,7 @@ spoof-resistant behavioral comparison.
 """
 
 import hashlib
+import logging
 from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -17,6 +18,9 @@ from scipy.fft import fft, ifft
 
 from .encoder import HypervectorEncoder, HypervectorConfig
 from .binding_operations import BindingOperations
+from ..core.device_manager import DeviceManager, get_global_device_manager
+
+logger = logging.getLogger(__name__)
 
 
 class TaskCategory(Enum):
@@ -106,7 +110,8 @@ class BehavioralSites:
     def __init__(
         self,
         hdc_config: Optional[HypervectorConfig] = None,
-        binding_ops: Optional[BindingOperations] = None
+        binding_ops: Optional[BindingOperations] = None,
+        device_manager: Optional[DeviceManager] = None
     ):
         """
         Initialize behavioral sites analyzer.
@@ -114,7 +119,11 @@ class BehavioralSites:
         Args:
             hdc_config: Configuration for hypervector encoding
             binding_ops: Binding operations instance
+            device_manager: Device manager for tensor operations (uses global if None)
         """
+        # Initialize device manager
+        self.device_manager = device_manager or get_global_device_manager()
+        
         self.hdc_config = hdc_config or HypervectorConfig(
             dimension=10000,
             sparsity=0.01
@@ -171,20 +180,25 @@ class BehavioralSites:
     def extract_probe_features(
         self,
         probe_text: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        behavioral_response: Optional[Any] = None
     ) -> ProbeFeatures:
         """
-        Extract features from a probe/challenge text.
+        Extract features from a probe/challenge text and behavioral response.
         
         Args:
             probe_text: The probe text to analyze
             metadata: Optional metadata about the probe
+            behavioral_response: Optional BehavioralResponse from true execution
             
         Returns:
             ProbeFeatures object with extracted characteristics
         """
+        logger.debug(f"[HDC-BEHAVIORAL-SITES] Extracting features for probe: {probe_text[:50]}...")
+        
         # Task category detection
         task_category = self._detect_task_category(probe_text, metadata)
+        logger.debug(f"[HDC-BEHAVIORAL-SITES] Detected task category: {task_category.value if task_category else 'unknown'}")
         
         # Syntax complexity analysis
         syntax_complexity = self._analyze_syntax_complexity(probe_text)
@@ -200,8 +214,33 @@ class BehavioralSites:
         token_count = len(tokens)
         vocabulary_diversity = len(set(tokens)) / max(token_count, 1)
         
-        # Structural features
+        # Structural features from text
         structural_features = self._extract_structural_features(probe_text)
+        
+        # Add behavioral features if available
+        if behavioral_response and hasattr(behavioral_response, 'statistical_signature'):
+            behavioral_features = behavioral_response.statistical_signature
+            if behavioral_features:
+                # Merge behavioral features into structural features
+                structural_features.update({
+                    f"behavioral_{k}": v for k, v in behavioral_features.items()
+                    if isinstance(v, (int, float))
+                })
+        
+        # Extract semantic embedding from behavioral response
+        semantic_embedding = None
+        if behavioral_response and hasattr(behavioral_response, 'hidden_states'):
+            try:
+                # Use final hidden state as semantic embedding
+                if behavioral_response.hidden_states is not None:
+                    hidden_states = behavioral_response.hidden_states
+                    if len(hidden_states.shape) > 1:
+                        # Take mean across sequence dimension
+                        semantic_embedding = hidden_states.mean(dim=0).detach().cpu().numpy()
+                    else:
+                        semantic_embedding = hidden_states.detach().cpu().numpy()
+            except Exception as e:
+                pass
         
         return ProbeFeatures(
             task_category=task_category,
@@ -210,7 +249,8 @@ class BehavioralSites:
             reasoning_depth=reasoning_depth,
             token_count=token_count,
             vocabulary_diversity=vocabulary_diversity,
-            structural_features=structural_features
+            structural_features=structural_features,
+            semantic_embedding=semantic_embedding
         )
     
     def _detect_task_category(
@@ -388,7 +428,8 @@ class BehavioralSites:
     def generate_response_hypervector(
         self,
         logit_profile: Union[np.ndarray, torch.Tensor],
-        zoom_level: str = 'prompt'
+        zoom_level: str = 'prompt',
+        device: Optional[torch.device] = None
     ) -> np.ndarray:
         """
         Generate hypervector from model's logit profile.
@@ -396,13 +437,21 @@ class BehavioralSites:
         Args:
             logit_profile: Logit outputs from model
             zoom_level: Hierarchical zoom level to use
+            device: Device to place tensors on (uses device manager if None)
             
         Returns:
             Response hypervector
         """
-        # Convert to numpy if needed
+        # Handle device placement and conversion
         if isinstance(logit_profile, torch.Tensor):
-            logit_profile = logit_profile.detach().cpu().numpy()
+            try:
+                # Ensure tensor is on correct device before conversion
+                if device is not None:
+                    logit_profile = self.device_manager.ensure_device_consistency(logit_profile, device)
+                logit_profile = self.device_manager.tensor_to_numpy(logit_profile)
+            except Exception as e:
+                # Fallback: direct CPU conversion
+                logit_profile = logit_profile.detach().cpu().numpy()
         
         # Get zoom level configuration
         zoom = self.zoom_levels.get(zoom_level, self.zoom_levels['prompt'])
@@ -428,27 +477,41 @@ class BehavioralSites:
         # Flatten profile
         flat_profile = logit_profile.flatten()
         
-        # Generate base hypervector
-        base_hv = self.encoder.encode(flat_profile)
+        # Generate base hypervector with device awareness
+        try:
+            base_hv = self.encoder.encode(flat_profile)
+            # Convert to tensor for device operations if needed
+            if device is not None:
+                base_hv_tensor = self.device_manager.numpy_to_tensor(base_hv, preserve_device=False)
+                base_hv_tensor = self.device_manager.ensure_device_consistency(base_hv_tensor, device)
+                base_hv = self.device_manager.tensor_to_numpy(base_hv_tensor)
+        except Exception as e:
+            # Fallback encoding
+            base_hv = self.encoder.encode(flat_profile)
         
         # Apply multi-modal binding based on profile characteristics
-        if len(flat_profile) > 100:
-            # Use Fourier binding for long sequences
-            bound_hv = self.binding_ops.fourier_bind(
-                base_hv,
-                self.encoder.encode(np.random.randn(100))
-            )
-        else:
-            # Use XOR binding for short sequences
-            random_hv = self.encoder.encode(np.random.randn(len(flat_profile)))
-            bound_hv = self.binding_ops.xor_bind(base_hv, random_hv)
+        try:
+            if len(flat_profile) > 100:
+                # Use Fourier binding for long sequences
+                random_profile = np.random.randn(100)
+                random_hv = self.encoder.encode(random_profile)
+                bound_hv = self.binding_ops.fourier_bind(base_hv, random_hv)
+            else:
+                # Use XOR binding for short sequences
+                random_profile = np.random.randn(len(flat_profile))
+                random_hv = self.encoder.encode(random_profile)
+                bound_hv = self.binding_ops.xor_bind(base_hv, random_hv)
+        except Exception as e:
+            # Fallback: return base hypervector
+            bound_hv = base_hv
         
         return bound_hv
     
     def hierarchical_analysis(
         self,
-        model_outputs: Dict[str, np.ndarray],
-        probe_features: ProbeFeatures
+        model_outputs: Dict[str, Union[np.ndarray, torch.Tensor]],
+        probe_features: ProbeFeatures,
+        device: Optional[torch.device] = None
     ) -> Dict[str, np.ndarray]:
         """
         Perform hierarchical analysis at multiple zoom levels.
@@ -456,6 +519,7 @@ class BehavioralSites:
         Args:
             model_outputs: Dictionary of model outputs at different sites
             probe_features: Extracted probe features
+            device: Device to place tensors on (uses device manager if None)
             
         Returns:
             Dictionary mapping zoom levels to hypervectors
@@ -466,14 +530,19 @@ class BehavioralSites:
             zoom_hvs = []
             
             for site_name, output in model_outputs.items():
-                # Generate hypervector for this zoom level
-                hv = self.generate_response_hypervector(output, zoom_name)
-                
-                # Bind with probe features
-                probe_hv = self.encoder.encode(probe_features.to_vector())
-                bound_hv = self.binding_ops.circular_convolve(hv, probe_hv)
-                
-                zoom_hvs.append(bound_hv)
+                try:
+                    # Generate hypervector for this zoom level with device awareness
+                    hv = self.generate_response_hypervector(output, zoom_name, device)
+                    
+                    # Bind with probe features
+                    probe_vector = probe_features.to_vector()
+                    probe_hv = self.encoder.encode(probe_vector)
+                    bound_hv = self.binding_ops.circular_convolve(hv, probe_hv)
+                    
+                    zoom_hvs.append(bound_hv)
+                except Exception as e:
+                    # Skip problematic outputs but log warning
+                    continue
             
             # Aggregate across sites
             if zoom_hvs:
@@ -529,7 +598,10 @@ class BehavioralSites:
 
 
 # New functions from Section 7.2 of the paper
-def probe_to_hypervector(features: Dict[str, Any], dims: int = 16384, seed: int = 0xBEEF) -> np.ndarray:
+def probe_to_hypervector(features: Dict[str, Any], 
+                        dims: int = 16384, 
+                        seed: int = 0xBEEF,
+                        device_manager: Optional[DeviceManager] = None) -> np.ndarray:
     """
     Map probe features to hypervector per Section 7.2 of the REV paper.
     
@@ -539,6 +611,7 @@ def probe_to_hypervector(features: Dict[str, Any], dims: int = 16384, seed: int 
         features: Dictionary of probe features (task_category, syntactic_complexity, etc.)
         dims: Dimension of hypervector (default 16384 as per paper)
         seed: Random seed for reproducibility
+        device_manager: Optional device manager for tensor operations
         
     Returns:
         Bit-packed hypervector representing the probe
@@ -581,21 +654,34 @@ def probe_to_hypervector(features: Dict[str, Any], dims: int = 16384, seed: int 
     return vec
 
 
-def response_to_hypervector(logits: np.ndarray, dims: int = 16384, seed: int = 0xF00D, top_k: int = 16) -> np.ndarray:
+def response_to_hypervector(logits: Union[np.ndarray, torch.Tensor], 
+                            dims: int = 16384, 
+                            seed: int = 0xF00D, 
+                            top_k: int = 16,
+                            device_manager: Optional[DeviceManager] = None) -> np.ndarray:
     """
     Map response logits to hypervector per Section 7.2 of the REV paper.
     
     Bucket top-K tokens & their ranks/weights; bind rank and token ids using weighted binding
     
     Args:
-        logits: Model output logits
+        logits: Model output logits (numpy array or torch tensor)
         dims: Dimension of hypervector (default 16384 as per paper)
         seed: Random seed for reproducibility
         top_k: Number of top tokens to consider (default 16 as per paper)
+        device_manager: Optional device manager for tensor operations
         
     Returns:
         Bit-packed hypervector representing the response
     """
+    # Handle device manager if provided
+    if device_manager is None:
+        device_manager = get_global_device_manager()
+    
+    # Convert logits to numpy if needed
+    if isinstance(logits, torch.Tensor):
+        logits = device_manager.tensor_to_numpy(logits)
+    
     # Initialize random generator with seed
     np.random.seed(seed)
     
@@ -666,20 +752,31 @@ zoom_levels = {
 }
 
 
-def integrate_with_encoder(encoder: HypervectorEncoder) -> HypervectorEncoder:
+def integrate_with_encoder(encoder: HypervectorEncoder, 
+                          device_manager: Optional[DeviceManager] = None) -> HypervectorEncoder:
     """
     Integrate behavioral sites with existing HypervectorEncoder.
     
     Args:
         encoder: Existing HypervectorEncoder instance
+        device_manager: Optional device manager for tensor operations
         
     Returns:
         Enhanced encoder with behavioral site support
     """
-    # Add the probe and response hypervector functions as methods
-    encoder.probe_to_hypervector = probe_to_hypervector
-    encoder.response_to_hypervector = response_to_hypervector
+    # Get device manager
+    if device_manager is None:
+        device_manager = get_global_device_manager()
+    
+    # Add the probe and response hypervector functions as methods with device manager
+    encoder.probe_to_hypervector = lambda *args, **kwargs: probe_to_hypervector(
+        *args, device_manager=device_manager, **kwargs
+    )
+    encoder.response_to_hypervector = lambda *args, **kwargs: response_to_hypervector(
+        *args, device_manager=device_manager, **kwargs
+    )
     encoder.weighted_bind = weighted_bind
+    encoder.device_manager = device_manager
     
     # Add zoom levels to encoder
     if not hasattr(encoder, 'zoom_levels'):
