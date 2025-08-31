@@ -1,8 +1,19 @@
 """
-Zero-Knowledge Proofs for distance computations in REV.
+Commitment-based distance verification for REV (Demonstration Only).
 
-This module implements ZK proofs for verifying distance computations
-between hypervectors without revealing the vectors themselves.
+IMPORTANT: This module implements a commit-and-open demonstration protocol,
+NOT a true zero-knowledge proof system. For production use requiring actual
+zero-knowledge properties, integrate a proper ZK framework like:
+- Halo2/Plonk for arithmetic circuits
+- Bulletproofs for range proofs
+- zkSNARKs/zkSTARKs for general computation
+
+Current implementation provides:
+- Commitments to vectors using SHA256
+- Challenge-response protocol for verification
+- Basic hiding but NOT zero-knowledge
+
+This is suitable for demonstration and testing purposes only.
 """
 
 import numpy as np
@@ -36,12 +47,15 @@ class RangeProof:
     proof_data: bytes
     
 
-class DistanceZKProof:
+class DistanceCommitmentProof:
     """
-    Zero-knowledge proofs for distance computations.
+    Commitment-based distance verification (NOT true ZK).
     
-    Implements Sigma protocols for proving properties of distance
-    computations without revealing the underlying vectors.
+    WARNING: This is a commit-and-open demonstration protocol.
+    It provides commitment binding and hiding but NOT zero-knowledge.
+    For actual ZK proofs, use a proper cryptographic framework.
+    
+    This implementation is for demonstration and testing only.
     """
     
     def __init__(self, security_bits: int = 128):

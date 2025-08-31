@@ -186,35 +186,77 @@ class MemoryManager:
         self._init_memory_pool()
         
     def _init_memory_pool(self):
-        """Initialize pre-allocated memory pool."""
-        pool_size_bytes = self.config.memory_pool_size_mb * 1024 * 1024
-        chunk_size = 1024 * 1024  # 1MB chunks
+        """
+        Initialize memory tracking (no Python-level pool).
         
-        for _ in range(pool_size_bytes // chunk_size):
-            self.memory_pool.append(bytearray(chunk_size))
+        WARNING: Previous implementation used Python bytearrays which don't help
+        with tensor allocation. Now we rely on PyTorch's caching allocator.
+        """
+        # Track memory limits, not pre-allocate
+        self.memory_limit_bytes = self.config.memory_pool_size_mb * 1024 * 1024
+        
+        # Set PyTorch memory fraction if using CUDA
+        if torch.cuda.is_available():
+            torch.cuda.set_per_process_memory_fraction(0.8)  # Use 80% of GPU memory
+            logger.info(f"Set CUDA memory fraction to 0.8")
+        
+        # Clear any existing allocations
+        self.memory_pool = None  # Remove fake pool
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
     
-    def allocate_memory(self, size_bytes: int) -> Optional[memoryview]:
-        """Allocate memory from pool."""
+    def allocate_tensor(self, shape: tuple, dtype: torch.dtype = torch.float32, 
+                       device: str = 'cpu') -> Optional[torch.Tensor]:
+        """
+        Allocate tensor with memory tracking.
+        
+        Uses PyTorch's caching allocator, not a manual pool.
+        """
         with self.memory_lock:
-            if size_bytes <= len(self.memory_pool) * 1024 * 1024:
-                chunks_needed = (size_bytes + 1024 * 1024 - 1) // (1024 * 1024)
-                if len(self.memory_pool) >= chunks_needed:
-                    allocated_chunks = []
-                    for _ in range(chunks_needed):
-                        allocated_chunks.append(self.memory_pool.pop())
-                    return memoryview(b''.join(allocated_chunks))
-            return None
+            # Calculate size
+            element_size = torch.tensor([], dtype=dtype).element_size()
+            size_bytes = np.prod(shape) * element_size
+            
+            # Check if we have space
+            current_usage = self.get_memory_usage()
+            if device == 'cuda' and torch.cuda.is_available():
+                available = torch.cuda.mem_get_info()[0]
+                if size_bytes > available:
+                    logger.warning(f"Not enough GPU memory: need {size_bytes}, have {available}")
+                    return None
+            else:
+                available_gb = current_usage['available_gb']
+                if size_bytes > available_gb * 1024**3:
+                    logger.warning(f"Not enough CPU memory: need {size_bytes/(1024**3):.2f}GB")
+                    return None
+            
+            # Allocate tensor
+            try:
+                tensor = torch.empty(shape, dtype=dtype, device=device)
+                self.current_memory_usage += size_bytes
+                return tensor
+            except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
+                logger.error(f"Failed to allocate tensor: {e}")
+                return None
     
-    def deallocate_memory(self, memory_view: memoryview):
-        """Return memory to pool."""
+    def free_tensor(self, tensor: torch.Tensor):
+        """
+        Free tensor memory.
+        
+        Relies on PyTorch's memory management.
+        """
+        if tensor is None:
+            return
+            
         with self.memory_lock:
-            # Split back into chunks and return to pool
-            data = memory_view.tobytes()
-            chunk_size = 1024 * 1024
-            for i in range(0, len(data), chunk_size):
-                chunk = bytearray(data[i:i+chunk_size])
-                if len(chunk) == chunk_size:
-                    self.memory_pool.append(chunk)
+            size_bytes = tensor.element_size() * tensor.nelement()
+            self.current_memory_usage = max(0, self.current_memory_usage - size_bytes)
+            
+            # Delete tensor and run garbage collection if needed
+            del tensor
+            
+            # Clear cache if using CUDA
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
     
     def get_memory_usage(self) -> Dict[str, float]:
         """Get current memory usage statistics."""
@@ -226,7 +268,7 @@ class MemoryManager:
             'vms_gb': memory_info.vms / 1024**3,
             'percent': process.memory_percent(),
             'available_gb': psutil.virtual_memory().available / 1024**3,
-            'pool_available_mb': len(self.memory_pool)
+            'pool_available_mb': self.memory_limit_bytes / (1024 * 1024) if self.memory_limit_bytes else 0
         }
     
     def should_use_checkpointing(self) -> bool:

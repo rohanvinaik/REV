@@ -437,16 +437,71 @@ class REVPipeline:
                     p.grad = None
     
     def _apply_quantization(self, model, quantization: str):
-        """Apply quantization to model parameters."""
+        """
+        Apply quantization to model using proper quantization backends.
+        
+        WARNING: Previous implementation was incorrect and would break models.
+        This now uses proper quantization that maintains FP compute.
+        
+        Args:
+            model: Model to quantize
+            quantization: Quantization mode ('8bit', '4bit', 'dynamic', 'none')
+        """
+        if quantization == "none" or not quantization:
+            return
+            
+        # Try to use bitsandbytes if available
+        try:
+            import bitsandbytes as bnb
+            has_bnb = True
+        except ImportError:
+            has_bnb = False
+            
+        # Try PyTorch native quantization
+        try:
+            import torch.ao.quantization as tq
+            has_torch_quant = True
+        except ImportError:
+            has_torch_quant = False
+            
         if quantization == "8bit":
-            # Apply 8-bit quantization
-            for param in model.parameters():
-                param.data = param.data.to(torch.int8)
+            if has_bnb:
+                # Use bitsandbytes 8-bit quantization (keeps FP16 compute)
+                logger.info("Using bitsandbytes 8-bit quantization")
+                model = bnb.nn.Linear8bitLt.from_float(model)
+            elif has_torch_quant:
+                # Use PyTorch dynamic quantization
+                logger.info("Using PyTorch dynamic 8-bit quantization")
+                model = torch.quantization.quantize_dynamic(
+                    model, {torch.nn.Linear}, dtype=torch.qint8
+                )
+            else:
+                logger.warning("No quantization backend available, using FP16 instead")
+                model = model.half()
+                
         elif quantization == "4bit":
-            # Apply 4-bit quantization (simplified)
-            for param in model.parameters():
-                # Pack two 4-bit values into one int8
-                param.data = (param.data * 7).round().clamp(-8, 7).to(torch.int8)
+            if has_bnb:
+                # Use bitsandbytes 4-bit quantization
+                logger.info("Using bitsandbytes 4-bit quantization")
+                # Note: This requires bnb 4-bit support
+                model = bnb.nn.Linear4bit.from_float(model)
+            else:
+                logger.warning("4-bit quantization requires bitsandbytes, falling back to FP16")
+                model = model.half()
+                
+        elif quantization == "dynamic":
+            if has_torch_quant:
+                # Dynamic quantization - quantizes weights, activations stay in FP
+                logger.info("Using PyTorch dynamic quantization")
+                model = torch.quantization.quantize_dynamic(
+                    model, {torch.nn.Linear, torch.nn.LSTM, torch.nn.GRU}, 
+                    dtype=torch.qint8
+                )
+            else:
+                logger.warning("Dynamic quantization unavailable, using FP16")
+                model = model.half()
+        else:
+            logger.warning(f"Unknown quantization mode: {quantization}, skipping")
     
     def _manage_kv_cache(self, max_tokens: int):
         """Manage KV cache size to stay within limits."""

@@ -1,0 +1,100 @@
+# REV Framework Configuration
+# This file configures all paths and environment settings
+# Override with environment variables prefixed with REV_
+
+# Model paths - use environment variables or HuggingFace cache
+models:
+  # Use TRANSFORMERS_CACHE or default HF cache location
+  cache_dir: ${TRANSFORMERS_CACHE:-~/.cache/huggingface/hub}
+  
+  # Local model directories (can be overridden with REV_MODEL_PATH)
+  local_models: ${REV_MODEL_PATH:-./models}
+  
+  # Test models for development
+  test_models:
+    tiny: "sshleifer/tiny-gpt2"  # 2MB model for testing
+    small: "distilgpt2"           # Small model for benchmarks
+    medium: "gpt2"                # Standard GPT-2
+
+# Data paths
+data:
+  # Directory for test datasets
+  test_data: ${REV_TEST_DATA:-./test_data}
+  
+  # Directory for experimental results
+  results: ${REV_RESULTS_DIR:-./results}
+  
+  # Directory for checkpoints
+  checkpoints: ${REV_CHECKPOINT_DIR:-./checkpoints}
+
+# API Configuration
+api:
+  # Redis URL for rate limiting
+  redis_url: ${REV_REDIS_URL:-redis://localhost:6379/0}
+  
+  # API host and port
+  host: ${REV_API_HOST:-0.0.0.0}
+  port: ${REV_API_PORT:-8000}
+  
+  # JWT secret (MUST override in production)
+  jwt_secret: ${REV_JWT_SECRET:-development-secret-change-in-production}
+
+# System Configuration
+system:
+  # Maximum memory per segment (MB)
+  max_segment_memory_mb: ${REV_MAX_SEGMENT_MEMORY:-512}
+  
+  # Default device (cuda/cpu/mps)
+  device: ${REV_DEVICE:-cpu}
+  
+  # Number of workers for parallel processing
+  num_workers: ${REV_NUM_WORKERS:-4}
+  
+  # Enable debug logging
+  debug: ${REV_DEBUG:-false}
+
+# Byzantine Consensus
+consensus:
+  # Number of validators
+  num_validators: ${REV_NUM_VALIDATORS:-5}
+  
+  # Byzantine fault tolerance (calculated as (num_validators - 1) // 3)
+  # This is informational only - actual value is computed
+  fault_tolerance: 1
+  
+  # Timeout for consensus rounds (ms)
+  timeout_ms: ${REV_CONSENSUS_TIMEOUT:-5000}
+
+# HDC Configuration
+hdc:
+  # Default hypervector dimension
+  dimension: ${REV_HDC_DIMENSION:-10000}
+  
+  # Sparsity for sparse encoding
+  sparsity: ${REV_HDC_SPARSITY:-0.01}
+  
+  # Enable HDC optimizations
+  enable_lut: ${REV_HDC_LUT:-true}
+  enable_simd: ${REV_HDC_SIMD:-true}
+
+# Security Configuration
+security:
+  # Rate limiting (requests per second)
+  rate_limit_rps: ${REV_RATE_LIMIT:-100}
+  
+  # Token expiry (seconds)
+  token_expiry_seconds: ${REV_TOKEN_EXPIRY:-3600}
+  
+  # Enable authentication
+  auth_enabled: ${REV_AUTH_ENABLED:-false}
+
+# Logging Configuration
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: ${REV_LOG_LEVEL:-INFO}
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Log file path (empty for stdout only)
+  file: ${REV_LOG_FILE:-}
