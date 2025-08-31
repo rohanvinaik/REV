@@ -1,0 +1,526 @@
+---
+# REV Verifier Deployment (3 replicas for fast verification)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rev-verifier
+  namespace: rev
+  labels:
+    app: rev-verifier
+    component: verification-engine
+    tier: compute
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: rev-verifier
+  template:
+    metadata:
+      labels:
+        app: rev-verifier
+        component: verification-engine
+        tier: compute
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: rev-verifier
+        image: rev/verifier:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 8001
+          name: http-api
+          protocol: TCP
+        - containerPort: 9100
+          name: metrics
+          protocol: TCP
+        env:
+        - name: SERVICE_NAME
+          value: "rev-verifier"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: LOG_LEVEL
+        - name: MAX_MEMORY_MB
+          value: "4096"
+        - name: SEGMENT_SIZE
+          value: "512"
+        - name: BUFFER_SIZE
+          value: "4"
+        - name: METRICS_PORT
+          value: "9100"
+        - name: RATE_LIMIT_RPS
+          value: "100"
+        - name: RATE_LIMIT_BURST
+          value: "200"
+        - name: TLS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: TLS_ENABLED
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: REDIS_URL
+        - name: REV_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rev-secrets
+              key: rev_api_key
+        - name: JAEGER_AGENT_HOST
+          value: "jaeger.monitoring.svc.cluster.local"
+        - name: JAEGER_AGENT_PORT
+          value: "6831"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+            # Optional GPU request
+            # nvidia.com/gpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+            # Optional GPU limit
+            # nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: checkpoint-data
+          mountPath: /data/checkpoints
+        - name: cache-data
+          mountPath: /data/cache
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /run
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+            scheme: HTTPS
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8001
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: 8001
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: checkpoint-data
+        persistentVolumeClaim:
+          claimName: checkpoint-pvc
+      - name: cache-data
+        persistentVolumeClaim:
+          claimName: cache-pvc
+      - name: certs
+        secret:
+          secretName: tls-certs
+      - name: tmp
+        emptyDir:
+          sizeLimit: 100Mi
+      - name: run
+        emptyDir:
+          sizeLimit: 10Mi
+      nodeSelector:
+        node-type: compute
+        # gpu-enabled: "true"  # Uncomment if GPU required
+      tolerations:
+      - key: "compute-intensive"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# HBT Consensus Deployment (5 replicas for Byzantine fault tolerance)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hbt-consensus
+  namespace: rev
+  labels:
+    app: hbt-consensus
+    component: consensus-engine
+    tier: consensus
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: hbt-consensus
+  template:
+    metadata:
+      labels:
+        app: hbt-consensus
+        component: consensus-engine
+        tier: consensus
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: hbt-consensus
+        image: rev/hbt-consensus:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 8002
+          name: http-api
+          protocol: TCP
+        - containerPort: 9101
+          name: metrics
+          protocol: TCP
+        env:
+        - name: SERVICE_NAME
+          value: "hbt-consensus"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: LOG_LEVEL
+        - name: MAX_MEMORY_MB
+          value: "8192"
+        - name: NUM_VALIDATORS
+          value: "5"
+        - name: FAULT_TOLERANCE
+          value: "1"
+        - name: CONSENSUS_THRESHOLD
+          value: "0.67"
+        - name: METRICS_PORT
+          value: "9101"
+        - name: TLS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: TLS_ENABLED
+        - name: REDIS_URL
+          value: "redis://redis.rev.svc.cluster.local:6379/1"
+        - name: CONSUL_URL
+          value: "http://consul.rev.svc.cluster.local:8500"
+        - name: PEER_DISCOVERY
+          value: "consul"
+        - name: CONSENSUS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rev-secrets
+              key: consensus_key
+        - name: VALIDATOR_KEYS
+          valueFrom:
+            secretKeyRef:
+              name: rev-secrets
+              key: validator_keys
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        volumeMounts:
+        - name: consensus-data
+          mountPath: /data/consensus
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8002
+            scheme: HTTPS
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: consensus-data
+        persistentVolumeClaim:
+          claimName: consensus-pvc
+      - name: certs
+        secret:
+          secretName: tls-certs
+      - name: tmp
+        emptyDir:
+          sizeLimit: 200Mi
+      nodeSelector:
+        node-type: consensus
+      tolerations:
+      - key: "consensus-dedicated"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      # Anti-affinity to spread consensus nodes across different physical nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: hbt-consensus
+            topologyKey: kubernetes.io/hostname
+
+---
+# Unified Coordinator Deployment (2 replicas for HA)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unified-coordinator
+  namespace: rev
+  labels:
+    app: unified-coordinator
+    component: api-coordinator
+    tier: frontend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Ensure at least one instance is always available
+  selector:
+    matchLabels:
+      app: unified-coordinator
+  template:
+    metadata:
+      labels:
+        app: unified-coordinator
+        component: api-coordinator
+        tier: frontend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9102"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: unified-coordinator
+        image: rev/unified-coordinator:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 8000
+          name: http-api
+          protocol: TCP
+        - containerPort: 9102
+          name: metrics
+          protocol: TCP
+        env:
+        - name: SERVICE_NAME
+          value: "unified-coordinator"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: LOG_LEVEL
+        - name: MAX_MEMORY_MB
+          value: "2048"
+        - name: CACHE_ENABLED
+          value: "true"
+        - name: MODE_SELECTION
+          value: "auto"
+        - name: METRICS_PORT
+          value: "9102"
+        - name: TLS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: rev-config
+              key: TLS_ENABLED
+        - name: RATE_LIMIT_RPS
+          value: "500"
+        - name: CIRCUIT_BREAKER_THRESHOLD
+          value: "0.5"
+        - name: CIRCUIT_BREAKER_TIMEOUT
+          value: "60"
+        - name: REV_SERVICE_URL
+          value: "http://rev-verifier.rev.svc.cluster.local:8001"
+        - name: HBT_SERVICE_URL
+          value: "http://hbt-consensus.rev.svc.cluster.local:8002"
+        - name: REDIS_URL
+          value: "redis://redis.rev.svc.cluster.local:6379/2"
+        - name: API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: rev-secrets
+              key: api_secret
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: rev-secrets
+              key: jwt_secret
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 50Mi
+      # Prefer to distribute across different nodes for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: unified-coordinator
+              topologyKey: kubernetes.io/hostname
+
+---
+# Persistent Volume Claims for data storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: checkpoint-pvc
+  namespace: rev
+  labels:
+    app: rev-verifier
+    type: checkpoint-storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: fast-ssd  # Use SSD storage for checkpoints
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cache-pvc
+  namespace: rev
+  labels:
+    app: rev-verifier
+    type: cache-storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: consensus-pvc
+  namespace: rev
+  labels:
+    app: hbt-consensus
+    type: consensus-storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: high-iops-ssd  # High-performance storage for consensus
+  resources:
+    requests:
+      storage: 20Gi

@@ -1,0 +1,252 @@
+---
+# REV Verifier Service (Internal ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rev-verifier
+  namespace: rev
+  labels:
+    app: rev-verifier
+    component: verification-engine
+    tier: compute
+spec:
+  type: ClusterIP
+  selector:
+    app: rev-verifier
+  ports:
+  - name: http-api
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  - name: metrics
+    port: 9100
+    targetPort: 9100
+    protocol: TCP
+
+---
+# HBT Consensus Service (Internal ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: hbt-consensus
+  namespace: rev
+  labels:
+    app: hbt-consensus
+    component: consensus-engine
+    tier: consensus
+spec:
+  type: ClusterIP
+  selector:
+    app: hbt-consensus
+  ports:
+  - name: http-api
+    port: 8002
+    targetPort: 8002
+    protocol: TCP
+  - name: metrics
+    port: 9101
+    targetPort: 9101
+    protocol: TCP
+
+---
+# Unified Coordinator Service (Internal ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: unified-coordinator
+  namespace: rev
+  labels:
+    app: unified-coordinator
+    component: api-coordinator
+    tier: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: unified-coordinator
+  ports:
+  - name: http-api
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 9102
+    targetPort: 9102
+    protocol: TCP
+
+---
+# REV API LoadBalancer (External Access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rev-api-lb
+  namespace: rev
+  labels:
+    app: unified-coordinator
+    component: api-coordinator
+    tier: frontend
+    service-type: external
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:region:account:certificate/cert-id"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+spec:
+  type: LoadBalancer
+  selector:
+    app: unified-coordinator
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+---
+# Redis Service (Internal ClusterIP for caching)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: rev
+  labels:
+    app: redis
+    component: cache
+    tier: data
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+
+---
+# Consul Service (Internal ClusterIP for service discovery)
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul
+  namespace: rev
+  labels:
+    app: consul
+    component: service-discovery
+    tier: infrastructure
+spec:
+  type: ClusterIP
+  selector:
+    app: consul
+  ports:
+  - name: http
+    port: 8500
+    targetPort: 8500
+    protocol: TCP
+  - name: rpc
+    port: 8400
+    targetPort: 8400
+    protocol: TCP
+  - name: serf-lan-tcp
+    port: 8301
+    targetPort: 8301
+    protocol: TCP
+  - name: serf-lan-udp
+    port: 8301
+    targetPort: 8301
+    protocol: UDP
+  - name: server
+    port: 8300
+    targetPort: 8300
+    protocol: TCP
+
+---
+# Jaeger Service (Internal ClusterIP for distributed tracing)
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+    component: tracing
+    tier: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+  - name: jaeger-agent-compact
+    port: 6831
+    targetPort: 6831
+    protocol: UDP
+  - name: jaeger-agent-binary
+    port: 6832
+    targetPort: 6832
+    protocol: UDP
+  - name: jaeger-query
+    port: 16686
+    targetPort: 16686
+    protocol: TCP
+  - name: jaeger-collector-http
+    port: 14268
+    targetPort: 14268
+    protocol: TCP
+  - name: jaeger-collector-grpc
+    port: 14250
+    targetPort: 14250
+    protocol: TCP
+
+---
+# Prometheus Service (Internal ClusterIP for metrics collection)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: metrics
+    tier: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+  - name: prometheus
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+---
+# Headless Service for HBT Consensus Discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: hbt-consensus-headless
+  namespace: rev
+  labels:
+    app: hbt-consensus
+    component: consensus-engine
+    tier: consensus
+    service-type: headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: hbt-consensus
+  ports:
+  - name: consensus-api
+    port: 8002
+    targetPort: 8002
+    protocol: TCP
+  - name: metrics
+    port: 9101
+    targetPort: 9101
+    protocol: TCP

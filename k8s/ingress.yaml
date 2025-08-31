@@ -1,0 +1,389 @@
+---
+# REV API Ingress (Primary external access point)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rev-api-ingress
+  namespace: rev
+  labels:
+    app: rev
+    component: ingress
+    tier: network
+  annotations:
+    # Nginx Ingress Controller annotations
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    
+    # Rate limiting (based on real performance: 500 RPS target)
+    nginx.ingress.kubernetes.io/rate-limit-rps: "500"
+    nginx.ingress.kubernetes.io/rate-limit-burst-multiplier: "2"
+    nginx.ingress.kubernetes.io/rate-limit-rpm: "30000"
+    
+    # Request size limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "10m"
+    
+    # Timeout configuration (based on real inference latency: 50-200ms + overhead)
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Content-Type-Options nosniff;
+      add_header X-Frame-Options DENY;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+      add_header Referrer-Policy "strict-origin-when-cross-origin";
+    
+    # Load balancing
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_id"
+    nginx.ingress.kubernetes.io/load-balance: "round_robin"
+    
+    # SSL/TLS configuration
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
+    
+    # Health checks
+    nginx.ingress.kubernetes.io/health-check-path: "/health"
+    nginx.ingress.kubernetes.io/health-check-interval: "30s"
+    nginx.ingress.kubernetes.io/health-check-timeout: "10s"
+
+spec:
+  tls:
+  - hosts:
+    - api.rev.your-domain.com
+    - rev-api.your-domain.com
+    secretName: rev-api-tls-cert
+  
+  rules:
+  - host: api.rev.your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator
+            port:
+              number: 8000
+      
+      # Health check endpoint
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: unified-coordinator
+            port:
+              number: 8000
+      
+      # API versioned endpoints
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator
+            port:
+              number: 8000
+      
+      # WebSocket endpoint for real-time verification
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator
+            port:
+              number: 8000
+  
+  - host: rev-api.your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator
+            port:
+              number: 8000
+
+---
+# Metrics and Monitoring Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rev-monitoring-ingress
+  namespace: monitoring
+  labels:
+    app: monitoring
+    component: ingress
+    tier: observability
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Authentication for monitoring endpoints
+    nginx.ingress.kubernetes.io/auth-type: "basic"
+    nginx.ingress.kubernetes.io/auth-secret: "monitoring-basic-auth"
+    nginx.ingress.kubernetes.io/auth-realm: "REV Monitoring"
+    
+    # Rate limiting for monitoring access
+    nginx.ingress.kubernetes.io/rate-limit-rps: "10"
+    nginx.ingress.kubernetes.io/rate-limit-rpm: "600"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Content-Type-Options nosniff;
+      add_header X-Frame-Options SAMEORIGIN;
+      add_header X-XSS-Protection "1; mode=block";
+
+spec:
+  tls:
+  - hosts:
+    - monitoring.rev.your-domain.com
+    - metrics.rev.your-domain.com
+    secretName: rev-monitoring-tls-cert
+  
+  rules:
+  - host: monitoring.rev.your-domain.com
+    http:
+      paths:
+      # Prometheus metrics
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus
+            port:
+              number: 9090
+      
+      # Grafana dashboards
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana
+            port:
+              number: 3000
+      
+      # Jaeger tracing UI
+      - path: /jaeger
+        pathType: Prefix
+        backend:
+          service:
+            name: jaeger
+            port:
+              number: 16686
+  
+  - host: metrics.rev.your-domain.com
+    http:
+      paths:
+      # Direct access to component metrics
+      - path: /rev-verifier
+        pathType: Prefix
+        backend:
+          service:
+            name: rev-verifier
+            port:
+              number: 9100
+      
+      - path: /hbt-consensus
+        pathType: Prefix
+        backend:
+          service:
+            name: hbt-consensus
+            port:
+              number: 9101
+      
+      - path: /unified-coordinator
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator
+            port:
+              number: 9102
+
+---
+# Internal Development Ingress (for staging/development environments)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rev-dev-ingress
+  namespace: rev-dev
+  labels:
+    app: rev
+    component: ingress
+    tier: development
+    environment: staging
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # Allow HTTP for dev
+    
+    # Relaxed rate limits for development
+    nginx.ingress.kubernetes.io/rate-limit-rps: "1000"
+    nginx.ingress.kubernetes.io/rate-limit-rpm: "60000"
+    
+    # Development-specific headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Environment "development";
+      add_header X-Debug-Mode "enabled";
+      add_header Access-Control-Allow-Origin "*";
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS";
+      add_header Access-Control-Allow-Headers "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization";
+
+spec:
+  rules:
+  - host: dev-api.rev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator-dev
+            port:
+              number: 8000
+  
+  - host: staging-api.rev.your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: unified-coordinator-staging
+            port:
+              number: 8000
+
+---
+# Gateway API Alternative (for future migration)
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: rev-api-route
+  namespace: rev
+  labels:
+    app: rev
+    component: gateway-api
+    tier: network
+spec:
+  parentRefs:
+  - name: rev-gateway
+    namespace: rev-gateway-system
+  
+  hostnames:
+  - "api.rev.your-domain.com"
+  - "rev-api.your-domain.com"
+  
+  rules:
+  # Main API routes
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1/verify
+    backendRefs:
+    - name: unified-coordinator
+      port: 8000
+      weight: 100
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-Route-Source
+          value: gateway-api
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
+        add:
+        - name: X-Response-Time
+          value: "${RESPONSE_TIME}"
+  
+  # Health check routes
+  - matches:
+    - path:
+        type: Exact
+        value: /health
+    - path:
+        type: Exact
+        value: /ready
+    backendRefs:
+    - name: unified-coordinator
+      port: 8000
+      weight: 100
+  
+  # WebSocket routes
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /ws
+    - headers:
+      - name: Upgrade
+        value: websocket
+    backendRefs:
+    - name: unified-coordinator
+      port: 8000
+      weight: 100
+
+---
+# Network Policy for Ingress Traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rev-ingress-network-policy
+  namespace: rev
+  labels:
+    app: rev
+    component: network-policy
+    tier: security
+spec:
+  podSelector:
+    matchLabels:
+      app: unified-coordinator
+  
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow traffic from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9102  # Metrics port
+  
+  egress:
+  # Allow outbound to internal services
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: rev
+    ports:
+    - protocol: TCP
+      port: 8001  # REV verifier
+    - protocol: TCP
+      port: 8002  # HBT consensus
+  
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

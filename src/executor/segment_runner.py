@@ -231,72 +231,192 @@ class SegmentRunner:
         self,
         model: torch.nn.Module,
         input_ids: torch.Tensor,
-        extraction_sites: Optional[List[str]] = None
+        attention_mask: Optional[torch.Tensor] = None,
+        layers_to_probe: Optional[List[str]] = None
     ) -> Dict[str, torch.Tensor]:
         """
-        Extract activations at restriction sites.
+        Extract activations from specified model layers with comprehensive architecture support.
+        
+        Supports:
+        - GPT-2 style models (transformer.h blocks)
+        - BERT style models (encoder.layer blocks) 
+        - T5 style models (encoder/decoder blocks)
+        - Custom architectures via layer name patterns
         
         Args:
-            model: Model to extract from
-            input_ids: Input token IDs
-            extraction_sites: Sites to extract activations from
+            model: Model to extract activations from
+            input_ids: Input token IDs [batch_size, seq_len]
+            attention_mask: Optional attention mask [batch_size, seq_len]
+            layers_to_probe: Specific layers to probe, uses config.extraction_sites if None
             
         Returns:
-            Dictionary mapping site names to activation tensors
+            Dictionary mapping layer names to activation tensors
         """
-        extraction_sites = extraction_sites or self.config.extraction_sites
+        layers_to_probe = layers_to_probe or self.config.extraction_sites
         activations = {}
         hooks = []
         
-        def create_hook(name):
-            def hook(module, input, output):
-                # Store activation
-                if isinstance(output, tuple):
-                    output = output[0]
-                activations[name] = output.detach().cpu()
+        def hook_fn(name: str):
+            """Create hook function for capturing activations."""
+            def hook(module, input_tensor, output_tensor):
+                try:
+                    # Handle different output types
+                    if isinstance(output_tensor, tuple):
+                        # Use hidden states (first element) from tuple outputs
+                        activation = output_tensor[0]
+                    else:
+                        activation = output_tensor
+                    
+                    # Convert to appropriate precision and device
+                    if self.config.use_fp16 and activation.dtype != torch.float16:
+                        activation = activation.half()
+                    
+                    # Move to CPU to save GPU memory
+                    activations[name] = activation.detach().cpu().clone()
+                    
+                    # Clear GPU memory if using CUDA
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        
+                except Exception as e:
+                    # Log error but continue execution
+                    print(f"Warning: Failed to extract activation for {name}: {e}")
             return hook
         
-        # Register hooks
-        for site in extraction_sites:
-            parts = site.split('.')
+        # Auto-detect model architecture and register hooks
+        model_type = self._detect_model_architecture(model)
+        
+        try:
+            # Register hooks on specified layers
+            for name, module in model.named_modules():
+                if self._should_probe_layer(name, layers_to_probe, model_type):
+                    hook = module.register_forward_hook(hook_fn(name))
+                    hooks.append((hook, name))
             
-            if parts[0] == 'embeddings':
-                if hasattr(model, 'embeddings'):
-                    hook = model.embeddings.register_forward_hook(create_hook(site))
-                    hooks.append(hook)
+            # Prepare model inputs
+            model_inputs = {"input_ids": input_ids}
+            if attention_mask is not None:
+                model_inputs["attention_mask"] = attention_mask
+            
+            # Enable gradient checkpointing if configured
+            original_checkpointing = getattr(model.config, 'use_cache', None)
+            if self.config.gradient_checkpointing:
+                if hasattr(model.config, 'use_cache'):
+                    model.config.use_cache = False
+                if hasattr(model, 'gradient_checkpointing_enable'):
+                    model.gradient_checkpointing_enable()
+            
+            # Forward pass with appropriate precision
+            with torch.no_grad():
+                if self.config.use_fp16:
+                    with torch.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
+                        _ = model(**model_inputs, output_hidden_states=True, return_dict=True)
+                else:
+                    _ = model(**model_inputs, output_hidden_states=True, return_dict=True)
+            
+            # Restore original settings
+            if self.config.gradient_checkpointing and original_checkpointing is not None:
+                model.config.use_cache = original_checkpointing
+                if hasattr(model, 'gradient_checkpointing_disable'):
+                    model.gradient_checkpointing_disable()
                     
-            elif parts[0] == 'attention':
-                layer_idx = int(parts[1]) if len(parts) > 1 else 0
-                if hasattr(model, 'transformer') and hasattr(model.transformer, 'h'):
-                    if layer_idx < len(model.transformer.h):
-                        layer = model.transformer.h[layer_idx]
-                        if hasattr(layer, 'attn'):
-                            hook = layer.attn.register_forward_hook(create_hook(site))
-                            hooks.append(hook)
-                            
-            elif parts[0] == 'mlp':
-                layer_idx = int(parts[1]) if len(parts) > 1 else 0
-                if hasattr(model, 'transformer') and hasattr(model.transformer, 'h'):
-                    if layer_idx < len(model.transformer.h):
-                        layer = model.transformer.h[layer_idx]
-                        if hasattr(layer, 'mlp'):
-                            hook = layer.mlp.register_forward_hook(create_hook(site))
-                            hooks.append(hook)
-                            
-            elif parts[0] == 'layer_norm':
-                if parts[1] == 'final' and hasattr(model, 'ln_f'):
-                    hook = model.ln_f.register_forward_hook(create_hook(site))
-                    hooks.append(hook)
-        
-        # Forward pass
-        with torch.no_grad():
-            _ = model(input_ids)
-        
-        # Remove hooks
-        for hook in hooks:
-            hook.remove()
+        except Exception as e:
+            print(f"Error during activation extraction: {e}")
+        finally:
+            # Clean up hooks
+            for hook, name in hooks:
+                try:
+                    hook.remove()
+                except:
+                    pass
+            
+            # Force garbage collection
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         return activations
+    
+    def _detect_model_architecture(self, model: torch.nn.Module) -> str:
+        """Detect the model architecture type."""
+        model_name = model.__class__.__name__.lower()
+        
+        # GPT-style models
+        if any(arch in model_name for arch in ['gpt', 'opt', 'bloom', 'llama', 'mistral']):
+            return 'gpt'
+        # BERT-style models  
+        elif any(arch in model_name for arch in ['bert', 'roberta', 'deberta', 'electra']):
+            return 'bert'
+        # T5-style models
+        elif any(arch in model_name for arch in ['t5', 'flan', 'ul2']):
+            return 't5'
+        # Default to GPT-style
+        else:
+            return 'gpt'
+    
+    def _should_probe_layer(self, layer_name: str, layers_to_probe: List[str], model_type: str) -> bool:
+        """Determine if a layer should be probed based on name patterns."""
+        for probe_pattern in layers_to_probe:
+            # Handle exact matches
+            if layer_name == probe_pattern:
+                return True
+            
+            # Handle pattern-based matching
+            parts = probe_pattern.split('.')
+            
+            if len(parts) >= 2:
+                component = parts[0]  # e.g., 'attention', 'mlp', 'embeddings'
+                layer_idx = parts[1]  # e.g., '0', '6', '11'
+                
+                # GPT-style architecture patterns
+                if model_type == 'gpt':
+                    if component == 'embeddings' and ('embed' in layer_name or 'wte' in layer_name):
+                        return True
+                    elif component == 'attention':
+                        if layer_idx.isdigit():
+                            expected_pattern = f"transformer.h.{layer_idx}.attn"
+                            if expected_pattern in layer_name:
+                                return True
+                    elif component == 'mlp':
+                        if layer_idx.isdigit():
+                            expected_pattern = f"transformer.h.{layer_idx}.mlp"
+                            if expected_pattern in layer_name:
+                                return True
+                    elif component == 'layer_norm':
+                        if layer_idx == 'final' and ('ln_f' in layer_name or 'final' in layer_name):
+                            return True
+                        elif layer_idx.isdigit():
+                            expected_pattern = f"transformer.h.{layer_idx}.ln"
+                            if expected_pattern in layer_name:
+                                return True
+                
+                # BERT-style architecture patterns
+                elif model_type == 'bert':
+                    if component == 'embeddings' and 'embeddings' in layer_name:
+                        return True
+                    elif component == 'attention':
+                        if layer_idx.isdigit():
+                            # Match both attention.self and attention modules
+                            if f"encoder.layer.{layer_idx}.attention" in layer_name:
+                                return True
+                    elif component == 'mlp':
+                        if layer_idx.isdigit():
+                            # Match both intermediate and output (feed-forward components)
+                            if f"encoder.layer.{layer_idx}.intermediate" in layer_name:
+                                return True
+                
+                # T5-style architecture patterns
+                elif model_type == 't5':
+                    if component == 'attention':
+                        if layer_idx.isdigit():
+                            if f"block.{layer_idx}.layer.0" in layer_name:  # Self-attention
+                                return True
+                    elif component == 'mlp':
+                        if layer_idx.isdigit():
+                            if f"block.{layer_idx}.layer.1" in layer_name:  # Feed-forward
+                                return True
+        
+        return False
     
     def process_segment(
         self,

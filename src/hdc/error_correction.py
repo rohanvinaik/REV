@@ -416,7 +416,7 @@ class ErrorCorrection:
         original: np.ndarray,
         noisy: np.ndarray,
         corrected: np.ndarray
-    ) -> Dict[str, float]:
+    ) -> dict:
         """
         Measure robustness metrics.
         

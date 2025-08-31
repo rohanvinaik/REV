@@ -1,0 +1,139 @@
+BLAKE2b not available, falling back to SHA256
+Traceback (most recent call last):
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 653, in run_complete_scientific_validation
+    result = self.compare_models_scientifically(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 517, in compare_models_scientifically
+    metrics_a = self.execute_full_pipeline(model_a, sites_a, segments_a, challenge)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 380, in execute_full_pipeline
+    signature.sigma = self.error_correction.encode(signature.sigma)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ErrorCorrection' object has no attribute 'encode'
+Traceback (most recent call last):
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 653, in run_complete_scientific_validation
+    result = self.compare_models_scientifically(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 517, in compare_models_scientifically
+    metrics_a = self.execute_full_pipeline(model_a, sites_a, segments_a, challenge)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 380, in execute_full_pipeline
+    signature.sigma = self.error_correction.encode(signature.sigma)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ErrorCorrection' object has no attribute 'encode'
+Traceback (most recent call last):
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 653, in run_complete_scientific_validation
+    result = self.compare_models_scientifically(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 517, in compare_models_scientifically
+    metrics_a = self.execute_full_pipeline(model_a, sites_a, segments_a, challenge)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_full_pipeline_scientific.py", line 380, in execute_full_pipeline
+    signature.sigma = self.error_correction.encode(signature.sigma)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ErrorCorrection' object has no attribute 'encode'
+
+🔬 COMPLETE REV PIPELINE SCIENTIFIC VALIDATION
+
+This test runs the FULL pipeline with ALL components.
+No simplifications or shortcuts - complete scientific validation.
+
+Initializing FULL REV Pipeline Components...
+  ✓ HDC Config: 10000D, 0.01 sparsity
+  ✓ REV Pipeline: segment_size=512
+  ✓ Segment Runner: max_memory=1.0GB
+  ✓ HDC Components: encoder, behavioral sites, binding, error correction
+  ✓ Hamming Calculator: LUT-optimized
+  ✓ Challenge Generator: HMAC-based KDF
+  ✓ Decision Aggregator
+  ✓ Privacy Components: DP (ε=1.0), ZK proofs
+  ✓ Execution Policy: deterministic, fp16, checkpointing
+✅ All pipeline components initialized
+
+
+================================================================================
+COMPLETE SCIENTIFIC REV PIPELINE VALIDATION
+================================================================================
+Start time: 2025-08-30 15:09:11.318256
+This is a FULL pipeline test with ALL components.
+Generating complete scientific validation data.
+
+Loading models...
+✅ Loaded 6 models:
+  - gpt2: 4.13GB, 12 layers
+  - gpt2-medium: 11.63GB, 24 layers
+  - distilgpt2: 2.95GB, 6 layers
+  - pythia-70m: 0.16GB, 6 layers
+  - pythia-160m: 0.35GB, 12 layers
+  - gpt-neo-125m: 0.47GB, 12 layers
+
+================================================================================
+SCIENTIFIC COMPARISON: gpt2 vs gpt2
+================================================================================
+Model A: 36 sites, 36 segments
+Model B: 36 sites, 36 segments
+
+Challenge 1/10: Answer this question: What color is the red car that's paint...
+    Executing 36 segments...
+
+❌ Error in comparison: 'ErrorCorrection' object has no attribute 'encode'
+
+================================================================================
+SCIENTIFIC COMPARISON: gpt2 vs gpt2-medium
+================================================================================
+Model A: 36 sites, 36 segments
+Model B: 72 sites, 72 segments
+
+Challenge 1/10: Classify this text into one of these categories: Science, Te...
+    Executing 36 segments...
+
+❌ Error in comparison: 'ErrorCorrection' object has no attribute 'encode'
+
+================================================================================
+SCIENTIFIC COMPARISON: gpt2 vs distilgpt2
+================================================================================
+Model A: 36 sites, 36 segments
+Model B: 18 sites, 18 segments
+
+Challenge 1/10: Generate a product description about innovation with using o...
+    Executing 36 segments...
+
+❌ Error in comparison: 'ErrorCorrection' object has no attribute 'encode'
+
+================================================================================
+SCIENTIFIC VALIDATION REPORT
+================================================================================
+
+📊 COMPARISON SUMMARY
+------------------------------------------------------------
+Comparison                     Verdict         Challenges   Match Rate
+------------------------------------------------------------
+
+⚡ PERFORMANCE METRICS
+------------------------------------------------------------
+
+📏 DISTANCE METRICS
+------------------------------------------------------------
+
+✅ PIPELINE COMPONENTS VALIDATED
+------------------------------------------------------------
+
+📄 PAPER CLAIMS VALIDATION
+------------------------------------------------------------
+  ✅ Memory-bounded execution (<4GB)
+  ✅ Segment-wise processing
+  ✅ Merkle tree commitments
+  ✅ HDC behavioral encoding (10K-dim)
+  ❌ SPRT with early stopping
+  ❌ Hamming LUT optimization
+  ❌ Error correction (25% overhead)
+  ❌ Differential privacy
+  ❌ Challenge generation (HMAC-KDF)
+
+💾 Detailed results saved to scientific_validation_20250830_150916.json
+
+Total test duration: 5.2s
+
+================================================================================
+✅ SCIENTIFIC VALIDATION COMPLETE
+================================================================================

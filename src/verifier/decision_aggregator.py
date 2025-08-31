@@ -55,7 +55,7 @@ class AggregatedDecision:
     mean_distance: float
     std_distance: float
     first_divergence: Optional[DivergencePoint]
-    sequential_result: Optional[SPRTResult]
+    sequential_result: Optional[Any]  # SPRTResult
     per_challenge_results: List[ChallengeResult]
 
 
@@ -313,7 +313,7 @@ class DecisionAggregator:
     def integrate_sequential_test(
         self,
         scores: Optional[List[float]] = None
-    ) -> SPRTResult:
+    ) -> Any:  # SPRTResult
         """
         Integrate with sequential testing framework.
         
