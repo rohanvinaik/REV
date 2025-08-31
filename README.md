@@ -10,14 +10,14 @@
 
 ## 🎯 Yi-34B Production Validation (34 Billion Parameters)
 
-**Successfully processed and verified Yi-34B model (68GB) on consumer hardware with 64GB RAM through intelligent behavioral segmentation.**
+**Successfully executed complete E2E pipeline on Yi-34B model (68GB) on 64GB RAM system.**
 
 ### Key Achievements
-- ✅ **34B Parameters**: Full pipeline execution on production-scale model
-- ✅ **Behavioral Discovery**: Automated identification of 4 processing regions
-- ✅ **Memory Efficiency**: 68GB model with only 2-3GB memory delta
-- ✅ **3 min/prompt**: Complete verification in minutes, not hours
-- ✅ **Cryptographic Proofs**: Merkle root generation for all segments
+- ✅ **34.4B Parameters**: Full pipeline execution completed in 21 minutes
+- ✅ **Memory-Bounded**: Only 19GB active memory for 68GB model
+- ✅ **Hypervector Generation**: Semantic fingerprints with 1-17% adaptive sparsity
+- ✅ **Model Discrimination**: Successfully distinguishes between different models
+- ✅ **Complete Verification**: From loading to comparison, all components working
 
 [📊 Full Yi-34B Experimental Report](YI34B_EXPERIMENT_REPORT.md)
 
@@ -88,15 +88,9 @@ REV Framework
     └── Early stopping with error control
 ```
 
-## Installation
+## Quick Start
 
-### Requirements
-
-- Python 3.8+
-- 8GB RAM minimum (64GB recommended for large models)
-- PyTorch 2.0+
-
-### Quick Start
+### Installation
 
 ```bash
 # Clone repository
@@ -105,13 +99,33 @@ cd REV
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Optional: Install development dependencies
-pip install -r requirements-dev.txt
-
-# Optional: Install quantization support
-pip install bitsandbytes  # For 8-bit/4-bit quantization
 ```
+
+### Run Complete E2E Pipeline
+
+```bash
+# Compare two models (e.g., GPT-2 vs DistilGPT-2)
+python run_rev_complete.py gpt2 distilgpt2 --challenges 2
+
+# Run on large model with quantization
+python run_rev_complete.py meta-llama/Llama-2-7b-hf --quantize 8bit
+
+# Compare local model to HuggingFace model
+python run_rev_complete.py /path/to/local/model bert-base-uncased
+```
+
+### Yi-34B Validation
+
+```bash
+# Run Yi-34B with memory-bounded execution (requires 64GB RAM)
+python run_rev_e2e.py /path/to/yi-34b --challenges 1 --output yi34b_results.json
+```
+
+### Requirements
+
+- Python 3.8+
+- 8GB RAM minimum (64GB recommended for large models)
+- PyTorch 2.0+
 
 ## Usage
 
