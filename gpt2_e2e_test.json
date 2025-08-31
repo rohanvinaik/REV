@@ -1,0 +1,74 @@
+{
+  "timestamp": "2025-08-31T10:40:03.215550",
+  "model": "gpt2",
+  "config": {
+    "model": "gpt2",
+    "device": "auto",
+    "quantize": "none",
+    "challenges": 2,
+    "output": "gpt2_e2e_test.json"
+  },
+  "stages": {
+    "model_loading": {
+      "success": true,
+      "time": 6.222445964813232,
+      "message": "Model loaded successfully (0.1B parameters)",
+      "model_info": {
+        "parameters": 124439808,
+        "load_time": 5.1025190353393555,
+        "dtype": "torch.float16",
+        "device": "cpu",
+        "device_map": {
+          "": "cpu"
+        }
+      }
+    },
+    "pipeline_init": {
+      "success": true,
+      "time": 0.017167091369628906,
+      "hdc_dimension": 10000,
+      "sparsity_range": "0.5% - 20%"
+    },
+    "challenge_generation": {
+      "success": true,
+      "time": 0.00019788742065429688,
+      "challenges_generated": 2
+    },
+    "challenge_processing": {
+      "success": true,
+      "time": 21.834057807922363,
+      "challenges_processed": 2,
+      "successful": 2,
+      "results": [
+        {
+          "challenge_id": 1,
+          "category": "ChallengeCategory.BOUNDARY",
+          "complexity": "ChallengeComplexity.ADVERSARIAL",
+          "success": true,
+          "response_preview": "\n\nThe following example shows how to use the recursive function to perform depth-first search.\n\ndef ",
+          "hypervector_generated": true,
+          "hypervector_sparsity": 0.1673,
+          "adaptive_stats": {
+            "final_sparsity": 0.01,
+            "actual_density": 0.01,
+            "quality_score": 0.0
+          }
+        },
+        {
+          "challenge_id": 2,
+          "category": "ChallengeCategory.BOUNDARY",
+          "complexity": "ChallengeComplexity.ADVERSARIAL",
+          "success": true,
+          "response_preview": "\n\nThe following example shows how to use the memoization strategy to perform a recursive function.\n\n",
+          "hypervector_generated": true,
+          "hypervector_sparsity": 0.1674,
+          "adaptive_stats": {
+            "final_sparsity": 0.01,
+            "actual_density": 0.01,
+            "quality_score": 0.0
+          }
+        }
+      ]
+    }
+  }
+}

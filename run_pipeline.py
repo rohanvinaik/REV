@@ -10,62 +10,48 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import torch
-from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM
-
 from src.rev_pipeline import REVPipeline
+from src.models.large_model_inference import LargeModelInference, LargeModelConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-def load_model(model_path: str, device: str = "cpu"):
-    """Load model from local path or HuggingFace."""
+def load_model(model_path: str, device: str = "auto", quantize: str = "none"):
+    """Load model using robust inference manager."""
     print(f"Loading model from: {model_path}")
+    print(f"Device: {device}, Quantization: {quantize}")
     
-    # Check if it's a local path
-    if Path(model_path).exists():
-        print("Loading from local filesystem...")
-        # Use int8 quantization for large models on CPU
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float32,  # Use float32 for CPU
-            device_map=None,  # Don't use auto device map on CPU
-            low_cpu_mem_usage=True,
-            load_in_8bit=False,  # Disable 8bit for now
-            offload_folder="offload",  # Offload to disk if needed
-            offload_state_dict=True
-        )
-        print(f"Model loaded into memory")
-        tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
-        print(f"Tokenizer loaded")
-    else:
-        # Try loading from HuggingFace
-        print("Loading from HuggingFace...")
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-            device_map="auto" if device == "cuda" else None,
-            low_cpu_mem_usage=True
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+    # Configure based on arguments
+    config = LargeModelConfig(
+        model_path=model_path,
+        device=device,
+        load_in_8bit=(quantize == "8bit"),
+        load_in_4bit=(quantize == "4bit"),
+        low_cpu_mem_usage=True,
+        max_new_tokens=128,
+        do_sample=False  # Deterministic for REV verification
+    )
     
-    if device == "cpu":
-        print("Moving model to CPU...")
-        model = model.to("cpu")
-        print("Model on CPU")
+    # Create inference manager
+    inference_manager = LargeModelInference(model_path, config)
     
-    # Set pad token if not set
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-        print("Set pad token")
+    # Load model
+    success, message = inference_manager.load_model()
+    if not success:
+        raise RuntimeError(f"Failed to load model: {message}")
     
-    return model, tokenizer
+    print(f"✓ {message}")
+    
+    # Return model and tokenizer for compatibility
+    return inference_manager.model, inference_manager.tokenizer
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run REV pipeline on any model")
     parser.add_argument("model_path", help="Path to model (local or HuggingFace)")
-    parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Device to use")
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"], help="Device to use")
+    parser.add_argument("--quantize", default="none", choices=["none", "8bit", "4bit"], help="Quantization mode")
     parser.add_argument("--segment-size", type=int, default=512, help="Segment size")
     parser.add_argument("--dimension", type=int, default=10000, help="Hypervector dimension")
     parser.add_argument("--sparsity", type=float, default=0.15, help="Sparsity level")
@@ -86,24 +72,55 @@ def main():
     
     # Load model
     try:
-        model, tokenizer = load_model(args.model_path, args.device)
+        model, tokenizer = load_model(args.model_path, args.device, args.quantize)
+        param_count = sum(p.numel() for p in model.parameters()) / 1e9
         print(f"✓ Model loaded successfully")
-        print(f"  Parameters: {sum(p.numel() for p in model.parameters()) / 1e9:.1f}B")
+        print(f"  Parameters: {param_count:.1f}B")
+        
+        # Memory info
+        import psutil
+        mem = psutil.virtual_memory()
+        print(f"  Memory: {mem.used/1e9:.1f}GB used / {mem.total/1e9:.1f}GB total")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         return 1
     
-    # Initialize pipeline
+    # Initialize pipeline with proper sparsity configuration
+    from src.hdc.encoder import HypervectorConfig
+    from src.hdc.adaptive_encoder import AdaptiveSparsityEncoder, AdjustmentStrategy
+    
+    # Configure HDC with dynamic sparsity (1-20% range as validated)
+    hdc_config = HypervectorConfig(
+        dimension=args.dimension,
+        sparsity=args.sparsity,  # Base sparsity, will be dynamically adjusted
+        encoding_mode="rev"
+    )
+    
+    # Create adaptive encoder for dynamic sparsity adjustment
+    adaptive_encoder = AdaptiveSparsityEncoder(
+        dimension=args.dimension,
+        initial_sparsity=args.sparsity,
+        min_sparsity=0.005,  # 0.5%
+        max_sparsity=0.2,     # 20% for complex features
+        adjustment_strategy=AdjustmentStrategy.ADAPTIVE
+    )
+    
     pipeline = REVPipeline(
         segment_size=args.segment_size,
         buffer_size=4,
-        dimension=args.dimension,
-        sparsity=args.sparsity,
+        hdc_config=hdc_config,
         enable_pot_challenges=args.pot,
         enable_behavioral_analysis=args.behavioral,
         experiment_name=f"run_{Path(args.model_path).name}"
     )
+    
+    # Store adaptive encoder for use in processing
+    pipeline.adaptive_encoder = adaptive_encoder
+    
     print(f"✓ Pipeline initialized")
+    print(f"  HDC dimension: {args.dimension}")
+    print(f"  Sparsity range: 0.5% - 20% (adaptive)")
+    print(f"  Base sparsity: {args.sparsity:.1%}")
     
     # Generate challenges
     if args.pot:
