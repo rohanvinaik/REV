@@ -1,0 +1,52 @@
+{
+  "timestamp": "2025-08-30T21:05:55.066969",
+  "system": {
+    "cpu_cores": 10,
+    "ram_gb": 64.0,
+    "transformers_available": true
+  },
+  "models_tested": 3,
+  "results": [
+    {
+      "model": "gpt2",
+      "architecture": "gpt2",
+      "parameters": 123532032,
+      "parameters_millions": 123.532032,
+      "load_time_s": 0.6261000633239746,
+      "memory_mb": 124.140625,
+      "status": "success",
+      "inference_ms": 52.8818340098951,
+      "activation_mb": 0.0439453125,
+      "memory_reduction_percent": 99.99067448352181
+    },
+    {
+      "model": "distilgpt2",
+      "architecture": "gpt2",
+      "parameters": 81064704,
+      "parameters_millions": 81.064704,
+      "load_time_s": 0.08679413795471191,
+      "memory_mb": 28.125,
+      "status": "success",
+      "inference_ms": 236.68304100283422,
+      "activation_mb": 0.0439453125,
+      "memory_reduction_percent": 99.98578912963157
+    },
+    {
+      "model": "pythia-70m",
+      "architecture": "gpt_neox",
+      "parameters": 100000000,
+      "parameters_millions": 100.0,
+      "load_time_s": 0.12652587890625,
+      "memory_mb": 159.875,
+      "status": "success",
+      "inference_ms": 23.294583021197468,
+      "activation_mb": 0.029296875,
+      "memory_reduction_percent": 99.99232
+    }
+  ],
+  "validation": {
+    "avg_memory_mb": 104.046875,
+    "avg_inference_ms": 104.28648601130892,
+    "avg_reduction_percent": 99.98959453771779
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-08-30T21:00:57.117865",
+  "models_tested": 5,
+  "results": [
+    {
+      "model": "gpt2",
+      "architecture": "gpt2",
+      "memory_mb": 0.0,
+      "expected_mb": 440,
+      "load_time_s": 5.0067901611328125e-05
+    },
+    {
+      "model": "pythia-70m",
+      "architecture": "bert",
+      "memory_mb": 0.0,
+      "expected_mb": 512,
+      "load_time_s": 7.104873657226562e-05
+    },
+    {
+      "model": "distilgpt2",
+      "architecture": "gpt2",
+      "memory_mb": 0.0,
+      "expected_mb": 440,
+      "load_time_s": 4.9114227294921875e-05
+    },
+    {
+      "model": "phi-2",
+      "architecture": "bert",
+      "memory_mb": 0.0,
+      "expected_mb": 512,
+      "load_time_s": 5.2928924560546875e-05
+    },
+    {
+      "model": "pythia-160m",
+      "architecture": "bert",
+      "memory_mb": 0.0,
+      "expected_mb": 512,
+      "load_time_s": 0.0002079010009765625
+    }
+  ]
+}
