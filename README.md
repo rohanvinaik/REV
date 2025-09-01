@@ -67,6 +67,22 @@ REV treats transformer models like DNA sequences that can be "cut" at restrictio
 | Reasoning | 0.324-0.326 | 100% | <1% |
 | Theoretical | 0.317-0.319 | 100% | <1% |
 
+### Cross-Layer Behavioral Analysis
+
+REV's behavioral profiling captures comprehensive data enabling multi-dimensional analysis:
+
+**Layer-to-Layer Comparisons**: Beyond baseline comparisons, REV enables analysis between any layer pairs to identify:
+- **Restriction Sites**: Natural boundaries where model behavior fundamentally shifts (e.g., layers 15→16 showing large divergence spike)
+- **Behavioral Phases**: Clusters of layers with similar processing patterns (e.g., layers 20-30 forming semantic processing region)
+- **Phase Transitions**: Critical points where models transition between processing modes (syntactic → semantic → reasoning)
+
+**Full Comparison Matrix**: Each layer's behavioral fingerprint includes:
+- Raw activation patterns across 8K-100K hyperdimensional vectors
+- Information-theoretic metrics (entropy, sparsity, coefficient of variation)
+- Temporal dynamics capturing how information flows through the network
+
+This enables post-hoc analysis to discover optimal segmentation boundaries for memory-bounded execution, not just arbitrary layer divisions.
+
 ## 🏗️ Architecture
 
 ```
