@@ -40,7 +40,7 @@ from src.hypervector.hamming import HammingDistanceOptimized
 from src.core.sequential import SequentialState, TestType
 from src.hypervector.similarity import AdvancedSimilarity
 from src.diagnostics.probe_monitor import get_probe_monitor, reset_probe_monitor
-from src.hdc.behavioral_sites import BehavioralRestrictionSites
+from src.hdc.behavioral_sites import BehavioralSites
 
 # Configure logging
 def setup_logging(debug: bool = False, log_file: Optional[str] = None):
@@ -136,13 +136,8 @@ class REVUnified:
         
         # Initialize behavioral sites analyzer
         if enable_behavioral_analysis:
-            self.behavioral_sites = BehavioralRestrictionSites(
-                hidden_dim=8192,  # Standard for Llama models
-                n_layers=80,      # Will be adjusted based on model
-                probe_config={
-                    'use_sophisticated_probes': True,
-                    'probe_categories': ['boundary', 'computation', 'reasoning', 'theoretical']
-                }
+            self.behavioral_sites = BehavioralSites(
+                hdc_config=self.hdc_config
             )
         else:
             self.behavioral_sites = None
@@ -370,10 +365,18 @@ class REVUnified:
             print(f"  Challenge {i}/{len(challenges_list)}...", end='')
             
             try:
+                # Get prompt from challenge (handle both dict and dataclass)
+                if hasattr(challenge, 'prompt'):
+                    prompt = challenge.prompt
+                elif isinstance(challenge, dict):
+                    prompt = challenge.get("prompt", str(challenge))
+                else:
+                    prompt = str(challenge)
+                
                 if use_local:
                     # Local processing with REV
                     rev_result = inference.process_for_rev(
-                        prompt=challenge.get("prompt", challenge),
+                        prompt=prompt,
                         extract_activations=True,
                         hdc_encoder=self.encoder,
                         adaptive_encoder=self.adaptive_encoder
@@ -390,7 +393,7 @@ class REVUnified:
                         print(" ✗")
                 else:
                     # API-only processing
-                    response = inference.generate(challenge.get("prompt", challenge))
+                    response = inference.generate(prompt)
                     responses.append(response)
                     
                     # Generate hypervector from response
