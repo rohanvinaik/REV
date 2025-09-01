@@ -233,7 +233,7 @@ class REVPipeline:
         self.telemetry_records: List[SegmentTelemetry] = []
         self.kv_cache = {}  # KV cache for attention
         self.checkpoint_manager = CheckpointManager()
-        self.memory_limit_mb = 4096  # Default 4GB limit
+        self.memory_limit_mb = 36864  # Default 36GB limit
         
         # PoT challenge generation
         self.enable_pot_challenges = enable_pot_challenges

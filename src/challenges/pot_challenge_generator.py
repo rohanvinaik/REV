@@ -659,47 +659,39 @@ class PoTChallengeGenerator:
     
     def generate_behavioral_probes(self) -> Dict[str, List[str]]:
         """
-        Generate behavioral probes for segmentation analysis.
-        Returns simpler probes designed to identify architectural boundaries.
+        Generate sophisticated PoT-style behavioral probes for segmentation analysis.
+        These probes are designed to trigger different computational patterns
+        across transformer layers to identify architectural boundaries.
         """
-        return {
-            "factual": [
-                "Paris is the capital of",
-                "Water freezes at",
-                "The Earth orbits around",
-                "DNA stands for"
+        # Generate actual PoT challenges for behavioral analysis
+        # Use a subset of the full challenge templates for efficiency
+        probes = {
+            "boundary": [
+                "Consider a recursive function that computes factorial. If we modify the base case from n<=1 to n<=0, explain the behavioral change and provide a test case that distinguishes the two implementations.",
+                "Given a binary tree traversal that switches from pre-order to post-order at depth k, design an algorithm to detect the transition point and prove its correctness.",
+                "Analyze the computational complexity when quicksort's pivot selection changes from deterministic to randomized after processing n/2 elements.",
+                "If a neural network's activation function changes from ReLU to GELU at layer L, derive the gradient flow differences and their impact on backpropagation."
             ],
-            "syntactic": [
-                "The cat sat on the",
-                "She walks to school every",
-                "The quick brown fox jumps",
-                "I have been living here"
-            ],
-            "semantic": [
-                "The opposite of hot is",
-                "A synonym for large is",
-                "The color of grass is",
-                "Birds fly using their"
+            "computation": [
+                "Transform the recursive Fibonacci function F(n) = F(n-1) + F(n-2) into an iterative version using matrix exponentiation. Prove that both have identical outputs for all n ≥ 0.",
+                "Given a hash table that switches from linear probing to quadratic probing when load factor exceeds 0.7, calculate the expected number of probes for successful and unsuccessful searches.",
+                "Design a self-modifying algorithm that optimizes its own time complexity based on input distribution. Provide formal analysis of convergence properties.",
+                "Implement dynamic programming solution for edit distance that adapts its space complexity based on available memory. Prove correctness under memory constraints."
             ],
             "reasoning": [
-                "If A > B and B > C, then A is",
-                "2 + 2 * 3 equals",
-                "If all cats are animals and all animals need food, then",
-                "The next number in 2, 4, 8, 16 is"
+                "Alice believes that Bob knows that Charlie has discovered a vulnerability. If Alice's belief is based on encrypted communication she intercepted, what can we infer about the cryptographic protocol's semantic security?",
+                "In a distributed consensus protocol, if f nodes are Byzantine and the network has 3f+1 total nodes, prove that consensus is achievable and derive the minimum number of communication rounds.",
+                "Given Gödel's incompleteness theorem, construct a self-referential statement in Peano arithmetic that demonstrates its own unprovability. Explain the diagonalization technique used.",
+                "If a Turing machine M decides language L in O(n²) time, and we construct M' that simulates M with space-time tradeoff, derive the space complexity lower bound for M'."
             ],
-            "creative": [
-                "In a world without gravity,",
-                "If colors had sounds,",
-                "Imagine a new primary color called",
-                "If time flowed backwards,"
-            ],
-            "code": [
-                "def factorial(n): return",
-                "for i in range(10):",
-                "class Person:",
-                "import numpy as"
+            "theoretical": [
+                "Prove that any comparison-based sorting algorithm requires Ω(n log n) comparisons in the worst case. Then show how radix sort circumvents this bound.",
+                "Using Kolmogorov complexity, prove that most binary strings of length n cannot be compressed to less than n - c bits for small constant c.",
+                "Demonstrate that the halting problem reduces to the problem of determining if a neural network will converge during training.",
+                "If P ≠ NP, prove that there exists an infinite hierarchy of complexity classes strictly between P and NP. Construct an explicit example using oracle separation."
             ]
         }
+        return probes
     
     def generate_verification_challenges(self,
                                         n: int,
