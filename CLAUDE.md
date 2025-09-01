@@ -1,5 +1,37 @@
 # REV - Restriction Enzyme Verification System
 
+## 🚀 QUICK START - RUNNING THE PIPELINE
+
+### Default Mode: API-Only (Recommended)
+```bash
+# Single model verification (uses API, no local loading)
+python run_rev.py meta-llama/Llama-3.3-70B-Instruct
+
+# Compare multiple models
+python run_rev.py gpt-4 claude-3-opus meta-llama/Llama-3.3-70B
+
+# With more challenges and debug output
+python run_rev.py meta-llama/Llama-3.3-70B-Instruct --challenges 10 --debug
+
+# Specify API provider explicitly
+python run_rev.py gpt-4 --provider openai --api-key sk-...
+```
+
+### Local Mode (Only for Small Models)
+```bash
+# WARNING: Only use --local for models <20GB. Larger models will exhaust memory!
+python run_rev.py meta-llama/Llama-2-7b-hf --local --device cpu --quantize 4bit
+
+# With memory limit (still may fail for very large models)
+python run_rev.py /path/to/small-model --local --memory-limit 20
+```
+
+### Important Notes:
+- **DEFAULT IS API-ONLY**: The pipeline uses APIs by default, no local model loading
+- **DO NOT USE --local FOR LARGE MODELS**: Models >20GB will crash your system
+- **The 70B/405B models should ONLY be run via API**
+- Use `run_rev.py` - this is the ONLY unified pipeline script
+
 ## 🎯 CORE PURPOSE OF THIS EXPERIMENT
 
 **THE WHOLE POINT**: REV enables verification of massive LLMs (like Yi-34B with 68GB memory footprint) that EXCEED available device memory through intelligent segmented execution. This is NOT about avoiding loading the model - it's about making it POSSIBLE to run and verify models that wouldn't otherwise fit in memory AT ALL.
@@ -252,6 +284,33 @@ make test-coverage
 - black>=21.0.0
 - mypy>=0.910
 - pytest-benchmark>=3.4.0
+
+## Recent Updates (September 2025)
+
+### Unified Pipeline (v3.0)
+- **CONSOLIDATED**: All pipeline scripts merged into single `run_rev.py`
+- **API-FIRST**: Default mode is now API-only (no local model loading)
+- **BEHAVIORAL ANALYSIS**: Integrated sophisticated PoT behavioral probing
+- **DIVERGENCE METRICS**: Information-theoretic divergence calculation
+- **MEMORY SAFETY**: Added --memory-limit flag for local mode
+- **MULTI-MODEL**: Support for comparing multiple models in one run
+
+### Deleted Old Scripts
+The following scripts have been removed (functionality merged into `run_rev.py`):
+- `run_pipeline.py` 
+- `run_rev_complete.py`
+- `run_rev_e2e.py`
+
+### Command Examples
+```bash
+# CORRECT - Use this:
+python run_rev.py meta-llama/Llama-3.3-70B-Instruct
+
+# INCORRECT - Don't use these (deleted):
+python run_rev_complete.py ...  # DELETED
+python run_pipeline.py ...      # DELETED
+python run_rev_e2e.py ...       # DELETED
+```
 
 ## Contact
 
