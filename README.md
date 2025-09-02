@@ -12,6 +12,44 @@
 
 **REV enables verification of massive LLMs that CANNOT fit in memory through intelligent behavioral segmentation.**
 
+### 🆕 Latest Features (v3.0)
+
+**Comprehensive Unified Analysis System (NEW):**
+- **Pattern-Based Relationship Detection**: Automatically infers model relationships from behavioral patterns
+- **Model Relationship Types**: Identifies scaled versions, adversarial modifications, fine-tuning, quantization, and family relationships
+- **Behavioral Phase Detection**: Discovers encoding, reasoning, and decoding phases across layers
+- **Divergence Analysis**: Pinpoints prompt-specific and layer-specific divergences that indicate tampering
+- **Scaling Analysis**: Detects if models are scaled versions (e.g., 70B vs 405B of same family)
+- **Architecture Fingerprinting**: Uses FFT and autocorrelation to identify architectural families
+- **Threat Detection**: Automatically identifies backdoors, poisoning, and extraction attacks
+- **Unified Output**: Single comprehensive report replacing multiple specialized detectors
+
+**Advanced Adversarial Capabilities (NEW):**
+- **Divergence Attack**: 150x faster training data extraction through prefix divergence
+- **MRCJ (Multi-Round Conversational Jailbreaking)**: >90% success rate with trust-building
+- **Two-Stage Model Inversion**: 38-75% success extracting PII from fine-tuned models
+- **SPV-MIA**: Self-calibrated probabilistic variation for membership inference
+- **PAIR Algorithm**: Automatic iterative refinement for jailbreak generation
+- **Cross-Lingual & Special Character Attacks**: Unicode exploitation and language switching
+- **Safety Controls**: All dangerous prompts include safety wrappers and research-only flags
+
+**Advanced Prompt Engineering:**
+- **KDF Prompt System**: Non-traditional injection techniques (Unicode, binary, structured data)
+- **TensorGuard Probes**: 94% model classification accuracy with 17 specialized probes
+- **Evolutionary Prompts**: Genetic algorithm-based prompt discovery and optimization
+
+**Behavioral Analysis:**
+- **Statistical Profiling**: 16-dimensional behavioral signatures with <100ms analysis
+- **Multi-Signal Integration**: Weighted voting across gradient, timing, embedding, and attention signals
+- **Real-time Streaming**: Process segments on-the-fly with anomaly detection
+- **Cassette Execution**: Deep behavioral analysis with probe topologies
+
+**Integrated Pipeline:**
+- **Unified CLI**: Single entry point for all REV features via `run_rev.py`
+- **Phase-aware Execution**: Seamlessly transition between discovery, cassette, and profiling phases
+- **Automatic Topology Management**: Export and reuse behavioral maps across runs
+- **Adversarial Integration**: Seamless adversarial prompt generation with configurable ratios
+
 ### 🔬 Current Achievement: Behavioral Restriction Sites Discovered
 
 Analyzing Llama 3.3 70B behavioral profile reveals natural segmentation boundaries:
@@ -185,25 +223,41 @@ This enables targeted optimization - skip syntactic probes in deep layers, focus
 ## 🏗️ Architecture
 
 ```
-REV Framework v2.0 (Production)
+REV Framework v3.0 (Production)
 ├── Segmented Execution Pipeline
 │   ├── True segment execution with transformer computations
 │   ├── Adaptive memory management (4-36GB configurable)
 │   ├── Intelligent weight loading/offloading
 │   └── KV cache management with spilling
 │
-├── Two-Phase Behavioral Analysis
+├── Three-Phase Behavioral Analysis
 │   ├── Phase 1: Baseline Topology Discovery
 │   │   ├── Standard behavioral probes
 │   │   ├── Information-theoretic divergence
 │   │   ├── Restriction site identification
 │   │   └── Topology export for reuse
 │   │
-│   └── Phase 2: Cassette-Based Deep Analysis
-│       ├── 7 specialized probe types
-│       ├── Cognitive capability mapping
-│       ├── Layer specialization detection
-│       └── Anomaly identification
+│   ├── Phase 2: Cassette-Based Deep Analysis
+│   │   ├── 7 specialized probe types
+│   │   ├── Cognitive capability mapping
+│   │   ├── Layer specialization detection
+│   │   └── Anomaly identification
+│   │
+│   └── Phase 3: Statistical Profiling
+│       ├── 16-dimensional behavioral signatures
+│       ├── Multi-signal integration
+│       ├── Real-time streaming analysis (<100ms)
+│       └── Model family classification
+│
+├── Advanced Prompt Systems
+│   ├── KDF Prompt Generation
+│   │   ├── Non-traditional injection techniques
+│   │   └── TensorGuard behavioral probes
+│   ├── Evolutionary Prompt Optimization
+│   │   ├── Genetic algorithms for prompt discovery
+│   │   └── Adaptive mutation strategies
+│   └── PoT Challenge Generation
+│       └── Sophisticated discriminative prompts
 │
 ├── Diagnostic System
 │   ├── ProbeMonitor with execution tracking
@@ -237,6 +291,9 @@ pip install -r requirements.txt
 # Profile model to discover behavioral topology
 python run_rev.py /path/to/model --challenges 4 --output profile.json
 
+# With behavioral profiling system (16-dimensional signatures)
+python run_rev.py /path/to/model --challenges 4 --profiler --output profile.json
+
 # Monitor live progress
 python monitor_80layers.py
 
@@ -260,7 +317,14 @@ python run_rev.py model1 model2 \
 
 ### Phase 2b: Cassette Analysis (Advanced probing)
 ```bash
-# Run cassette-based deep analysis after topology discovery
+# Run cassette-based deep analysis integrated in main pipeline
+python run_rev.py /path/to/model \
+    --cassettes \
+    --cassette-topology llama70b_topology.json \
+    --cassette-types recursive theory_of_mind meta \
+    --cassette-output cassette_results
+
+# Or run standalone cassette executor
 python -m src.challenges.cassette_executor \
     llama70b_topology.json \
     /path/to/model \
@@ -279,6 +343,121 @@ python export_topology.py llama70b.log -o llama70b_topology.json
 # View topology summary
 python export_topology.py llama70b.log  # Prints summary
 ```
+
+### Comprehensive Model Analysis
+
+```bash
+# Enable comprehensive analysis with pattern detection
+python run_rev.py model1 model2 \
+    --comprehensive-analysis \
+    --analysis-sensitivity 0.1 \
+    --phase-min-length 3 \
+    --transition-threshold 0.2 \
+    --save-analysis-report
+
+# The analysis will automatically:
+# 1. Detect if models are scaled versions (70B vs 405B)
+# 2. Identify adversarial modifications (backdoors, poisoning)
+# 3. Recognize fine-tuning or quantization relationships
+# 4. Discover behavioral phases and transitions
+# 5. Generate threat assessment and security warnings
+
+# Example output interpretations:
+# - "SCALED_VERSION": Models are same family, different sizes
+# - "ADVERSARIAL": Potential tampering detected
+# - "FINE_TUNED": Same base model, different training
+# - "SAME_FAMILY": Same architecture, different training
+# - "DIFFERENT_FAMILY": Different architectures
+```
+
+### Unified CLI Interface
+
+The `run_rev.py` script provides a comprehensive interface to all REV features:
+
+```bash
+# Basic usage
+python run_rev.py /path/to/model
+
+# With all advanced features
+python run_rev.py /path/to/model \
+    --challenges 5 \
+    --profiler \
+    --cassettes \
+    --cassette-types recursive theory_of_mind \
+    --debug \
+    --output results.json
+
+# API-only mode (default, no local loading)
+python run_rev.py gpt-3.5-turbo claude-3-opus \
+    --provider openai \
+    --challenges 10
+
+# Local model loading
+python run_rev.py /path/to/llama-70b \
+    --local \
+    --device mps \
+    --memory-limit 36 \
+    --quantize 4bit
+
+# Adversarial testing (security research only)
+python run_rev.py /path/to/model \
+    --adversarial \
+    --adversarial-ratio 0.2 \
+    --adversarial-types divergence_attack mrcj \
+    --challenges 10
+
+# Comprehensive adversarial suite with safety wrappers
+python run_rev.py /path/to/model \
+    --adversarial \
+    --adversarial-suite \
+    --include-dangerous \
+    --output adversarial_results.json
+```
+
+#### CLI Options
+
+**Core Features:**
+- `--challenges N`: Number of PoT challenges (default: 5)
+- `--challenge-focus`: Focus strategy: coverage/separation/balanced
+- `--max-tokens`: Maximum tokens to generate (default: 50)
+
+**Advanced Analysis:**
+- `--profiler`: Enable 16-dimensional behavioral profiling
+- `--cassettes`: Enable Phase 2 cassette-based analysis
+- `--cassette-topology`: Path to topology JSON
+- `--cassette-types`: Probe types to include
+- `--cassette-output`: Output directory for cassette results
+
+**Adversarial Testing (Security Research Only):**
+- `--adversarial`: Enable adversarial prompt generation
+- `--adversarial-ratio`: Ratio of adversarial prompts (default: 0.1)
+- `--adversarial-types`: Specific attack types to use
+  - `divergence_attack`: 150x faster extraction
+  - `mrcj`: Multi-round conversational jailbreaking
+  - `special_char`: Special character triggers
+  - `two_stage_inversion`: Model inversion attacks
+  - `spv_mia`: Membership inference probes
+  - `alignment_faking`: Alignment faking detection
+  - `pair_algorithm`: PAIR algorithm jailbreaks
+  - `cross_lingual`: Cross-lingual attacks
+  - `temperature_exploit`: Temperature exploitation
+  - `dataset_extraction`: Dataset extraction probes
+  - `deception_pattern`: Deception pattern detection
+- `--adversarial-suite`: Generate comprehensive adversarial suite
+- `--include-dangerous`: Include high-risk prompts (with safety wrappers)
+
+**Feature Toggles:**
+- `--no-behavioral`: Disable behavioral analysis
+- `--no-pot`: Disable PoT challenges
+- `--no-validation`: Skip paper claims validation
+
+**System Options:**
+- `--local`: Enable local model loading
+- `--device`: Device for computation (auto/cpu/cuda/mps)
+- `--memory-limit`: Memory limit in GB
+- `--quantize`: Quantization level (none/8bit/4bit)
+- `--debug`: Enable debug logging
+- `--output`: Output file for results
 
 ## 🗺️ Behavioral Topology Format
 
@@ -452,6 +631,26 @@ Reliable model differentiation through behavioral analysis:
 - Optional homomorphic operations
 - Differential privacy support
 
+### ⚠️ Adversarial Testing Capabilities
+
+**IMPORTANT**: The adversarial generation features are for authorized security research ONLY.
+
+REV includes sophisticated adversarial prompt generation for model robustness testing:
+
+**Attack Categories:**
+1. **Extraction Attacks**: Divergence Attack (150x faster), dataset extraction
+2. **Jailbreaking**: MRCJ (>90% success), PAIR algorithm, special characters
+3. **Inference Attacks**: SPV-MIA, two-stage inversion (38-75% success)
+4. **Analysis Tools**: Alignment faking detection, deception patterns
+
+**Safety Controls:**
+- All dangerous prompts wrapped with research context
+- Warning labels on high-risk prompts
+- Research-only flags in metadata
+- Opt-in required for dangerous generation (`--include-dangerous`)
+
+See [ADVERSARIAL_CAPABILITIES.md](ADVERSARIAL_CAPABILITIES.md) for detailed documentation and ethical guidelines.
+
 ## 📚 Documentation
 
 - [Full Technical Paper](docs/Restriction%20Enzyme%20Verification%20(REV)%20for%20Memory-Bounded,%20Black-Box%20LLM%20Comparison.md)
@@ -490,4 +689,4 @@ REV builds upon:
 
 ---
 
-**Status**: Production Ready | **Version**: 2.0 | **Last Updated**: August 31, 2025
+**Status**: Production Ready | **Version**: 3.0 | **Last Updated**: September 2, 2025

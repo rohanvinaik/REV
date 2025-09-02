@@ -1,0 +1,264 @@
+[nltk_data] Downloading package wordnet to
+[nltk_data]     /Users/rohanvinaik/nltk_data...
+[nltk_data]   Package wordnet is already up-to-date!
+Traceback (most recent call last):
+  File "/Users/rohanvinaik/REV/test_dynamic_synthesis.py", line 302, in main
+    results[test_name] = test_func()
+                         ^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/test_dynamic_synthesis.py", line 259, in test_batch_generation
+    batch = system.generate_batch(
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 1250, in generate_batch
+    prompt = self.generate_prompt(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 1163, in generate_prompt
+    return self.generate_prompt(template_types, domain, context, complexity, ensure_quality)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 1163, in generate_prompt
+    return self.generate_prompt(template_types, domain, context, complexity, ensure_quality)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 1163, in generate_prompt
+    return self.generate_prompt(template_types, domain, context, complexity, ensure_quality)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  [Previous line repeated 945 more times]
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 1150, in generate_prompt
+    base_prompt = self.context_generator.scale_difficulty(base_prompt, complexity)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 498, in scale_difficulty
+    prompt = self._complexify_vocabulary(prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/REV/src/challenges/dynamic_synthesis.py", line 533, in _complexify_vocabulary
+    doc = nlp(text)
+          ^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/spacy/language.py", line 1057, in __call__
+    error_handler(name, proc, [doc], e)
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/spacy/util.py", line 1722, in raise_error
+    raise e
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/spacy/language.py", line 1052, in __call__
+    doc = proc(doc, **component_cfg.get(name, {}))  # type: ignore[call-arg]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "spacy/pipeline/trainable_pipe.pyx", line 56, in spacy.pipeline.trainable_pipe.TrainablePipe.__call__
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/spacy/util.py", line 1722, in raise_error
+    raise e
+  File "spacy/pipeline/trainable_pipe.pyx", line 52, in spacy.pipeline.trainable_pipe.TrainablePipe.__call__
+  File "spacy/pipeline/transition_parser.pyx", line 264, in spacy.pipeline.transition_parser.Parser.predict
+  File "spacy/pipeline/transition_parser.pyx", line 285, in spacy.pipeline.transition_parser.Parser.greedy_parse
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 334, in predict
+    return self._func(self, X, is_train=False)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/spacy/ml/tb_framework.py", line 34, in forward
+    step_model = ParserStepModel(
+                 ^^^^^^^^^^^^^^^^
+  File "spacy/ml/parser_model.pyx", line 250, in spacy.ml.parser_model.ParserStepModel.__init__
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/chain.py", line 54, in forward
+    Y, inc_layer_grad = layer(X, is_train=is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/chain.py", line 54, in forward
+    Y, inc_layer_grad = layer(X, is_train=is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/with_array.py", line 42, in forward
+    return cast(Tuple[SeqT, Callable], _list_forward(model, Xseq, is_train))
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/with_array.py", line 77, in _list_forward
+    Yf, get_dXf = layer(Xf, is_train)
+                  ^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/chain.py", line 54, in forward
+    Y, inc_layer_grad = layer(X, is_train=is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/residual.py", line 41, in forward
+    Y, backprop_layer = model.layers[0](X, is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/chain.py", line 54, in forward
+    Y, inc_layer_grad = layer(X, is_train=is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/chain.py", line 54, in forward
+    Y, inc_layer_grad = layer(X, is_train=is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/chain.py", line 54, in forward
+    Y, inc_layer_grad = layer(X, is_train=is_train)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/model.py", line 310, in __call__
+    return self._func(self, X, is_train=is_train)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/layernorm.py", line 24, in forward
+    N, mu, var = _get_moments(model.ops, X)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/thinc/layers/layernorm.py", line 74, in _get_moments
+    mu: Floats2d = X.mean(axis=1, keepdims=True)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/site-packages/numpy/core/_methods.py", line 120, in _mean
+    with _no_nep50_warning():
+         ^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/contextlib.py", line 301, in helper
+    return _GeneratorContextManager(func, args, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/rohanvinaik/miniconda3/lib/python3.11/contextlib.py", line 105, in __init__
+    self.gen = func(*args, **kwds)
+               ^^^^^^^^^^^^^^^^^^^
+RecursionError: maximum recursion depth exceeded
+============================================================
+DYNAMIC PROMPT SYNTHESIS SYSTEM TEST SUITE
+============================================================
+
+============================================================
+TESTING TEMPLATE COMBINATION ENGINE
+============================================================
+
+Simple Question Template:
+  the What is democracy?
+
+Combined Question + Reasoning:
+  the the What is genetics ? To elaborate , presumption that development is important and challenges must be considered , what can we conclude about genetics ? Step 1: Consider the implications of this. Next, analyze the underlying assumptions. Then, evaluate potential counterarguments.
+
+Semantically Blended Prompt:
+  What is quantum computing? Alternatively, how does {concept1} differ from {concept2} in terms of practical applications?
+
+✅ Template Combination passed
+
+============================================================
+TESTING CONTEXT-AWARE GENERATION
+============================================================
+
+Context History:
+  Q1: What is machine learning?
+  A1: Machine learning is a subset of AI......
+  Q2: How does it differ from traditional programming?
+  A2: Unlike traditional programming......
+  Q3: What are neural networks?
+  A3: Neural networks are computational models......
+
+Context-Aware Follow-up:
+  Difficulty: 1.00
+  Prompt: the Building on the previous point about computational models, What is genetics?
+
+Adaptively Scaled Prompt (harder):
+  Explain the concept.
+
+✅ Context-Aware Generation passed
+
+============================================================
+TESTING DOMAIN-SPECIFIC SYNTHESIS
+============================================================
+
+SCIENTIFIC Domain:
+  Base: Analyze the statistical significance of result given sample size and confidence level.
+  With Jargon: Analyze the statistical significance of result given sample size (standard deviation) and confidence level.
+
+MATHEMATICAL Domain:
+  Base: Demonstrate the relationship between concept1 and concept2 using integrate.
+  With Jargon: Demonstrate the (manifold) relationship between concept1 and concept2 using integrate.
+
+TECHNICAL Domain:
+  Base: Implement feature ensuring non functional requirements.
+  With Jargon: Implement feature ensuring non functional requirements.
+
+PHILOSOPHICAL Domain:
+  Base: Critically examine the assumption that belief.
+  With Jargon: Critically examine the assumption that belief.
+
+Cross-Domain (Science + Philosophy):
+  What are the epistemological implications of data?
+
+Technical Edge Cases:
+  1. What happens during network partition ? Step 1: Consider the implications of this. Next, analyze the underlying assumptions. Then, evaluate potential counterarguments. Subsequently, synthesize the different perspectives.
+  2. How does the system handle race conditions ? Step 1: Consider the implications of this. Next, analyze the underlying assumptions. Then, evaluate potential counterarguments. Subsequently, synthesize the different perspectives.
+  3. How do you guarantee information consistency in distributed failure ? Step 1: Consider the implications of this. Next, analyze the underlying assumptions. Then, evaluate potential counterarguments. Subsequently, synthesize the different perspectives.
+
+✅ Domain-Specific Synthesis passed
+
+============================================================
+TESTING QUALITY CONTROL PIPELINE
+============================================================
+
+Prompt: What is the the capital of France?
+  Valid: False
+  Errors: ['Repeated word: the', 'Sentence fragment: What is the the capital of Fra...']
+
+Prompt: capital of France is what?
+  Valid: False
+  Errors: ['Missing determiner before: capital', 'Sentence fragment: capital of France is what?...']
+
+Prompt: Explain quantum mechanics and its applications in modern technology.
+  Valid: False
+  Errors: ['Sentence fragment: Explain quantum mechanics and ...']
+
+Coherence Scores:
+  Coherent text: 0.51
+  Incoherent text: 0.42
+
+Complexity Metrics:
+  Simple: FK Grade=-1.8
+  Complex: FK Grade=22.9
+
+✅ Quality Control Pipeline passed
+
+============================================================
+TESTING KDF PROMPT GENERATOR INTEGRATION
+============================================================
+
+Generated 10 challenges:
+
+Challenge Type Distribution:
+  dynamic_synthesis: 4 (40%)
+  unknown: 6 (60%)
+
+Sample Dynamic Synthesis Challenges:
+
+  1. Prompt: the How does climate change differ from blockchain in terms of implications?...
+     Domain: mixed
+     Difficulty: 1
+     Diversity Score: 0.95
+
+  2. Prompt: the To clarify your answer on implications , specifically regarding How does commonwealth differ fro...
+     Domain: mixed
+     Difficulty: 3
+     Diversity Score: 0.95
+
+  3. Prompt: presumption your response about the implicit in assumptions , how does this connect to Explain quant...
+     Domain: mixed
+     Difficulty: 2
+     Diversity Score: 0.95
+
+✅ KDF Integration passed
+
+============================================================
+TESTING BATCH GENERATION WITH DIVERSITY
+============================================================
+
+❌ Batch Generation failed: maximum recursion depth exceeded
+
+============================================================
+TEST SUMMARY
+============================================================
+Template Combination          : ✅ PASSED
+Context-Aware Generation      : ✅ PASSED
+Domain-Specific Synthesis     : ✅ PASSED
+Quality Control Pipeline      : ✅ PASSED
+KDF Integration               : ✅ PASSED
+Batch Generation              : ❌ FAILED
+
+⚠️ Some tests failed. Review output above.

@@ -35,12 +35,18 @@ from src.models.metal_accelerated_inference import MetalAcceleratedInference, ge
 from src.rev_pipeline import REVPipeline
 from src.hdc.encoder import HypervectorEncoder, HypervectorConfig
 from src.hdc.adaptive_encoder import AdaptiveSparsityEncoder, AdjustmentStrategy
+from src.hdc.unified_fingerprint import UnifiedFingerprintGenerator, FingerprintConfig, UnifiedFingerprint
+from src.analysis.unified_model_analysis import UnifiedModelAnalyzer, ComprehensiveAnalysis, ModelRelationship
 from src.challenges.pot_challenge_generator import PoTChallengeGenerator
+from src.challenges.kdf_prompts import KDFPromptGenerator, AdversarialType
 from src.hypervector.hamming import HammingDistanceOptimized
 from src.core.sequential import SequentialState, TestType
 from src.hypervector.similarity import AdvancedSimilarity
 from src.diagnostics.probe_monitor import get_probe_monitor, reset_probe_monitor
 from src.hdc.behavioral_sites import BehavioralSites
+from src.challenges.cassette_executor import CassetteExecutor, CassetteExecutionConfig
+from src.challenges.advanced_probe_cassettes import ProbeType
+from src.analysis.behavior_profiler import BehaviorProfiler, integrate_with_rev_pipeline
 
 # Configure logging
 def setup_logging(debug: bool = False, log_file: Optional[str] = None):
@@ -88,7 +94,15 @@ class REVUnified:
         enable_behavioral_analysis: bool = True,
         enable_pot_challenges: bool = True,
         enable_paper_validation: bool = True,
-        memory_limit_gb: Optional[float] = None
+        enable_cassettes: bool = False,
+        enable_profiler: bool = False,
+        enable_adversarial: bool = False,
+        adversarial_config: Optional[Dict[str, Any]] = None,
+        memory_limit_gb: Optional[float] = None,
+        enable_unified_fingerprints: bool = False,
+        fingerprint_config: Optional[Dict[str, Any]] = None,
+        enable_adversarial_detection: bool = False,
+        adversarial_detection_config: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize unified REV pipeline.
@@ -98,13 +112,25 @@ class REVUnified:
             enable_behavioral_analysis: Enable behavioral site discovery
             enable_pot_challenges: Use sophisticated PoT challenges
             enable_paper_validation: Validate paper claims
+            enable_cassettes: Enable Phase 2 cassette-based analysis
+            enable_profiler: Enable behavioral profiling system
+            enable_adversarial: Enable adversarial prompt generation
+            adversarial_config: Configuration for adversarial generation
             memory_limit_gb: Memory limit in GB (for local loading only)
         """
         self.debug = debug
         self.enable_behavioral_analysis = enable_behavioral_analysis
         self.enable_pot_challenges = enable_pot_challenges
         self.enable_paper_validation = enable_paper_validation
+        self.enable_cassettes = enable_cassettes
+        self.enable_profiler = enable_profiler
+        self.enable_adversarial = enable_adversarial
+        self.adversarial_config = adversarial_config or {}
         self.memory_limit_gb = memory_limit_gb or 36  # Default 36GB as per paper
+        self.enable_unified_fingerprints = enable_unified_fingerprints
+        self.fingerprint_config = fingerprint_config or {}
+        self.enable_adversarial_detection = enable_adversarial_detection
+        self.adversarial_detection_config = adversarial_detection_config or {}
         
         self.logger = logging.getLogger(__name__)
         
@@ -113,6 +139,9 @@ class REVUnified:
         self.hypervectors = {}
         self.models_processed = []
         self.behavioral_profiles = {}
+        self.unified_fingerprints = {}  # Storage for unified fingerprints
+        self.unified_analyzer = None  # Will be initialized if enabled
+        self.comprehensive_analyses = {}  # Storage for comprehensive analyses
         
         # Initialize probe monitor for diagnostics
         self.probe_monitor = get_probe_monitor() if debug else None
@@ -133,6 +162,24 @@ class REVUnified:
             max_sparsity=0.2,
             adjustment_strategy=AdjustmentStrategy.ADAPTIVE
         )
+        
+        # Initialize unified fingerprint generator if enabled
+        self.fingerprint_generator = None
+        if enable_unified_fingerprints:
+            fp_config = FingerprintConfig(**self.fingerprint_config)
+            self.fingerprint_generator = UnifiedFingerprintGenerator(
+                config=fp_config,
+                hdc_encoder=self.encoder
+            )
+        
+        # Initialize unified analyzer if enabled
+        if enable_adversarial_detection or enable_unified_fingerprints:
+            self.unified_analyzer = UnifiedModelAnalyzer(
+                sensitivity=self.adversarial_detection_config.get("sensitivity", 0.1),
+                phase_min_length=self.adversarial_detection_config.get("phase_min_length", 3),
+                transition_threshold=self.adversarial_detection_config.get("transition_threshold", 0.2)
+            )
+            self.logger.info(f"Initialized unified model analyzer")
         
         # Initialize behavioral sites analyzer
         if enable_behavioral_analysis:
@@ -158,6 +205,22 @@ class REVUnified:
         # Store inference managers for cleanup
         self.inference_managers = {}
         
+        # Initialize cassette executor if enabled
+        self.cassette_executor = None
+        if enable_cassettes:
+            self.logger.info("Initializing cassette executor for Phase 2 analysis...")
+        
+        # Initialize behavior profiler if enabled
+        self.behavior_profiler = None
+        if enable_profiler:
+            self.logger.info("Initializing behavior profiler...")
+            self.behavior_profiler = BehaviorProfiler({
+                "enable_multi_signal": True,
+                "enable_streaming": True
+            })
+            # Enhance pipeline with profiling
+            self.pipeline = integrate_with_rev_pipeline(self.pipeline)
+        
         self.logger.info("=" * 80)
         self.logger.info("REV UNIFIED PIPELINE v3.0")
         self.logger.info("=" * 80)
@@ -165,6 +228,11 @@ class REVUnified:
         self.logger.info(f"Behavioral Analysis: {enable_behavioral_analysis}")
         self.logger.info(f"PoT Challenges: {enable_pot_challenges}")
         self.logger.info(f"Paper Validation: {enable_paper_validation}")
+        self.logger.info(f"Cassette Analysis: {enable_cassettes}")
+        self.logger.info(f"Behavior Profiler: {enable_profiler}")
+        self.logger.info(f"Adversarial Generation: {enable_adversarial}")
+        self.logger.info(f"Unified Fingerprints: {enable_unified_fingerprints}")
+        self.logger.info(f"Adversarial Detection: {enable_adversarial_detection}")
         self.logger.info(f"Memory Limit: {self.memory_limit_gb}GB")
         self.logger.info("=" * 80)
     
@@ -333,24 +401,89 @@ class REVUnified:
         print(f"\n[Stage 3/7] Generating PoT Challenges...")
         start = time.time()
         
-        if self.enable_pot_challenges:
+        if self.enable_adversarial and self.kdf_generator:
+            # Generate adversarial challenges
+            if self.adversarial_suite:
+                # Generate comprehensive adversarial suite
+                adversarial_prompts = self.kdf_generator.generate_comprehensive_adversarial_suite(
+                    base_index=0,
+                    include_dangerous=self.include_dangerous
+                )
+                challenges_list = adversarial_prompts
+                print(f"✅ Generated comprehensive adversarial suite with {len(challenges_list)} prompts")
+            else:
+                # Generate mixed challenges with specified ratio
+                n_adversarial = int(challenges * self.adversarial_ratio)
+                n_regular = challenges - n_adversarial
+                
+                adversarial_challenges = []
+                regular_challenges = []
+                
+                # Generate adversarial challenges
+                if n_adversarial > 0:
+                    if self.adversarial_types:
+                        # Generate specific types
+                        for i, attack_type in enumerate(self.adversarial_types[:n_adversarial]):
+                            method_map = {
+                                'divergence_attack': self.kdf_generator.generate_divergence_attack,
+                                'mrcj': lambda idx: self.kdf_generator.generate_multi_round_conversational_jailbreak(idx, rounds=1)[0],
+                                'special_char': self.kdf_generator.generate_special_character_triggers,
+                                'two_stage_inversion': self.kdf_generator.generate_two_stage_inversion_attack,
+                                'spv_mia': self.kdf_generator.generate_spv_mia_probe,
+                                'alignment_faking': self.kdf_generator.generate_alignment_faking_detector,
+                                'pair_algorithm': lambda idx: self.kdf_generator.generate_pair_algorithm_jailbreak(idx, iterations=2),
+                                'cross_lingual': self.kdf_generator.generate_cross_lingual_inversion,
+                                'temperature_exploit': self.kdf_generator.generate_temperature_exploitation,
+                                'dataset_extraction': self.kdf_generator.generate_dataset_extraction_probe,
+                                'deception_pattern': self.kdf_generator.generate_deception_pattern_detector
+                            }
+                            if attack_type in method_map:
+                                result_prompt = method_map[attack_type](i)
+                                adversarial_challenges.append(result_prompt)
+                    else:
+                        # Generate random adversarial challenges
+                        suite = self.kdf_generator.generate_comprehensive_adversarial_suite(
+                            base_index=0,
+                            include_dangerous=self.include_dangerous
+                        )
+                        adversarial_challenges = suite[:n_adversarial]
+                
+                # Generate regular challenges
+                if n_regular > 0:
+                    if self.enable_pot_challenges:
+                        regular_challenges = self.pipeline.generate_pot_challenges(
+                            n=n_regular,
+                            focus=challenge_focus
+                        )
+                    else:
+                        regular_challenges = [
+                            {"prompt": f"Test prompt {i}", "category": "test"}
+                            for i in range(n_regular)
+                        ]
+                
+                challenges_list = adversarial_challenges + regular_challenges
+                print(f"✅ Generated {len(adversarial_challenges)} adversarial + {len(regular_challenges)} regular challenges")
+        
+        elif self.enable_pot_challenges:
             challenges_list = self.pipeline.generate_pot_challenges(
                 n=challenges, 
                 focus=challenge_focus
             )
+            print(f"✅ Generated {len(challenges_list)} PoT challenges")
         else:
             # Simple challenges as fallback
             challenges_list = [
                 {"prompt": f"Test prompt {i}", "category": "test"}
                 for i in range(challenges)
             ]
-        
-        print(f"✅ Generated {len(challenges_list)} challenges")
+            print(f"✅ Generated {len(challenges_list)} simple challenges")
         
         result["stages"]["challenges"] = {
             "count": len(challenges_list),
             "time": time.time() - start,
-            "pot_enabled": self.enable_pot_challenges
+            "pot_enabled": self.enable_pot_challenges,
+            "adversarial_enabled": self.enable_adversarial,
+            "adversarial_ratio": self.adversarial_ratio if self.enable_adversarial else 0
         }
         
         # Stage 4: Process Challenges & Generate Hypervectors
@@ -360,6 +493,7 @@ class REVUnified:
         hypervectors = []
         responses = []
         divergence_scores = []
+        unified_fingerprints = []
         
         for i, challenge in enumerate(challenges_list, 1):
             print(f"  Challenge {i}/{len(challenges_list)}...", end='')
@@ -383,12 +517,35 @@ class REVUnified:
                     )
                     
                     if rev_result["success"]:
-                        responses.append(rev_result.get("response", ""))
+                        response = rev_result.get("response", "")
+                        responses.append(response)
+                        
                         if "hypervector" in rev_result:
                             hypervectors.append(rev_result["hypervector"])
                         if "divergence" in rev_result:
                             divergence_scores.append(rev_result["divergence"])
-                        print(" ✓")
+                        
+                        # Generate unified fingerprint if enabled
+                        if self.enable_unified_fingerprints and self.fingerprint_generator:
+                            try:
+                                layer_activations = rev_result.get("layer_activations", {})
+                                if layer_activations:
+                                    unified_fp = self.fingerprint_generator.generate_unified_fingerprint(
+                                        model_interface=inference,
+                                        prompt=prompt,
+                                        layer_activations=layer_activations,
+                                        response=response,
+                                        model_id=model_name
+                                    )
+                                    unified_fingerprints.append(unified_fp)
+                                    print(" ✓ (+ fingerprint)")
+                                else:
+                                    print(" ✓ (no activations)")
+                            except Exception as e:
+                                self.logger.warning(f"Failed to generate unified fingerprint: {e}")
+                                print(" ✓ (fingerprint failed)")
+                        else:
+                            print(" ✓")
                     else:
                         print(" ✗")
                 else:
@@ -406,7 +563,7 @@ class REVUnified:
                 self.logger.error(f"Challenge {i} failed: {e}")
                 print(" ✗")
         
-        # Combine hypervectors
+        # Combine hypervectors and unified fingerprints
         if hypervectors:
             combined_hv = np.mean(hypervectors, axis=0)
             self.hypervectors[model_name] = combined_hv
@@ -419,13 +576,40 @@ class REVUnified:
             if avg_divergence:
                 print(f"   Average divergence: {avg_divergence:.3f}")
         
+        # Process unified fingerprints
+        if unified_fingerprints:
+            self.unified_fingerprints[model_name] = unified_fingerprints
+            avg_quality = np.mean([fp.fingerprint_quality for fp in unified_fingerprints])
+            avg_binding = np.mean([fp.binding_strength for fp in unified_fingerprints])
+            
+            print(f"✅ Generated {len(unified_fingerprints)} unified fingerprint(s)")
+            print(f"   Average quality: {avg_quality:.3f}")
+            print(f"   Average binding strength: {avg_binding:.3f}")
+            
+            # Save fingerprints to file if requested
+            if self.fingerprint_config.get('save_fingerprints', False):
+                fingerprint_dir = Path("fingerprints") / model_name
+                fingerprint_dir.mkdir(parents=True, exist_ok=True)
+                
+                for i, fp in enumerate(unified_fingerprints):
+                    fp_path = fingerprint_dir / f"fingerprint_{i}.json"
+                    self.fingerprint_generator.save_fingerprint(fp, str(fp_path))
+                
+                print(f"   Saved fingerprints to {fingerprint_dir}")
+        
+        elif self.enable_unified_fingerprints:
+            print("⚠️  Unified fingerprints enabled but none generated (local mode required)")
+        
         result["stages"]["processing"] = {
             "success": len(hypervectors) > 0,
             "hypervectors_generated": len(hypervectors),
             "responses_generated": len(responses),
+            "unified_fingerprints_generated": len(unified_fingerprints),
             "time": time.time() - start,
             "sparsity": sparsity if hypervectors else None,
-            "avg_divergence": avg_divergence if divergence_scores else None
+            "avg_divergence": avg_divergence if divergence_scores else None,
+            "avg_fingerprint_quality": avg_quality if unified_fingerprints else None,
+            "avg_binding_strength": avg_binding if unified_fingerprints else None
         }
         
         # Stage 5: Behavioral Analysis
@@ -508,8 +692,73 @@ class REVUnified:
         
         return result
     
+    def run_cassette_analysis(
+        self,
+        model_path: str,
+        topology_file: str,
+        probe_types: Optional[List[str]] = None,
+        output_dir: str = "./cassette_results"
+    ) -> Dict[str, Any]:
+        """
+        Run Phase 2 cassette-based analysis on a model.
+        
+        Args:
+            model_path: Path to model
+            topology_file: Path to topology JSON from Phase 1
+            probe_types: List of probe types to include (None = all)
+            output_dir: Directory for cassette results
+            
+        Returns:
+            Cassette execution results
+        """
+        self.logger.info("=" * 80)
+        self.logger.info("PHASE 2: CASSETTE-BASED ANALYSIS")
+        self.logger.info("=" * 80)
+        
+        # Configure cassette execution
+        config = CassetteExecutionConfig(
+            topology_file=topology_file,
+            output_dir=output_dir,
+            max_probes_per_layer=10,
+            probe_timeout=120.0,
+            probe_types=[ProbeType[pt.upper()] for pt in probe_types] if probe_types else None
+        )
+        
+        # Initialize executor
+        self.cassette_executor = CassetteExecutor(config)
+        
+        # Generate execution plan
+        execution_plan = self.cassette_executor.generate_execution_plan()
+        self.logger.info(f"Execution plan covers {len(execution_plan)} layers")
+        
+        # Get model interface (reuse existing or create new)
+        if model_path in self.inference_managers:
+            model_interface = self.inference_managers[model_path]
+        else:
+            # Create appropriate model interface
+            if model_path.startswith("http"):
+                # API model
+                model_interface = APIOnlyInference(APIOnlyConfig(model_name=model_path))
+            else:
+                # Local model
+                model_interface = UnifiedInferenceManager(
+                    model_path=model_path,
+                    device="auto",
+                    memory_limit_mb=self.memory_limit_gb * 1024
+                )
+            self.inference_managers[model_path] = model_interface
+        
+        # Execute cassette plan
+        results = self.cassette_executor.execute_plan(execution_plan, model_interface)
+        
+        # Generate and print report
+        report = self.cassette_executor.generate_report(results)
+        print(report)
+        
+        return results
+    
     def compare_models(self, model1: str, model2: str) -> Dict[str, Any]:
-        """Compare two processed models."""
+        """Compare two processed models using both traditional and unified fingerprints."""
         print(f"\n{'='*80}")
         print(f"Comparing: {model1} vs {model2}")
         print(f"{'='*80}")
@@ -518,10 +767,11 @@ class REVUnified:
             print("❌ Both models must be processed first")
             return {"error": "Models not processed"}
         
+        comparison = {}
+        
+        # Traditional hypervector comparison
         hv1 = self.hypervectors[model1]
         hv2 = self.hypervectors[model2]
-        
-        comparison = {}
         
         # Cosine similarity
         dot_product = np.dot(hv1, hv2)
@@ -533,7 +783,7 @@ class REVUnified:
         else:
             cosine_sim = 0
         
-        comparison["cosine_similarity"] = float(cosine_sim)
+        comparison["traditional_cosine_similarity"] = float(cosine_sim)
         
         # Hamming distance
         hamming_calc = HammingDistanceOptimized()
@@ -544,23 +794,122 @@ class REVUnified:
         comparison["hamming_distance"] = int(hamming_dist)
         comparison["normalized_hamming"] = float(hamming_dist / len(binary_hv1))
         
-        # Decision
-        threshold = 0.7
-        if cosine_sim > threshold:
-            decision = "SAME/SIMILAR"
-            confidence = (cosine_sim - threshold) / (1 - threshold)
+        # Comprehensive unified analysis if available
+        comprehensive_analysis = None
+        if (model1 in self.unified_fingerprints and 
+            model2 in self.unified_fingerprints and
+            self.unified_analyzer):
+            
+            fps1 = self.unified_fingerprints[model1]
+            fps2 = self.unified_fingerprints[model2]
+            
+            if fps1 and fps2:
+                # Perform comprehensive analysis
+                comprehensive_analysis = self.unified_analyzer.analyze_models(
+                    fingerprints_a=fps1,
+                    fingerprints_b=fps2,
+                    prompts=None,  # Could pass prompts if available
+                    layer_activations_a=None,  # Could pass if stored
+                    layer_activations_b=None
+                )
+                
+                # Store for later reference
+                analysis_key = f"{model1}_vs_{model2}"
+                self.comprehensive_analyses[analysis_key] = comprehensive_analysis
+                
+                # Print comprehensive report
+                report = self.unified_analyzer.generate_report(comprehensive_analysis)
+                print(report)
+                
+                # Create simplified comparison dict for backward compatibility
+                unified_comparison = {
+                    "overall_similarity": comprehensive_analysis.overall_similarity,
+                    "decision": comprehensive_analysis.inferred_relationship.value,
+                    "confidence": comprehensive_analysis.relationship_confidence,
+                    "scaling_analysis": {
+                        "is_likely_scaled_version": comprehensive_analysis.inferred_relationship == ModelRelationship.SCALED_VERSION,
+                        "layer_ratio": comprehensive_analysis.layer_ratio,
+                        "quality_ratio": comprehensive_analysis.magnitude_ratio
+                    }
+                }
         else:
-            decision = "DIFFERENT"
-            confidence = (threshold - cosine_sim) / threshold
+            unified_comparison = {}
         
-        comparison["decision"] = decision
-        comparison["confidence"] = float(confidence)
+        comparison["unified_fingerprint_comparison"] = unified_comparison
+        comparison["comprehensive_analysis"] = comprehensive_analysis
         
-        print(f"Cosine similarity: {cosine_sim:.4f}")
-        print(f"Hamming distance: {hamming_dist} ({comparison['normalized_hamming']:.1%} different)")
-        print(f"\nDecision: {decision} (confidence: {confidence:.1%})")
+        # Overall decision (prioritize comprehensive analysis if available)
+        if comprehensive_analysis:
+            main_similarity = comprehensive_analysis.overall_similarity
+            decision_source = "comprehensive_analysis"
+            decision = comprehensive_analysis.inferred_relationship.value
+            confidence = comprehensive_analysis.relationship_confidence
+        elif unified_comparison:
+            main_similarity = unified_comparison["overall_similarity"]
+            decision_source = "unified_fingerprint"
+            # Use threshold-based decision
+            threshold = 0.7
+            if main_similarity > threshold:
+                decision = "SAME/SIMILAR"
+                confidence = (main_similarity - threshold) / (1 - threshold)
+            else:
+                decision = "DIFFERENT"  
+                confidence = (threshold - main_similarity) / threshold
+        else:
+            main_similarity = cosine_sim
+            decision_source = "traditional_hypervector"
+            # Use threshold-based decision
+            threshold = 0.7
+            if main_similarity > threshold:
+                decision = "SAME/SIMILAR"
+                confidence = (main_similarity - threshold) / (1 - threshold)
+            else:
+                decision = "DIFFERENT"  
+                confidence = (threshold - main_similarity) / threshold
+        
+        comparison["final_decision"] = decision
+        comparison["final_confidence"] = float(confidence)
+        comparison["decision_source"] = decision_source
+        
+        # Only print traditional analysis if comprehensive wasn't done
+        if not comprehensive_analysis:
+            print(f"\n📊 TRADITIONAL ANALYSIS:")
+            print(f"Cosine similarity: {cosine_sim:.4f}")
+            print(f"Hamming distance: {hamming_dist} ({comparison['normalized_hamming']:.1%} different)")
+            print(f"\n🎯 FINAL DECISION: {decision} (confidence: {confidence:.1%}) [{decision_source}]")
         
         return comparison
+    
+    def _average_fingerprints(self, fingerprints: List[UnifiedFingerprint]) -> UnifiedFingerprint:
+        """Average multiple unified fingerprints into one representative fingerprint."""
+        if not fingerprints:
+            raise ValueError("Cannot average empty fingerprint list")
+        
+        if len(fingerprints) == 1:
+            return fingerprints[0]
+        
+        # Average the hypervector components
+        avg_unified = np.mean([fp.unified_hypervector for fp in fingerprints], axis=0)
+        avg_prompt = np.mean([fp.prompt_hypervector for fp in fingerprints], axis=0)
+        avg_pathway = np.mean([fp.pathway_hypervector for fp in fingerprints], axis=0)
+        avg_response = np.mean([fp.response_hypervector for fp in fingerprints], axis=0)
+        
+        # Use first fingerprint as template and update vectors
+        representative = fingerprints[0]
+        representative.unified_hypervector = avg_unified
+        representative.prompt_hypervector = avg_prompt
+        representative.pathway_hypervector = avg_pathway
+        representative.response_hypervector = avg_response
+        
+        # Average quality metrics
+        representative.fingerprint_quality = np.mean([fp.fingerprint_quality for fp in fingerprints])
+        representative.binding_strength = np.mean([fp.binding_strength for fp in fingerprints])
+        
+        # Update metadata
+        representative.prompt_text = f"[AVERAGED from {len(fingerprints)} prompts]"
+        representative.response_text = f"[AVERAGED from {len(fingerprints)} responses]"
+        
+        return representative
     
     def _validate_paper_claims(self, result: Dict[str, Any], use_local: bool) -> Dict[str, Any]:
         """Validate paper claims based on processing results."""
@@ -765,6 +1114,148 @@ Examples:
         help="Skip paper claims validation"
     )
     
+    # Cassette features (Phase 2 analysis)
+    parser.add_argument(
+        "--cassettes",
+        action="store_true",
+        help="Enable Phase 2 cassette-based deep analysis"
+    )
+    parser.add_argument(
+        "--cassette-topology",
+        help="Path to topology JSON for cassette analysis"
+    )
+    parser.add_argument(
+        "--cassette-types",
+        nargs="+",
+        choices=["syntactic", "semantic", "recursive", "transform", "theory_of_mind", "counterfactual", "meta"],
+        help="Probe types to include in cassette analysis"
+    )
+    parser.add_argument(
+        "--cassette-output",
+        default="./cassette_results",
+        help="Output directory for cassette results (default: ./cassette_results)"
+    )
+    
+    # Behavior profiler
+    parser.add_argument(
+        "--profiler",
+        action="store_true",
+        help="Enable behavioral profiling system"
+    )
+    
+    # Unified fingerprint generation
+    parser.add_argument(
+        "--unified-fingerprints",
+        action="store_true", 
+        help="Enable unified hypervector fingerprint generation (requires local mode)"
+    )
+    parser.add_argument(
+        "--fingerprint-dimension",
+        type=int,
+        default=10000,
+        help="Dimension for unified fingerprints (default: 10000)"
+    )
+    parser.add_argument(
+        "--fingerprint-sparsity", 
+        type=float,
+        default=0.15,
+        help="Sparsity for unified fingerprints (default: 0.15)"
+    )
+    parser.add_argument(
+        "--layer-sampling",
+        choices=["all", "uniform", "adaptive", "boundary"],
+        default="adaptive",
+        help="Layer sampling strategy for fingerprints (default: adaptive)"
+    )
+    parser.add_argument(
+        "--max-layers-sampled",
+        type=int,
+        default=20,
+        help="Maximum layers to sample for fingerprints (default: 20)" 
+    )
+    parser.add_argument(
+        "--save-fingerprints",
+        action="store_true",
+        help="Save unified fingerprints to files"
+    )
+    parser.add_argument(
+        "--enable-scaling-analysis",
+        action="store_true",
+        help="Enable cross-model scaling analysis in fingerprints"
+    )
+    parser.add_argument(
+        "--fingerprint-weights",
+        nargs=3,
+        type=float,
+        default=[0.3, 0.5, 0.2],
+        metavar=("PROMPT", "PATHWAY", "RESPONSE"),
+        help="Weights for prompt, pathway, response components (default: 0.3 0.5 0.2)"
+    )
+    
+    # Comprehensive analysis options
+    parser.add_argument(
+        "--comprehensive-analysis",
+        action="store_true",
+        help="Enable comprehensive model analysis with pattern detection"
+    )
+    parser.add_argument(
+        "--analysis-sensitivity",
+        type=float,
+        default=0.1,
+        help="Sensitivity for anomaly detection (0-1, default: 0.1)"
+    )
+    parser.add_argument(
+        "--phase-min-length",
+        type=int,
+        default=3,
+        help="Minimum layers for behavioral phase detection (default: 3)"
+    )
+    parser.add_argument(
+        "--transition-threshold",
+        type=float,
+        default=0.2,
+        help="Threshold for detecting layer transitions (default: 0.2)"
+    )
+    parser.add_argument(
+        "--save-analysis-report",
+        action="store_true",
+        help="Save comprehensive analysis report to file"
+    )
+    
+    # Adversarial prompt generation
+    parser.add_argument(
+        "--adversarial",
+        action="store_true",
+        help="Enable adversarial prompt generation for security testing"
+    )
+    parser.add_argument(
+        "--adversarial-ratio",
+        type=float,
+        default=0.1,
+        help="Ratio of adversarial prompts to generate (default: 0.1)"
+    )
+    parser.add_argument(
+        "--adversarial-types",
+        nargs="+",
+        choices=[
+            "jailbreak", "divergence_attack", "mrcj", "special_char_trigger",
+            "temperature_exploit", "two_stage_inversion", "cross_lingual_inversion",
+            "pii_extraction", "spv_mia", "dataset_extraction", "alignment_faking",
+            "hidden_preference", "pair_algorithm", "deception_pattern"
+        ],
+        help="Specific adversarial attack types to include"
+    )
+    parser.add_argument(
+        "--include-dangerous",
+        action="store_true",
+        help="Include high-risk adversarial prompts (with safety wrappers)"
+    )
+    parser.add_argument(
+        "--adversarial-suite",
+        action="store_true",
+        help="Generate comprehensive adversarial test suite"
+    )
+    
     # Output and debugging
     parser.add_argument(
         "--output",
@@ -797,7 +1288,39 @@ Examples:
         print(f"Memory Limit: {args.memory_limit}GB")
     print(f"Challenges: {args.challenges} ({args.challenge_focus} focus)")
     print(f"Debug: {args.debug}")
+    if args.cassettes:
+        print(f"Cassettes: Enabled (Types: {args.cassette_types or 'all'})")
+    if args.profiler:
+        print(f"Profiler: Enabled (16-dimensional behavioral signatures)")
+    if args.unified_fingerprints:
+        print(f"Unified Fingerprints: Enabled ({args.fingerprint_dimension}D)")
+        print(f"  Sampling: {args.layer_sampling} (max {args.max_layers_sampled} layers)")
+        print(f"  Weights: P{args.fingerprint_weights[0]:.1f}/W{args.fingerprint_weights[1]:.1f}/R{args.fingerprint_weights[2]:.1f}")
+        if args.save_fingerprints:
+            print(f"  Saving: Enabled")
+        if not args.local:
+            print(f"  ⚠️  Requires --local mode for full functionality")
     print("=" * 80)
+    
+    # Prepare fingerprint configuration
+    fingerprint_config = {
+        "dimension": args.fingerprint_dimension,
+        "sparsity": args.fingerprint_sparsity,
+        "layer_sampling": args.layer_sampling,
+        "max_layers_sampled": args.max_layers_sampled,
+        "enable_cross_scale_analysis": args.enable_scaling_analysis,
+        "save_fingerprints": args.save_fingerprints,
+        "prompt_weight": args.fingerprint_weights[0],
+        "pathway_weight": args.fingerprint_weights[1], 
+        "response_weight": args.fingerprint_weights[2]
+    }
+    
+    # Prepare analysis configuration
+    analysis_config = {
+        "sensitivity": args.analysis_sensitivity,
+        "phase_min_length": args.phase_min_length,
+        "transition_threshold": args.transition_threshold
+    }
     
     # Initialize pipeline
     rev = REVUnified(
@@ -805,6 +1328,12 @@ Examples:
         enable_behavioral_analysis=not args.no_behavioral,
         enable_pot_challenges=not args.no_pot,
         enable_paper_validation=not args.no_validation,
+        enable_cassettes=args.cassettes,
+        enable_profiler=args.profiler,
+        enable_unified_fingerprints=args.unified_fingerprints,
+        fingerprint_config=fingerprint_config,
+        enable_adversarial_detection=args.comprehensive_analysis,
+        adversarial_detection_config=analysis_config,
         memory_limit_gb=args.memory_limit
     )
     
@@ -825,6 +1354,24 @@ Examples:
             
             if "error" not in result:
                 print(f"\n✅ Successfully processed {result['model_name']}")
+                
+                # Run cassette analysis if enabled and topology available
+                if args.cassettes:
+                    topology_file = args.cassette_topology or f"{result['model_name']}_topology.json"
+                    
+                    # Check if topology exists (from phase 1 or provided)
+                    if Path(topology_file).exists():
+                        print(f"\n🔬 Running Phase 2 cassette analysis...")
+                        cassette_results = rev.run_cassette_analysis(
+                            model_path=model_path,
+                            topology_file=topology_file,
+                            probe_types=args.cassette_types,
+                            output_dir=args.cassette_output
+                        )
+                        result['cassette_analysis'] = cassette_results
+                    else:
+                        print(f"⚠️  Topology file not found: {topology_file}")
+                        print("    Run Phase 1 analysis first or provide --cassette-topology")
             else:
                 print(f"\n❌ Failed to process {model_path}: {result['error']}")
                 
@@ -850,6 +1397,15 @@ Examples:
         print("\nModel Comparisons:")
         for comp_name, comp_result in report["comparisons"].items():
             print(f"  • {comp_name}: {comp_result['decision']} ({comp_result['confidence']:.0%} confidence)")
+    
+    # Save comprehensive analysis reports if requested
+    if args.save_analysis_report and rev.comprehensive_analyses:
+        for analysis_key, analysis in rev.comprehensive_analyses.items():
+            analysis_file = f"analysis_{analysis_key}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            analysis_report = rev.unified_analyzer.generate_report(analysis)
+            with open(analysis_file, 'w') as f:
+                f.write(analysis_report)
+            print(f"📊 Analysis report saved: {analysis_file}")
     
     print(f"\n✅ Report saved to: {output_file}")
     
