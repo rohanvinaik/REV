@@ -206,7 +206,16 @@ class TokenVocabulary:
 
 
 class GeneticPromptOptimizer:
-    """Main class for evolutionary prompt optimization"""
+    """
+    Main class for evolutionary prompt optimization.
+    
+    NOTE: Performance metrics assume fitness evaluation without actual model queries.
+    In production with real model API calls, expect:
+    - 1-3 seconds per prompt for single model evaluation
+    - 3-10 seconds per prompt for multi-model discrimination
+    - Realistic throughput: 6-20 prompts/minute with API calls
+    - Current implementation: 100+ prompts/minute (fitness calculation only)
+    """
     
     def __init__(self, config: EvolutionConfig, seed: Optional[int] = None):
         """Initialize genetic optimizer"""
@@ -696,9 +705,15 @@ class GeneticPromptOptimizer:
         
         return child1, child2
     
-    def evaluate_fitness(self, chromosome: Chromosome, model_responses: Optional[Dict[str, str]] = None) -> float:
+    def evaluate_fitness(self, chromosome: Chromosome, model_responses: Optional[Dict[str, str]] = None,
+                        simulate_api_delay: bool = False) -> float:
         """Evaluate fitness of a chromosome"""
         prompt = chromosome.to_prompt()
+        
+        # Simulate realistic API query time if requested
+        if simulate_api_delay:
+            # Typical API response time: 0.5-2 seconds per model
+            time.sleep(random.uniform(0.01, 0.05))  # Reduced for testing, real would be 0.5-2.0
         
         # Calculate component scores
         discrimination = self._calculate_discrimination_score(chromosome, model_responses)
@@ -1162,11 +1177,17 @@ class GeneticPromptOptimizer:
             # Progress report
             if gen % 10 == 0:
                 elapsed = time.time() - start_time
-                prompts_per_minute = (gen + 1) * self.config.population_size / (elapsed / 60)
+                # More accurate: prompts actually evaluated in this run
+                total_prompts_evaluated = (gen + 1) * self.config.population_size
+                if elapsed > 0:
+                    prompts_per_minute = (total_prompts_evaluated / elapsed) * 60
+                else:
+                    prompts_per_minute = 0
                 print(f"Generation {gen}: Best={self.population.best_fitness:.3f}, "
                       f"Avg={self.population.average_fitness:.3f}, "
                       f"Diversity={self.population.diversity:.3f}, "
-                      f"Rate={prompts_per_minute:.1f} prompts/min")
+                      f"Evaluated={total_prompts_evaluated}, "
+                      f"Time={elapsed:.1f}s")
         
         return self.population
     
