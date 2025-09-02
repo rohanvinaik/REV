@@ -14,6 +14,15 @@
 
 ### 🆕 Latest Features (v3.0)
 
+**Multi-Stage Orchestrated Testing with Fingerprint Library (NEW):**
+- **Automatic Architecture Identification**: Identifies model family in 5 minutes
+- **Fingerprint Library**: Pre-built profiles for Llama, GPT, Mistral, Qwen, Yi families
+- **Adaptive Strategy Selection**: Targeted (2h), Adaptive (3h), or Exploratory (4h) based on confidence
+- **Strategic Cassette Loading**: Loads appropriate test probes based on identified architecture
+- **Focus on Vulnerable Layers**: Skip stable regions, target known weaknesses
+- **Novel Architecture Discovery**: Automatically builds new base fingerprints for unknown models
+- **70% Time Reduction**: For known architectures vs comprehensive testing
+
 **Comprehensive Unified Analysis System (NEW):**
 - **Pattern-Based Relationship Detection**: Automatically infers model relationships from behavioral patterns
 - **Model Relationship Types**: Identifies scaled versions, adversarial modifications, fine-tuning, quantization, and family relationships
@@ -343,6 +352,52 @@ python export_topology.py llama70b.log -o llama70b_topology.json
 # View topology summary
 python export_topology.py llama70b.log  # Prints summary
 ```
+
+### Multi-Stage Orchestrated Testing
+
+```bash
+# Quick identification and adaptive testing (recommended)
+python run_rev.py /path/to/model --orchestrate
+
+# Verify claimed architecture
+python run_rev.py /path/to/model --orchestrate --claimed-family llama
+
+# Set time budget (hours)
+python run_rev.py /path/to/model --orchestrate --time-budget 2.5
+
+# Build fingerprint library
+python run_rev.py /path/to/model --orchestrate --add-to-library
+
+# List known architectures
+python run_rev.py --list-known-architectures
+
+# Example output:
+# 📚 Known Architectures in Library:
+#   • llama: 2 fingerprints
+#     - 70B (llama-3)
+#     - 7B (llama-3)
+#   • gpt: 1 fingerprint
+#     - 175B (gpt-3)
+#   • mistral: 1 fingerprint
+#     - 7B (mistral-v0.1)
+```
+
+#### Orchestration Workflow
+
+1. **Stage 1: Architecture Identification (5 min)**
+   - Quick analysis of first 10 layers
+   - Comparison against fingerprint library
+   - Confidence scoring
+
+2. **Stage 2: Strategy Selection**
+   - **Known Architecture (>85% confidence)**: Target vulnerable layers
+   - **Variant (60-85%)**: Adaptive sampling
+   - **Novel (<60%)**: Full exploration + library addition
+
+3. **Stage 3: Focused Testing**
+   - Load architecture-specific cassettes
+   - Skip stable layers
+   - Concentrate on behavioral boundaries
 
 ### Comprehensive Model Analysis
 

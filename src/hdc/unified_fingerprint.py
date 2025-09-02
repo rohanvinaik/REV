@@ -31,7 +31,7 @@ from sklearn.preprocessing import StandardScaler
 # REV components
 from .encoder import HypervectorEncoder, HypervectorConfig, DEFAULT_DIMENSION
 from .behavioral_sites import BehavioralSites
-from .binding_operations import BindingOperator, BindingType
+from .binding_operations import BindingOperations, BindingType
 from ..crypto.merkle import build_merkle_tree, generate_merkle_proof
 from ..hypervector.similarity import AdvancedSimilarity
 from ..analysis.pattern_recognition import PatternRecognizer
@@ -149,7 +149,7 @@ class UnifiedFingerprintGenerator:
             self.encoder = HypervectorEncoder(hdc_config)
         
         # Initialize binding operations
-        self.binder = BindingOperator(
+        self.binder = BindingOperations(
             dimension=self.config.dimension,
             binding_type=self.config.binding_type
         )

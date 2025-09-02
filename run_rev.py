@@ -37,6 +37,8 @@ from src.hdc.encoder import HypervectorEncoder, HypervectorConfig
 from src.hdc.adaptive_encoder import AdaptiveSparsityEncoder, AdjustmentStrategy
 from src.hdc.unified_fingerprint import UnifiedFingerprintGenerator, FingerprintConfig, UnifiedFingerprint
 from src.analysis.unified_model_analysis import UnifiedModelAnalyzer, ComprehensiveAnalysis, ModelRelationship
+from src.fingerprint.strategic_orchestrator import StrategicTestingOrchestrator, OrchestrationPlan
+from src.fingerprint.model_library import ModelFingerprintLibrary
 from src.challenges.pot_challenge_generator import PoTChallengeGenerator
 from src.challenges.kdf_prompts import KDFPromptGenerator, AdversarialType
 from src.hypervector.hamming import HammingDistanceOptimized
@@ -142,6 +144,8 @@ class REVUnified:
         self.unified_fingerprints = {}  # Storage for unified fingerprints
         self.unified_analyzer = None  # Will be initialized if enabled
         self.comprehensive_analyses = {}  # Storage for comprehensive analyses
+        self.orchestrator = None  # Strategic testing orchestrator
+        self.fingerprint_library = None  # Model fingerprint library
         
         # Initialize probe monitor for diagnostics
         self.probe_monitor = get_probe_monitor() if debug else None
@@ -220,6 +224,10 @@ class REVUnified:
             })
             # Enhance pipeline with profiling
             self.pipeline = integrate_with_rev_pipeline(self.pipeline)
+        
+        # Initialize fingerprint library and orchestrator
+        self.fingerprint_library = ModelFingerprintLibrary()
+        self.orchestrator = StrategicTestingOrchestrator()
         
         self.logger.info("=" * 80)
         self.logger.info("REV UNIFIED PIPELINE v3.0")
@@ -1222,6 +1230,49 @@ Examples:
         help="Save comprehensive analysis report to file"
     )
     
+    # Multi-stage orchestration and fingerprint library
+    parser.add_argument(
+        "--orchestrate",
+        action="store_true",
+        help="Enable multi-stage orchestrated testing based on architecture identification"
+    )
+    parser.add_argument(
+        "--claimed-family",
+        type=str,
+        help="Claimed architecture family (e.g., llama, gpt, mistral)"
+    )
+    parser.add_argument(
+        "--time-budget",
+        type=float,
+        help="Time budget in hours for testing"
+    )
+    parser.add_argument(
+        "--library-path",
+        type=str,
+        default="./fingerprint_library",
+        help="Path to fingerprint library (default: ./fingerprint_library)"
+    )
+    parser.add_argument(
+        "--add-to-library",
+        action="store_true",
+        help="Add discovered fingerprint to library as base model"
+    )
+    parser.add_argument(
+        "--export-fingerprint",
+        type=str,
+        help="Export fingerprint to specified file"
+    )
+    parser.add_argument(
+        "--import-fingerprint",
+        type=str,
+        help="Import fingerprint from specified file"
+    )
+    parser.add_argument(
+        "--list-known-architectures",
+        action="store_true",
+        help="List all known architectures in fingerprint library"
+    )
+    
     # Adversarial prompt generation
     parser.add_argument(
         "--adversarial",
@@ -1300,7 +1351,30 @@ Examples:
             print(f"  Saving: Enabled")
         if not args.local:
             print(f"  ⚠️  Requires --local mode for full functionality")
+    if args.orchestrate:
+        print(f"Orchestration: Enabled")
+        if args.claimed_family:
+            print(f"  Claimed Family: {args.claimed_family}")
+        if args.time_budget:
+            print(f"  Time Budget: {args.time_budget:.1f} hours")
     print("=" * 80)
+    
+    # Handle fingerprint library operations first
+    if args.list_known_architectures:
+        library = ModelFingerprintLibrary(args.library_path)
+        print("\n📚 Known Architectures in Library:")
+        for family, fp_ids in library.family_index.items():
+            print(f"  • {family}: {len(fp_ids)} fingerprints")
+            for fp_id in fp_ids[:3]:  # Show first 3
+                fp = library.fingerprints[fp_id]
+                print(f"    - {fp.model_size} ({fp.architecture_version})")
+        return 0
+    
+    if args.import_fingerprint:
+        library = ModelFingerprintLibrary(args.library_path)
+        fp_id = library.import_fingerprint(args.import_fingerprint)
+        print(f"✅ Imported fingerprint: {fp_id}")
+        return 0
     
     # Prepare fingerprint configuration
     fingerprint_config = {
@@ -1337,10 +1411,66 @@ Examples:
         memory_limit_gb=args.memory_limit
     )
     
-    # Process each model
-    for model_path in args.models:
-        try:
-            result = rev.process_model(
+    # Handle orchestrated testing if enabled
+    if args.orchestrate:
+        print("\n🎯 ORCHESTRATED MULTI-STAGE TESTING")
+        print("=" * 80)
+        
+        for model_path in args.models:
+            # Create orchestration plan
+            time_budget_seconds = args.time_budget * 3600 if args.time_budget else None
+            
+            plan = rev.orchestrator.create_orchestration_plan(
+                model_path=model_path,
+                claimed_family=args.claimed_family,
+                force_comprehensive=args.comprehensive_analysis,
+                time_budget=time_budget_seconds
+            )
+            
+            print(f"\n📋 Orchestration Plan for {model_path}:")
+            print(f"  Identified Architecture: {plan.identified_architecture} (confidence: {plan.confidence:.2%})")
+            print(f"  Stages: {len(plan.stages)}")
+            for i, stage in enumerate(plan.stages, 1):
+                print(f"    {i}. {stage.stage_name} ({stage.duration_estimate/60:.1f} min)")
+            print(f"  Total Estimated Time: {plan.total_estimated_time/3600:.1f} hours")
+            print(f"\n  Reasoning:")
+            for reason in plan.reasoning:
+                print(f"    • {reason}")
+            
+            # Execute plan
+            print(f"\n▶️  Executing orchestration plan...")
+            
+            def progress_callback(progress, stage_name):
+                print(f"  [{progress:.0%}] {stage_name}")
+            
+            results = rev.orchestrator.execute_plan(plan, rev, progress_callback)
+            
+            print(f"\n✅ Orchestration complete!")
+            print(f"  Total Duration: {results['total_duration']/3600:.1f} hours")
+            print(f"  Stages Completed: {results['summary']['successful_stages']}/{results['summary']['total_stages']}")
+            
+            # Export fingerprint if requested
+            if args.export_fingerprint and plan.identified_architecture:
+                rev.fingerprint_library.export_fingerprint(
+                    plan.identified_architecture, 
+                    args.export_fingerprint
+                )
+                print(f"📤 Exported fingerprint to {args.export_fingerprint}")
+            
+            # Add to library if requested
+            if args.add_to_library and results.get("new_fingerprint"):
+                rev.fingerprint_library.add_fingerprint(results["new_fingerprint"])
+                print(f"📚 Added new base fingerprint to library")
+        
+        # Generate final report
+        report = rev.generate_report()
+        
+    # Standard processing (non-orchestrated)
+    else:
+        # Process each model
+        for model_path in args.models:
+            try:
+                result = rev.process_model(
                 model_path=model_path,
                 use_local=args.local,
                 device=args.device,
