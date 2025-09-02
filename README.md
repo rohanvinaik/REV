@@ -105,6 +105,23 @@ REV's behavioral profiling captures comprehensive data enabling multi-dimensiona
 
 This enables post-hoc analysis to discover optimal segmentation boundaries for memory-bounded execution, not just arbitrary layer divisions.
 
+### 🔬 Micro-Pattern Discovery
+
+Deep analysis reveals sophisticated structure within "stable" regions:
+
+**Sub-Plateaus Within Plateaus**: The 16-layer stable region (layers 4-19) contains three distinct sub-plateaus with ~0.004 divergence steps between them, suggesting hierarchical organization.
+
+**Probe-Type Bifurcation**: Different cognitive tasks show 35-point divergence spread:
+- Recursive/Transform probes: 0.519 (complex reasoning)
+- Belief/Comparison probes: 0.484 (simple comparisons)
+
+**Growth-Freeze-Drift Pattern**: Layers follow characteristic evolution:
+- Growth phases (rapid adaptation)
+- Freeze points (consolidation at layers 8, 10)
+- Drift phases (gentle evolution)
+
+See [MICRO_PATTERNS_ANALYSIS.md](MICRO_PATTERNS_ANALYSIS.md) for detailed findings.
+
 ## 🏗️ Architecture
 
 ```
