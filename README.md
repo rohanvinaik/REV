@@ -123,6 +123,65 @@ Deep analysis reveals sophisticated structure within "stable" regions:
 
 See [MICRO_PATTERNS_ANALYSIS.md](MICRO_PATTERNS_ANALYSIS.md) for detailed findings.
 
+## 🧪 Advanced Probe Cassettes (Phase 2 Analysis)
+
+REV now includes a sophisticated cassette-based probe system for deep behavioral analysis after initial topology discovery:
+
+### Two-Phase Analysis Architecture
+
+**Phase 1: Baseline Topology Discovery**
+- Uses standard behavioral probes to map model structure
+- Identifies restriction sites and stable regions
+- Exports topology for parallel optimization
+- Time: ~35 hours for 80 layers
+
+**Phase 2: Cassette-Based Deep Analysis**
+- Deploys specialized probe cassettes targeting discovered regions
+- Tests specific cognitive capabilities per layer
+- Identifies layer specializations and anomalies
+- Time: ~10 hours with parallel execution
+
+### Seven Probe Types in Cassettes
+
+| Probe Type | Description | Example | Complexity |
+|------------|-------------|---------|------------|
+| **Syntactic** | Grammar & structure | Subject-verb agreement | 1-3 |
+| **Semantic** | Meaning relationships | Word associations | 2-4 |
+| **Recursive** | Self-referential logic | Nested reasoning | 5-7 |
+| **Transform** | Mathematical operations | Pattern transformation | 4-6 |
+| **Theory of Mind** | Perspective reasoning | Belief attribution | 6-8 |
+| **Counterfactual** | Alternative scenarios | "What if" reasoning | 7-9 |
+| **Meta** | Self-awareness | Model introspection | 8-10 |
+
+### Cassette Execution
+
+```python
+from src.challenges.cassette_executor import run_cassette_phase
+
+# Phase 2: Advanced analysis using topology from Phase 1
+results = run_cassette_phase(
+    topology_file="llama70b_topology.json",
+    model_path="/path/to/model",
+    probe_types=["recursive", "theory_of_mind", "meta"]
+)
+
+# Results include:
+# - Layer specialization scores
+# - Cognitive capability heat maps
+# - Anomaly detection
+# - Cross-layer capability evolution
+```
+
+### Layer Specialization Discovery
+
+The cassette system reveals how different layers specialize:
+- **Early layers (0-10)**: Syntactic processing dominance
+- **Middle layers (20-40)**: Semantic and recursive reasoning
+- **Deep layers (50-70)**: Theory of mind and counterfactuals
+- **Final layers (70-80)**: Meta-reasoning and output formatting
+
+This enables targeted optimization - skip syntactic probes in deep layers, focus complex reasoning probes on middle layers.
+
 ## 🏗️ Architecture
 
 ```
@@ -133,13 +192,20 @@ REV Framework v2.0 (Production)
 │   ├── Intelligent weight loading/offloading
 │   └── KV cache management with spilling
 │
-├── PoT Behavioral Analysis
-│   ├── Sophisticated challenge generation
-│   ├── Information-theoretic divergence metrics
-│   ├── Automatic restriction site discovery
-│   └── Multi-category probe coverage
+├── Two-Phase Behavioral Analysis
+│   ├── Phase 1: Baseline Topology Discovery
+│   │   ├── Standard behavioral probes
+│   │   ├── Information-theoretic divergence
+│   │   ├── Restriction site identification
+│   │   └── Topology export for reuse
+│   │
+│   └── Phase 2: Cassette-Based Deep Analysis
+│       ├── 7 specialized probe types
+│       ├── Cognitive capability mapping
+│       ├── Layer specialization detection
+│       └── Anomaly identification
 │
-├── Diagnostic System (NEW)
+├── Diagnostic System
 │   ├── ProbeMonitor with execution tracking
 │   ├── Fallback event detection
 │   ├── Real-time performance metrics
@@ -178,7 +244,7 @@ python monitor_80layers.py
 python export_topology.py profile.log --output model_topology.json
 ```
 
-### Phase 2: Verification (Using topology)
+### Phase 2a: Verification (Using topology)
 ```bash
 # Fast verification using known topology
 python run_rev.py /path/to/model \
@@ -190,6 +256,19 @@ python run_rev.py /path/to/model \
 python run_rev.py model1 model2 \
     --topology base_topology.json \
     --compare
+```
+
+### Phase 2b: Cassette Analysis (Advanced probing)
+```bash
+# Run cassette-based deep analysis after topology discovery
+python -m src.challenges.cassette_executor \
+    llama70b_topology.json \
+    /path/to/model \
+    --output cassette_results \
+    --types recursive theory_of_mind meta
+
+# View cassette results
+cat cassette_results/cassette_report.txt
 ```
 
 ### Topology Analysis
