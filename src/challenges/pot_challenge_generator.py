@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import time
 from collections import defaultdict
+import logging
 
 class ChallengeComplexity(Enum):
     """Challenge complexity levels from PoT paper."""
@@ -278,6 +279,7 @@ class PoTChallengeGenerator:
         self.selector = InformationTheoreticSelector() if enable_info_selection else None
         self.reference_topology = reference_topology
         self.templates = self._initialize_templates()
+        self.logger = logging.getLogger(__name__)
         
         # If reference topology provided, enhance with targeted templates
         if self.reference_topology:
@@ -664,40 +666,137 @@ class PoTChallengeGenerator:
         
         return selected
     
-    def generate_behavioral_probes(self) -> Dict[str, List[str]]:
+    def generate_behavioral_probes(self, n_layers: int = 100, probes_per_category: int = 50) -> Dict[str, List[str]]:
         """
-        Generate sophisticated PoT-style behavioral probes for segmentation analysis.
-        These probes are designed to trigger different computational patterns
-        across transformer layers to identify architectural boundaries.
+        Generate comprehensive PoT-style behavioral probes for reference library building.
+        
+        For reference library construction, we generate a large, diverse set of prompts
+        that comprehensively explore the model's behavioral space. No statistical shortcuts -
+        this is about building a complete behavioral fingerprint.
+        
+        Args:
+            n_layers: Approximate number of layers in the model (used for scaling)
+            probes_per_category: Number of probes to generate per challenge category
+            
+        Returns:
+            Dictionary of probe categories with extensive prompt lists
         """
-        # Generate actual PoT challenges for behavioral analysis
-        # Use a subset of the full challenge templates for efficiency
-        probes = {
-            "boundary": [
-                "Consider a recursive function that computes factorial. If we modify the base case from n<=1 to n<=0, explain the behavioral change and provide a test case that distinguishes the two implementations.",
-                "Given a binary tree traversal that switches from pre-order to post-order at depth k, design an algorithm to detect the transition point and prove its correctness.",
-                "Analyze the computational complexity when quicksort's pivot selection changes from deterministic to randomized after processing n/2 elements.",
-                "If a neural network's activation function changes from ReLU to GELU at layer L, derive the gradient flow differences and their impact on backpropagation."
-            ],
-            "computation": [
-                "Transform the recursive Fibonacci function F(n) = F(n-1) + F(n-2) into an iterative version using matrix exponentiation. Prove that both have identical outputs for all n ≥ 0.",
-                "Given a hash table that switches from linear probing to quadratic probing when load factor exceeds 0.7, calculate the expected number of probes for successful and unsuccessful searches.",
-                "Design a self-modifying algorithm that optimizes its own time complexity based on input distribution. Provide formal analysis of convergence properties.",
-                "Implement dynamic programming solution for edit distance that adapts its space complexity based on available memory. Prove correctness under memory constraints."
-            ],
-            "reasoning": [
-                "Alice believes that Bob knows that Charlie has discovered a vulnerability. If Alice's belief is based on encrypted communication she intercepted, what can we infer about the cryptographic protocol's semantic security?",
-                "In a distributed consensus protocol, if f nodes are Byzantine and the network has 3f+1 total nodes, prove that consensus is achievable and derive the minimum number of communication rounds.",
-                "Given Gödel's incompleteness theorem, construct a self-referential statement in Peano arithmetic that demonstrates its own unprovability. Explain the diagonalization technique used.",
-                "If a Turing machine M decides language L in O(n²) time, and we construct M' that simulates M with space-time tradeoff, derive the space complexity lower bound for M'."
-            ],
-            "theoretical": [
-                "Prove that any comparison-based sorting algorithm requires Ω(n log n) comparisons in the worst case. Then show how radix sort circumvents this bound.",
-                "Using Kolmogorov complexity, prove that most binary strings of length n cannot be compressed to less than n - c bits for small constant c.",
-                "Demonstrate that the halting problem reduces to the problem of determining if a neural network will converge during training.",
-                "If P ≠ NP, prove that there exists an infinite hierarchy of complexity classes strictly between P and NP. Construct an explicit example using oracle separation."
+        import hashlib
+        import time
+        
+        self.logger.info(f"[REFERENCE-BUILD] Generating comprehensive probe set for {n_layers} layer model")
+        self.logger.info(f"[REFERENCE-BUILD] Target: {probes_per_category} probes per category")
+        
+        # For reference library, we want COMPREHENSIVE coverage
+        # Generate hundreds of diverse prompts using ALL our sophisticated generators
+        
+        # First, use the existing challenge generation system with all categories
+        all_categories = list(ChallengeCategory)
+        all_complexities = list(ChallengeComplexity)
+        
+        # Generate a large batch of PoT challenges using the full system
+        pot_challenges = self.generate_challenges(
+            n=probes_per_category * 4,  # Generate 200+ PoT challenges
+            categories=all_categories,
+            complexity_range=(ChallengeComplexity.MODERATE, ChallengeComplexity.ADVERSARIAL)
+        )
+        
+        # Also generate simpler challenges for baseline
+        baseline_challenges = self.generate_challenges(
+            n=probes_per_category,  # 50 simple challenges
+            complexity_range=(ChallengeComplexity.SIMPLE, ChallengeComplexity.MODERATE)
+        )
+        
+        # Generate cryptographically bound challenge variants
+        crypto_challenges = []
+        for i in range(probes_per_category):
+            seed = hashlib.sha256(f"{time.time()}_{i}".encode()).hexdigest()[:8]
+            
+            # Create cryptographically unique variants of core problems
+            crypto_prompts = [
+                f"[SEED:{seed}] Prove that the halting problem for Turing machine M with input {seed} is undecidable. Construct a specific counterexample.",
+                f"[NONCE:{seed}] Given graph G with adjacency matrix hash {seed}, find the minimum spanning tree and prove optimality using Kruskal's algorithm.",
+                f"[CHALLENGE:{seed}] If cryptographic hash H produces output {seed}, demonstrate a second preimage attack or prove its infeasibility.",
+                f"[VERIFY:{seed}] For neural network with weight checksum {seed}, derive the gradient vanishing conditions across layers.",
+                f"[MERKLE:{seed}] In a Merkle tree with root {seed}, prove membership of leaf node using minimum verification path."
             ]
+            crypto_challenges.extend(crypto_prompts)
+        
+        # Organize into comprehensive probe dictionary
+        probes = {
+            "pot_complex": [c.prompt for c in pot_challenges[:probes_per_category]],
+            "pot_adversarial": [c.prompt for c in pot_challenges[probes_per_category:probes_per_category*2]],
+            "pot_boundary": [c.prompt for c in pot_challenges[probes_per_category*2:probes_per_category*3] 
+                           if c.category == ChallengeCategory.BOUNDARY],
+            "pot_reasoning": [c.prompt for c in pot_challenges if c.category == ChallengeCategory.REASONING][:probes_per_category],
+            "baseline": [c.prompt for c in baseline_challenges],
+            "cryptographic": crypto_challenges[:probes_per_category],
+            
+            # Add specific architectural probes for transformer models
+            "architectural": [
+                f"Analyze attention head {i%8} in layer {i//8}: What patterns does it capture? Provide mathematical formulation." 
+                for i in range(min(probes_per_category, n_layers))
+            ],
+            
+            # Add gradient flow analysis prompts
+            "gradient_flow": [
+                f"Track gradient flow from layer {n_layers-1} to layer {i}. Identify vanishing or exploding gradient conditions."
+                for i in range(0, min(probes_per_category, n_layers), max(1, n_layers//20))
+            ],
+            
+            # Add information theoretic probes
+            "information_theory": self._generate_information_probes(probes_per_category),
+            
+            # Add computational complexity probes
+            "complexity": self._generate_complexity_probes(probes_per_category)
         }
+        
+        # Calculate total probes
+        total_probes = sum(len(prompts) for prompts in probes.values())
+        self.logger.info(f"[REFERENCE-BUILD] Generated {total_probes} behavioral probes across {len(probes)} categories")
+        self.logger.info(f"[REFERENCE-BUILD] Categories: {list(probes.keys())}")
+        # Estimate ~0.5 seconds per probe per layer for comprehensive analysis
+        estimated_time_hours = (total_probes * n_layers * 0.5) / 3600
+        self.logger.info(f"[REFERENCE-BUILD] Expected analysis time: {estimated_time_hours:.1f} hours ({estimated_time_hours*60:.0f} minutes)")
+        
+        # Add fallback to hardcoded probes if generation fails
+        if total_probes < 100:
+            self.logger.warning("[REFERENCE-BUILD] Insufficient probes generated, adding hardcoded set")
+            probes["fallback"] = [
+                "Prove P ≠ NP using diagonal argument.",
+                "Implement quantum Fourier transform and analyze circuit depth.",
+                "Derive Church-Turing thesis implications for neural computation.",
+                # ... could add more fallbacks
+            ]
+        
+        return probes
+    
+    def _generate_information_probes(self, n: int) -> List[str]:
+        """Generate information-theoretic behavioral probes."""
+        return [
+            f"Calculate the Shannon entropy of distribution P{i} and prove it maximizes at uniform. "
+            f"Then compute KL divergence from P{i} to Q{i} where Q is Gaussian."
+            for i in range(n)
+        ]
+    
+    def _generate_complexity_probes(self, n: int) -> List[str]:
+        """Generate computational complexity probes."""
+        templates = [
+            "Prove that problem {} is NP-complete by reduction from 3-SAT.",
+            "Show that algorithm {} achieves O(n log n) average case complexity.",
+            "Demonstrate space-time tradeoff for {} with S*T = Ω(n²).",
+            "Analyze the circuit complexity of {} and derive lower bounds.",
+            "Prove {} requires exponential time under ETH assumption."
+        ]
+        problems = ["vertex cover", "traveling salesman", "graph coloring", "subset sum", 
+                   "knapsack", "clique", "hamiltonian path", "max cut", "set cover", "3D matching"]
+        
+        probes = []
+        for i in range(n):
+            template = templates[i % len(templates)]
+            problem = problems[i % len(problems)]
+            probes.append(template.format(problem))
+        
         return probes
     
     def generate_verification_challenges(self,

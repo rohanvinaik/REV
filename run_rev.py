@@ -105,7 +105,20 @@ class REVUnified:
             model_name: Name of the model
             result: Processing results
         """
+        # Ensure logger exists (fix for multiprocessing context)
+        if not hasattr(self, 'logger'):
+            self.logger = logging.getLogger(__name__)
+        
         try:
+            # Ensure validation_data exists
+            if not hasattr(self, 'validation_data'):
+                self.validation_data = {
+                    'fingerprints': [],
+                    'classifications': [],
+                    'stopping_times': [],
+                    'adversarial_results': []
+                }
+            
             # Collect fingerprint data
             if 'stages' in result:
                 if 'behavioral_analysis' in result['stages']:
@@ -164,6 +177,10 @@ class REVUnified:
             rate_limit: Requests per second limit
             enable_hsm: Enable HSM for Merkle trees
         """
+        # Ensure logger exists (fix for multiprocessing context)
+        if not hasattr(self, 'logger'):
+            self.logger = logging.getLogger(__name__)
+        
         self.enable_security = True
         
         if enable_zk:
@@ -251,6 +268,10 @@ class REVUnified:
         Args:
             output_path: Path to save validation data
         """
+        # Ensure logger exists (fix for multiprocessing context)
+        if not hasattr(self, 'logger'):
+            self.logger = logging.getLogger(__name__)
+        
         import json
         from pathlib import Path
         
@@ -709,11 +730,35 @@ class REVUnified:
                             
                             # Generate PoT challenges for deep probing
                             pot_gen = PoTChallengeGenerator()
-                            probe_prompts = pot_gen.generate_behavioral_probes()
+                            
+                            # For reference library building, generate COMPREHENSIVE probe set
+                            # No shortcuts - we want complete behavioral coverage
+                            probe_prompts_dict = pot_gen.generate_behavioral_probes(
+                                n_layers=deep_executor.n_layers,
+                                probes_per_category=100  # This will generate ~1000 total probes
+                            )
+                            
+                            # Flatten the dictionary to a list of prompts
+                            probe_prompts = []
+                            for category, prompts in probe_prompts_dict.items():
+                                # Handle both string prompts and GeneratedChallenge objects
+                                for prompt in prompts:
+                                    if isinstance(prompt, str):
+                                        probe_prompts.append(prompt)
+                                    elif hasattr(prompt, 'prompt'):
+                                        probe_prompts.append(prompt.prompt)
+                                    else:
+                                        # Skip any problematic entries
+                                        self.logger.warning(f"Skipping non-string prompt: {type(prompt)}")
+                            
+                            # For reference library, we use ALL generated probes
+                            # No limiting based on --challenges parameter
+                            self.logger.info(f"[REFERENCE-BUILD] Using ALL {len(probe_prompts)} generated probes")
+                            self.logger.info(f"[REFERENCE-BUILD] Ignoring --challenges parameter for comprehensive analysis")
                             
                             print(f"   🔬 Profiling ALL {deep_executor.n_layers} layers")
-                            print(f"   🎯 Probes per layer: 4")
-                            print(f"   📊 Total probes: {deep_executor.n_layers * 4}")
+                            print(f"   🎯 Probes: {len(probe_prompts)} behavioral challenges")
+                            print(f"   📊 Total analysis points: {deep_executor.n_layers * len(probe_prompts)}")
                             print(f"   ⏱️  Estimated time: {deep_executor.n_layers * 0.5:.1f} hours")
                             
                             # Run the EXACT SAME deep analysis as the 70B test!

@@ -1,0 +1,86 @@
+{
+  "summary": {
+    "timestamp": "2025-09-03T07:45:08.180441",
+    "session_duration_minutes": 0.023943250000000003,
+    "total_executions": 24,
+    "successful_executions": 24,
+    "failed_executions": 0,
+    "success_rate": 1.0,
+    "fallback_count": 0,
+    "using_behavioral_probing": true
+  },
+  "performance": {
+    "average_execution_time_ms": 12.75572058026834,
+    "median_execution_time_ms": 5.102041497593746,
+    "max_execution_time_ms": 137.67329198890366,
+    "min_execution_time_ms": 4.640458995709196
+  },
+  "divergence_analysis": {
+    "total_scores": 24,
+    "mean_divergence": 0.25294673387445726,
+    "std_divergence": 0.025404972363377423,
+    "min_divergence": 0.22677894199666046,
+    "max_divergence": 0.2945622576621228,
+    "divergence_distribution": {
+      "low_count": 24,
+      "medium_count": 0,
+      "high_count": 0
+    }
+  },
+  "layer_statistics": {
+    "0": {
+      "executions": 4,
+      "success_rate": 1.0,
+      "average_time_ms": 50.14753124851268,
+      "average_divergence": 0.25294673387445726,
+      "divergence_variance": 0.0006454126207839706
+    },
+    "1": {
+      "executions": 4,
+      "success_rate": 1.0,
+      "average_time_ms": 6.056104240997229,
+      "average_divergence": 0.25294673387445726,
+      "divergence_variance": 0.0006454126207839706
+    },
+    "2": {
+      "executions": 4,
+      "success_rate": 1.0,
+      "average_time_ms": 4.776781497639604,
+      "average_divergence": 0.25294673387445726,
+      "divergence_variance": 0.0006454126207839706
+    },
+    "3": {
+      "executions": 4,
+      "success_rate": 1.0,
+      "average_time_ms": 5.612572749669198,
+      "average_divergence": 0.25294673387445726,
+      "divergence_variance": 0.0006454126207839706
+    },
+    "4": {
+      "executions": 4,
+      "success_rate": 1.0,
+      "average_time_ms": 5.042843753471971,
+      "average_divergence": 0.25294673387445726,
+      "divergence_variance": 0.0006454126207839706
+    },
+    "5": {
+      "executions": 4,
+      "success_rate": 1.0,
+      "average_time_ms": 4.898489991319366,
+      "average_divergence": 0.25294673387445726,
+      "divergence_variance": 0.0006454126207839706
+    }
+  },
+  "device_statistics": {
+    "mps": 24
+  },
+  "probe_type_statistics": {
+    "general": {
+      "count": 24,
+      "average_divergence": 0.25294673387445726,
+      "divergence_std": 0.025404972363377423
+    }
+  },
+  "fallback_events": [],
+  "recommendations": []
+}

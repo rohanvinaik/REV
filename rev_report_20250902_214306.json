@@ -1,0 +1,93 @@
+{
+  "timestamp": "2025-09-02T21:43:06.043671",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "llama-2-7b-chat-hf"
+  ],
+  "total_models": 1,
+  "results": {
+    "llama-2-7b-chat-hf": {
+      "model": "/Users/rohanvinaik/LLM_models/llama-2-7b-chat-hf",
+      "model_name": "llama-2-7b-chat-hf",
+      "mode": "api",
+      "timestamp": "2025-09-02T21:43:05.295065",
+      "identification": {
+        "family": "llama",
+        "confidence": 0.85,
+        "method": "name_match_no_reference",
+        "reference_model": "llama-2-7b"
+      },
+      "strategy": {
+        "strategy": "exploratory",
+        "challenges": 20,
+        "notes": "Full exploratory analysis"
+      },
+      "stages": {
+        "initialization": {
+          "success": true,
+          "time": 0.0010712146759033203,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenges": {
+          "count": 20,
+          "time": 0.002045869827270508,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": true,
+          "hypervectors_generated": 20,
+          "responses_generated": 20,
+          "unified_fingerprints_generated": 0,
+          "time": 0.7438950538635254,
+          "sparsity": 0.01,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {
+            "avg_response_length": 39.2,
+            "unique_tokens": 133,
+            "response_diversity": 0.16964285714285715,
+            "hv_entropy": 14.684124240005495,
+            "hv_active_dims": 100,
+            "hv_sparsity": 0.01
+          },
+          "time": 0.0002319812774658203
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": true,
+              "count": 20
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 20
+            },
+            "behavioral_analysis": {
+              "validated": true,
+              "metrics_count": 6
+            }
+          },
+          "time": 4.291534423828125e-06
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 0.7472484111785889
+  }
+}

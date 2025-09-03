@@ -1,0 +1,226 @@
+{
+  "timestamp": "2025-09-03T19:09:23.423629",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "distilgpt2"
+  ],
+  "total_models": 1,
+  "results": {
+    "distilgpt2": {
+      "model": "/Users/rohanvinaik/LLM_models/distilgpt2",
+      "model_name": "distilgpt2",
+      "mode": "api",
+      "timestamp": "2025-09-03T19:09:19.489136",
+      "identification": {
+        "family": "gpt",
+        "confidence": 0.85,
+        "method": "name_match_no_reference",
+        "reference_model": "gpt2"
+      },
+      "strategy": {
+        "strategy": "exploratory",
+        "challenges": 20,
+        "notes": "Full exploratory analysis"
+      },
+      "stages": {
+        "deep_behavioral_analysis": {
+          "success": true,
+          "restriction_sites_found": 6,
+          "layers_profiled": 6,
+          "behavioral_topology": {
+            "model": "distilgpt2",
+            "timestamp": "2025-09-03T19:09:23.419968",
+            "total_layers": 6,
+            "restriction_sites": [
+              {
+                "layer": 1,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0417,
+                "after": 0.0417
+              },
+              {
+                "layer": 2,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0417,
+                "after": 0.0417
+              },
+              {
+                "layer": 3,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0417,
+                "after": 0.0417
+              },
+              {
+                "layer": 4,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0417,
+                "after": 0.0417
+              },
+              {
+                "layer": 5,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0417,
+                "after": 0.0417
+              }
+            ],
+            "stable_regions": [],
+            "phase_boundaries": [],
+            "behavioral_phases": [
+              {
+                "phase": "embedding",
+                "layers": [
+                  0
+                ],
+                "avg_divergence": 0.0417,
+                "description": "Input embedding and tokenization"
+              },
+              {
+                "phase": "early_processing",
+                "layers": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "avg_divergence": 0.0417,
+                "description": "Rapid feature extraction and initial processing"
+              }
+            ],
+            "layer_profiles": {
+              "0": {
+                "mean": 0.041666666666666664,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09166666666666667,
+                "samples": 8
+              },
+              "1": {
+                "mean": 0.041666666666666664,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09166666666666667,
+                "samples": 8
+              },
+              "2": {
+                "mean": 0.041666666666666664,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09166666666666667,
+                "samples": 8
+              },
+              "3": {
+                "mean": 0.041666666666666664,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09166666666666667,
+                "samples": 8
+              },
+              "4": {
+                "mean": 0.041666666666666664,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09166666666666667,
+                "samples": 8
+              },
+              "5": {
+                "mean": 0.041666666666666664,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09166666666666667,
+                "samples": 8
+              }
+            },
+            "optimization_hints": {
+              "critical_layers": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "parallel_safe_layers": [],
+              "memory_per_layer_gb": 0.5,
+              "parallel_speedup_potential": "4x",
+              "skip_stable_region": []
+            },
+            "precision_targeting": {
+              "large_model_strategy": "target_restriction_sites_only",
+              "expected_speedup": "15-20x",
+              "accuracy_retention": "95%+"
+            }
+          },
+          "time": 3.04089093208313,
+          "enables_precision_targeting": true
+        },
+        "initialization": {
+          "success": true,
+          "time": 3.9318909645080566,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenge_generation": {
+          "orchestrated": true,
+          "prompt_types": [],
+          "target_layers": null
+        },
+        "challenges": {
+          "count": 0,
+          "time": 3.695487976074219e-05,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": false,
+          "hypervectors_generated": 0,
+          "responses_generated": 0,
+          "unified_fingerprints_generated": 0,
+          "time": 9.5367431640625e-07,
+          "sparsity": null,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {},
+          "time": 0.0
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": false,
+              "count": 0
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 0
+            },
+            "behavioral_analysis": {
+              "validated": false,
+              "metrics_count": 0
+            }
+          },
+          "time": 3.0994415283203125e-06
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 6.972822904586792
+  }
+}

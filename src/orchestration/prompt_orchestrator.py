@@ -412,9 +412,8 @@ class UnifiedPromptOrchestrator:
                 
                 # Create context for generation
                 context = GenerationContext(
-                    model_type=model_family,
-                    difficulty=0.3 + (i * 0.4 / n),  # Varying difficulty
-                    format_constraints={"max_length": 200}
+                    current_difficulty=0.3 + (i * 0.4 / n),  # Varying difficulty
+                    domain_focus=domains[i % len(domains)]
                 )
                 
                 # Generate prompt
@@ -428,7 +427,7 @@ class UnifiedPromptOrchestrator:
                     "type": "dynamic",
                     "category": "synthesized",
                     "prompt": prompt_text,
-                    "complexity": context.difficulty,
+                    "complexity": context.current_difficulty,
                     "metadata": {
                         "generator": "dynamic",
                         "family": model_family,
@@ -450,38 +449,53 @@ class UnifiedPromptOrchestrator:
         
         try:
             # Build taxonomy if needed
-            if not self.hierarchical_system.root:
-                self.hierarchical_system.build_standard_taxonomy()
+            if not hasattr(self.hierarchical_system, 'taxonomy') or not self.hierarchical_system.taxonomy:
+                from src.challenges.prompt_hierarchy import PromptTaxonomy
+                self.hierarchical_system.taxonomy = PromptTaxonomy("REV Prompt Taxonomy")
+                # Add some basic nodes
+                import uuid
+                from src.challenges.prompt_hierarchy import PromptNode
+                for category in ['Architecture', 'Behavior', 'Security', 'Performance']:
+                    cat_node = PromptNode(
+                        node_id=str(uuid.uuid4()),
+                        name=category,
+                        description=f"Category for {category} prompts",
+                        node_type="category",
+                        domain=category.lower()
+                    )
+                    self.hierarchical_system.taxonomy.add_node(cat_node)
             
             # Generate prompts by navigating the taxonomy
             prompts = []
             
-            # Get all leaf nodes (most specific prompts)
+            # Get all leaf nodes using taxonomy's methods
+            taxonomy = self.hierarchical_system.taxonomy
             all_nodes = []
-            def collect_nodes(node, path=""):
-                if node.children:
-                    for child in node.children:
-                        collect_nodes(child, f"{path}/{child.name}")
-                else:
-                    all_nodes.append((node, path))
             
-            if self.hierarchical_system.root:
-                collect_nodes(self.hierarchical_system.root, "root")
+            # Navigate through the taxonomy
+            for node_id, node in taxonomy.nodes.items():
+                if node_id != taxonomy.root_id and not node.children_ids:  # Leaf nodes
+                    all_nodes.append((node_id, node))
+            
+            # If no leaf nodes, use all non-root nodes
+            if not all_nodes:
+                all_nodes = [(node_id, node) for node_id, node in taxonomy.nodes.items() 
+                           if node_id != taxonomy.root_id]
             
             # Select diverse nodes
             for i in range(min(n, len(all_nodes))):
-                node, path = all_nodes[i % len(all_nodes)]
+                node_id, node = all_nodes[i % len(all_nodes)]
                 
                 prompts.append({
                     "type": "hierarchical",
                     "category": "structured",
                     "prompt": f"Hierarchical prompt: {node.name} - {node.description}",
-                    "depth": path.count('/'),
-                    "path": path,
+                    "depth": node.difficulty if hasattr(node, 'difficulty') else 1,
+                    "path": f"{node.domain}/{node.name}" if node.domain else node.name,
                     "metadata": {
                         "generator": "hierarchical",
                         "family": model_family,
-                        "taxonomy_path": path
+                        "taxonomy_path": f"{node.domain}/{node.name}" if node.domain else node.name
                     }
                 })
             

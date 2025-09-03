@@ -1,0 +1,137 @@
+--- run_rev.py	original
++++ run_rev.py	enhanced
+@@ -280,6 +280,24 @@
+         model_name = Path(model_path).name if Path(model_path).exists() else model_path
+         
+         # Use dual library system for intelligent testing
+         from src.fingerprint.dual_library_system import identify_and_strategize
+         identification, strategy = identify_and_strategize(model_path)
+         
++        # CRITICAL: Determine if deep behavioral analysis is needed
++        # Deep analysis should be the STANDARD for:
++        # 1. Unknown models (confidence < 0.5) - building reference library
++        # 2. Explicit --build-reference flag
++        # 3. When --profiler is enabled
++        needs_deep_analysis = (
++            identification.confidence < 0.5 or  # Unknown model - needs reference
++            getattr(self, 'build_reference', False) or  # Explicit reference building
++            self.enable_profiler  # Profiler requires deep analysis
++        )
++        
++        if needs_deep_analysis and os.path.exists(model_path):
++            print(f"🔬 DEEP BEHAVIORAL ANALYSIS REQUIRED")
++            print(f"   Reason: {'New reference model' if identification.confidence < 0.5 else 'Profiling requested'}")
++            print(f"   This will extract restriction sites, behavioral phases, and optimization hints")
++            print(f"   Expected duration: 6-24 hours depending on model size")
++        
+         print(f"\n{'='*80}")
+         print(f"Processing Model: {model_name}")
+@@ -350,6 +368,60 @@
+             else:
+                 # API-only mode (default)
+                 self.logger.info("[API] Using API-only mode")
+                 
++                # CRITICAL ENHANCEMENT: Use deep behavioral analysis for reference models
++                if needs_deep_analysis and os.path.exists(model_path):
++                    self.logger.info("[DEEP-ANALYSIS] Triggering deep behavioral analysis for reference library")
++                    
++                    # Import the deep analysis system (same code running the 70B test!)
++                    from src.models.true_segment_execution import (
++                        LayerSegmentExecutor, 
++                        SegmentExecutionConfig
++                    )
++                    
++                    # Configure for deep behavioral analysis
++                    deep_config = SegmentExecutionConfig(
++                        model_path=model_path,
++                        max_memory_gb=self.memory_limit_gb if hasattr(self, 'memory_limit_gb') else 8.0,
++                        memory_limit=self.memory_limit_gb * 1024 if hasattr(self, 'memory_limit_gb') else 8192,
++                        use_half_precision=True,
++                        extract_activations=True
++                    )
++                    
++                    # Initialize the LayerSegmentExecutor
++                    executor = LayerSegmentExecutor(deep_config)
++                    self.logger.info(f"[DEEP-ANALYSIS] Initialized for {executor.n_layers} layer model")
++                    
++                    # Generate PoT challenges for deep probing
++                    from src.challenges.pot_challenge_generator import PoTChallengeGenerator
++                    pot_gen = PoTChallengeGenerator()
++                    probe_prompts = pot_gen.generate_behavioral_probes()
++                    
++                    print(f"🔬 Starting deep behavioral analysis...")
++                    print(f"   Layers to profile: ALL {executor.n_layers} layers")
++                    print(f"   Probes per layer: 4")
++                    print(f"   Total probes: {executor.n_layers * 4}")
++                    
++                    # Run the EXACT SAME deep analysis as the 70B test!
++                    # This profiles ALL layers and finds restriction sites
++                    restriction_sites = executor.identify_all_restriction_sites(probe_prompts)
++                    
++                    # Store the deep analysis results in the result dictionary
++                    result["stages"]["deep_behavioral_analysis"] = {
++                        "success": True,
++                        "restriction_sites": len(restriction_sites),
++                        "layers_profiled": executor.n_layers,
++                        "sites": [
++                            {
++                                "layer": site.layer_idx,
++                                "divergence": site.behavioral_divergence,
++                                "confidence": site.confidence_score,
++                                "type": site.site_type
++                            } for site in restriction_sites
++                        ],
++                        "time": time.time() - start
++                    }
++                    
++                    print(f"✅ Deep analysis complete: {len(restriction_sites)} restriction sites found")
++                    # Continue with regular processing but now with deep insights
++                
+                 # Check if this is a local model path first
+                 if os.path.exists(model_path) or model_path.startswith('/'):
+@@ -755,8 +827,31 @@
+                 library.add_to_active_library(fingerprint_data, model_info)
+                 
+                 # If this is a new family (low confidence), add to reference library too
+                 if identification.confidence < 0.5:
+-                    library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
+-                    print(f"📚 Added {model_name} as new reference fingerprint")
++                    # CRITICAL: Add deep analysis results to reference fingerprint
++                    if "deep_behavioral_analysis" in result.get("stages", {}):
++                        deep_results = result["stages"]["deep_behavioral_analysis"]
++                        
++                        # Enhance fingerprint with deep architectural insights
++                        fingerprint_data["restriction_sites"] = deep_results["sites"]
++                        fingerprint_data["behavioral_topology"] = {
++                            "total_layers": deep_results["layers_profiled"],
++                            "restriction_sites": deep_results["sites"],
++                            "stable_regions": self._identify_stable_regions(deep_results["sites"]),
++                            "optimization_hints": {
++                                "parallel_safe_layers": self._get_parallel_safe_layers(deep_results["sites"]),
++                                "critical_layers": [s["layer"] for s in deep_results["sites"][:5]]
++                            }
++                        }
++                        
++                        library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
++                        print(f"📚 Added {model_name} as DEEP REFERENCE fingerprint with {len(deep_results['sites'])} restriction sites")
++                        print(f"   This reference enables precision targeting for {identification.identified_family or 'new'} family")
++                    else:
++                        # Fallback to regular fingerprint (shouldn't happen if deep analysis ran)
++                        library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
++                        print(f"📚 Added {model_name} as reference fingerprint (shallow)")
+                 else:
+                     print(f"📚 Added {model_name} to active library")
+                     
+@@ -1320,6 +1415,11 @@
+         help="List all known architectures in the fingerprint library"
+     )
+     
++    parser.add_argument(
++        "--build-reference",
++        action="store_true",
++        help="Force deep behavioral analysis to build reference library (6-24 hour analysis)"
++    )
++    
+     # Import/Export
+     parser.add_argument(
+         "--add-to-library",

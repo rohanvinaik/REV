@@ -1,0 +1,193 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rev-api
+  namespace: rev-system
+  labels:
+    app: rev-api
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rev-api
+  template:
+    metadata:
+      labels:
+        app: rev-api
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: rev-api
+        image: rev-system:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: websocket
+          containerPort: 8001
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: POSTGRES_HOST
+          value: "postgres-service"
+        - name: OTLP_ENDPOINT
+          value: "jaeger-collector:4317"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+            nvidia.com/gpu: "1"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: model-storage
+          mountPath: /app/models
+        - name: data-storage
+          mountPath: /app/data
+        - name: output-storage
+          mountPath: /app/outputs
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: rev-models-pvc
+      - name: data-storage
+        persistentVolumeClaim:
+          claimName: rev-data-pvc
+      - name: output-storage
+        persistentVolumeClaim:
+          claimName: rev-outputs-pvc
+      nodeSelector:
+        node.kubernetes.io/gpu: "true"
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rev-api-service
+  namespace: rev-system
+  labels:
+    app: rev-api
+spec:
+  type: LoadBalancer
+  selector:
+    app: rev-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: websocket
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rev-api-hpa
+  namespace: rev-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rev-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: rev_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rev-models-pvc
+  namespace: rev-system
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 500Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rev-data-pvc
+  namespace: rev-system
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rev-outputs-pvc
+  namespace: rev-system
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi

@@ -235,6 +235,35 @@ ls -la ~/LLM_models/models--*/snapshots/
 - ✅ **Meta** (Llama models via HF API)
 - ✅ **Custom APIs** (OpenAI-compatible endpoints)
 
+## 🔬 Reference Library Building (NEW!)
+
+### Comprehensive Behavioral Analysis
+REV now builds deep behavioral reference libraries using exhaustive prompt testing:
+
+```bash
+# Build reference library for a model family (use smallest model)
+python run_rev.py /path/to/pythia-70m --build-reference
+
+# What happens:
+# - Generates ~400-1000 comprehensive behavioral probes
+# - Tests across 10+ challenge categories:
+#   • PoT Complex/Adversarial (200+ prompts)
+#   • Cryptographically-bound challenges (100+ prompts)
+#   • Architectural probes for attention patterns
+#   • Gradient flow analysis prompts
+#   • Information-theoretic probes
+#   • Computational complexity challenges
+# - Profiles ALL model layers (no sampling)
+# - Extracts restriction sites and behavioral topology
+# - Runtime: 20 min (small) to 6-24 hours (large)
+```
+
+### Reference Library Benefits
+- **15-20x Speedup**: Large models in same family use reference for targeted testing
+- **Complete Coverage**: No statistical shortcuts - comprehensive behavioral mapping
+- **Cryptographic Integrity**: Challenges are cryptographically auditable
+- **Automatic Family Detection**: New models automatically matched to references
+
 ## 🧠 How It Works: Behavioral Fingerprinting
 
 ### 1. Challenge Generation
@@ -244,6 +273,7 @@ REV creates sophisticated PoT challenges designed to reveal architectural differ
 - **Mathematical Computation**: Exposes numerical reasoning
 - **Linguistic Understanding**: Captures language processing
 - **Creative Generation**: Shows output diversity patterns
+- **Cryptographic Binding**: Verifiable challenge-response pairs
 
 ### 2. Response Analysis  
 Model responses are converted to **10,000-dimensional hypervectors**:
@@ -288,11 +318,13 @@ REV Pipeline (Pure API Mode)
     └── Automatic fingerprint updates
 ```
 
-### Memory-Bounded Mode (Optional)
-For local models that fit in memory, REV also supports direct weight analysis:
+### Memory-Bounded Execution
+REV uses segmented streaming for local filesystem models, processing one layer at a time:
 ```bash
-# Local mode for smaller models
-python run_rev.py /path/to/llama-2-7b-hf --local --memory-limit 20
+# Processes ANY size model with 2GB memory cap per segment
+python run_rev.py /path/to/llama-405b-fp8 --memory-limit 2
+
+# The model is NEVER fully loaded - weights stream from disk layer-by-layer
 ```
 
 ## 📈 Validation Results

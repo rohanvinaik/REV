@@ -1,0 +1,91 @@
+{
+  "timestamp": "2025-09-03T13:27:35.200223",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "distilgpt2"
+  ],
+  "total_models": 1,
+  "results": {
+    "distilgpt2": {
+      "model": "/Users/rohanvinaik/LLM_models/distilgpt2",
+      "model_name": "distilgpt2",
+      "mode": "api",
+      "timestamp": "2025-09-03T13:27:34.319372",
+      "identification": {
+        "family": "gpt",
+        "confidence": 0.85,
+        "method": "name_match_no_reference",
+        "reference_model": "gpt2"
+      },
+      "strategy": {
+        "strategy": "exploratory",
+        "challenges": 20,
+        "notes": "Full exploratory analysis"
+      },
+      "stages": {
+        "initialization": {
+          "success": true,
+          "time": 0.877913236618042,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenge_generation": {
+          "orchestrated": true,
+          "prompt_types": [],
+          "target_layers": null
+        },
+        "challenges": {
+          "count": 0,
+          "time": 4.410743713378906e-05,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": false,
+          "hypervectors_generated": 0,
+          "responses_generated": 0,
+          "unified_fingerprints_generated": 0,
+          "time": 1.1920928955078125e-06,
+          "sparsity": null,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {},
+          "time": 0.0
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": false,
+              "count": 0
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 0
+            },
+            "behavioral_analysis": {
+              "validated": false,
+              "metrics_count": 0
+            }
+          },
+          "time": 2.86102294921875e-06
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 0.8779613971710205
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "timestamp": "2025-09-02T23:59:55.171628",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [],
+  "total_models": 0,
+  "results": {},
+  "comparisons": {},
+  "summary": {
+    "models_processed": 0,
+    "api_models": 0,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 0
+  }
+}
