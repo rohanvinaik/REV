@@ -39,12 +39,159 @@
       "model_path": "/Users/rohanvinaik/LLM_models/gpt2",
       "run_type": "reference_baseline",
       "timestamp": "2025-09-02T20:13:08.596972"
+    },
+    "llama-2-7b-chat-hf_20250902_214306": {
+      "behavioral_patterns": {
+        "hv_entropy": 14.684124240005495,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.16964285714285715,
+        "avg_response_length": 39.2
+      },
+      "model_family": "llama",
+      "model_size": "unknown",
+      "architecture_version": "llama-2-7b-chat-hf",
+      "reference_model": "llama-2-7b",
+      "hypervectors_generated": 20,
+      "challenges_processed": 20,
+      "processing_time": 0.7438950538635254,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "llama-2-7b-chat-hf",
+      "model_path": "/Users/rohanvinaik/LLM_models/llama-2-7b-chat-hf",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T21:43:06.042542"
+    },
+    "mistral_for_colab_20250902_214357": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.929950349316954,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.23591087811271297,
+        "avg_response_length": 38.15
+      },
+      "model_family": "mistral",
+      "model_size": "unknown",
+      "architecture_version": "mistral_for_colab",
+      "reference_model": "mistral-7b",
+      "hypervectors_generated": 20,
+      "challenges_processed": 20,
+      "processing_time": 1.3383939266204834,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "mistral_for_colab",
+      "model_path": "/Users/rohanvinaik/LLM_models/mistral_for_colab",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T21:43:57.693194"
+    },
+    "yi-34b_20250902_214915": {
+      "behavioral_patterns": {
+        "hv_entropy": 15.186351270331286,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.15465268676277852,
+        "avg_response_length": 38.15
+      },
+      "model_family": "yi",
+      "model_size": "unknown",
+      "architecture_version": "yi-34b",
+      "reference_model": "yi-6b",
+      "hypervectors_generated": 20,
+      "challenges_processed": 20,
+      "processing_time": 2.4750611782073975,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "yi-34b",
+      "model_path": "/Users/rohanvinaik/LLM_models/yi-34b",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T21:49:15.297139"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_20250902_215112": {
+      "behavioral_patterns": {
+        "hv_entropy": 14.333757530848494,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.510752688172043,
+        "avg_response_length": 37.2
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 5,
+      "challenges_processed": 5,
+      "processing_time": 0.07928872108459473,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-160m/snapshots/50f5173d932e8e61f858120bcb800b97af589f46",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T21:51:12.014599"
+    },
+    "49c537161a457d5256512f9d2d38a87d81ae0f0e_20250902_215131": {
+      "behavioral_patterns": {
+        "hv_entropy": 15.511441002799984,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.4411764705882353,
+        "avg_response_length": 40.8
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "reference_model": "49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "hypervectors_generated": 5,
+      "challenges_processed": 5,
+      "processing_time": 0.08188605308532715,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--microsoft--DialoGPT-small/snapshots/49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T21:51:31.552721"
+    },
+    "llama-3.1-405b-fp8_20250902_215717": {
+      "behavioral_patterns": {
+        "hv_entropy": 15.041169731640602,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.18306351183063513,
+        "avg_response_length": 40.15
+      },
+      "model_family": "llama",
+      "model_size": "unknown",
+      "architecture_version": "llama-3.1-405b-fp8",
+      "reference_model": "llama-2-7b",
+      "hypervectors_generated": 20,
+      "challenges_processed": 20,
+      "processing_time": 192.69068598747253,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "llama-3.1-405b-fp8",
+      "model_path": "/Users/rohanvinaik/LLM_models/llama-3.1-405b-fp8",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T21:57:17.768345"
+    },
+    "llama-2-7b-chat-hf_20250902_220309": {
+      "behavioral_patterns": {
+        "hv_entropy": 14.742450470933408,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.14987405541561713,
+        "avg_response_length": 39.7
+      },
+      "model_family": "llama",
+      "model_size": "unknown",
+      "architecture_version": "llama-2-7b-chat-hf",
+      "reference_model": "llama-2-7b",
+      "hypervectors_generated": 20,
+      "challenges_processed": 20,
+      "processing_time": 0.7536900043487549,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "llama-2-7b-chat-hf",
+      "model_path": "/Users/rohanvinaik/LLM_models/llama-2-7b-chat-hf",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T22:03:09.415054"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-02T20:13:08.596481",
-    "last_updated": "2025-09-02T20:13:08.596973",
-    "num_fingerprints": 1
+    "last_updated": "2025-09-02T22:03:09.415057",
+    "num_fingerprints": 8
   }
 }
