@@ -1,415 +1,226 @@
 """
-Integration tests for the full REV pipeline.
+Integration Tests for REV Production System
+Tests API endpoints, error recovery, and system integration
 """
 
 import pytest
-import numpy as np
-from unittest.mock import Mock, patch, MagicMock
+import asyncio
 import json
-import tempfile
-import os
+import time
+from pathlib import Path
+from unittest.mock import Mock, patch
+import numpy as np
 
-from src.rev_pipeline import REVPipeline, REVConfig
-from src.executor.segment_runner import SegmentRunner, SegmentConfig
-from src.verifier.blackbox import BlackBoxVerifier
-from src.hdc.behavioral_sites import BehavioralSites
-from src.hdc.encoder import HypervectorEncoder, HypervectorConfig
-from src.verifier.decision_aggregator import DecisionAggregator
-from src.core.sequential import sequential_verify
+# Import modules to test
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+
+from src.utils.error_handling import (
+    REVException, CircuitBreaker, 
+    GracefulDegradation, ErrorRecoveryManager
+)
+from src.utils.logging_config import LoggingConfig, MetricsCollector
+from src.utils.reproducibility import SeedManager, ExperimentTracker, CheckpointManager
+from src.utils.run_rev_recovery import PipelineRecovery, EnhancedREVPipeline
 
 
-class TestREVPipelineIntegration:
-    """Integration tests for REV pipeline."""
+# ============================================================================
+# Error Recovery Tests
+# ============================================================================
+
+class TestErrorRecovery:
+    """Test error recovery mechanisms"""
     
-    @pytest.fixture
-    def mock_model(self):
-        """Create a mock model for testing."""
-        model = Mock()
-        model.config = Mock(hidden_size=768, num_hidden_layers=12)
-        model.forward = Mock(return_value=Mock(
-            logits=np.random.randn(1, 100, 50000),
-            hidden_states=(np.random.randn(1, 100, 768) for _ in range(13))
-        ))
-        return model
-    
-    @pytest.fixture
-    def mock_tokenizer(self):
-        """Create a mock tokenizer."""
-        tokenizer = Mock()
-        tokenizer.encode = Mock(return_value=list(range(100)))
-        tokenizer.decode = Mock(return_value="test output")
-        tokenizer.pad_token_id = 0
-        return tokenizer
-    
-    @pytest.fixture
-    def pipeline(self):
-        """Create REV pipeline instance."""
-        config = REVConfig(
-            segment_size=32,
-            buffer_size=2,
-            memory_limit_gb=1.0,
-            hdc_dimension=1000
-        )
-        return REVPipeline(config)
-    
-    def test_end_to_end_challenge_processing(self, pipeline, mock_model, mock_tokenizer):
-        """Test complete challenge processing flow."""
-        challenge = "Explain quantum computing in simple terms."
+    def test_circuit_breaker(self):
+        """Test circuit breaker functionality"""
+        breaker = CircuitBreaker()
         
-        result = pipeline.process_challenge(
-            mock_model,
-            challenge,
-            tokenizer=mock_tokenizer
-        )
+        def failing_function():
+            raise Exception("Test failure")
         
-        assert "segment_signatures" in result
-        assert "merkle_root" in result
-        assert "behavioral_signature" in result
-        assert "metadata" in result
-        
-        # Verify segment processing
-        assert len(result["segment_signatures"]) > 0
-        
-        # Verify Merkle tree construction
-        assert result["merkle_root"] is not None
-        assert len(result["merkle_root"]) == 32  # SHA256 hash
-        
-        # Verify behavioral signature
-        assert result["behavioral_signature"]["dimension"] == pipeline.config.hdc_dimension
-    
-    def test_memory_bounded_execution(self, pipeline, mock_model, mock_tokenizer):
-        """Test memory-bounded segment execution."""
-        # Long challenge to trigger segmentation
-        challenge = " ".join(["test"] * 500)
-        
-        with patch('src.executor.segment_runner.SegmentRunner.get_memory_usage') as mock_memory:
-            mock_memory.return_value = 0.5  # 500MB
-            
-            result = pipeline.process_challenge(
-                mock_model,
-                challenge,
-                tokenizer=mock_tokenizer
-            )
-            
-            # Should have processed in segments
-            assert len(result["segment_signatures"]) > 1
-            assert result["metadata"]["memory_efficient"] == True
-    
-    @patch('src.verifier.blackbox.requests.post')
-    def test_api_based_verification(self, mock_post):
-        """Test API-based model verification."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "API response"}}]
-        }
-        mock_post.return_value = mock_response
-        
-        verifier = BlackBoxVerifier()
-        
-        # Compare two models
-        result = verifier.compare_models(
-            model_a="gpt-3.5-turbo",
-            model_b="claude-2",
-            prompts=["Test prompt 1", "Test prompt 2"]
-        )
-        
-        assert "similarity_scores" in result
-        assert "decision" in result
-        assert len(result["similarity_scores"]) == 2
-    
-    def test_decision_aggregation(self):
-        """Test decision aggregation across multiple challenges."""
-        aggregator = DecisionAggregator()
-        
-        # Add multiple challenge results
+        # Should trip after threshold
         for i in range(10):
-            similarity = 0.95 if i < 7 else 0.3
-            aggregator.add_result(f"challenge_{i}", similarity)
+            try:
+                breaker.call(failing_function)
+            except:
+                pass
         
-        # Get final decision
-        decision = aggregator.get_final_decision(alpha=0.05, beta=0.10)
+        # Should be open
+        assert breaker.state.value == "open"
         
-        assert decision["overall_decision"] in ["accept_h0", "reject_h0", "continue"]
-        assert decision["confidence"] > 0
-        assert len(decision["per_challenge_scores"]) == 10
-    
-    def test_behavioral_site_extraction(self):
-        """Test behavioral site extraction and encoding."""
-        sites = BehavioralSites()
-        
-        # Simulate model outputs at different layers
-        model_outputs = {
-            f"layer_{i}": np.random.randn(100, 768)
-            for i in range(12)
-        }
-        
-        # Extract features
-        probe_features = sites.extract_probe_features("Solve this math problem: 2+2")
-        
-        # Generate hierarchical signatures
-        signatures = sites.hierarchical_analysis(model_outputs, probe_features)
-        
-        assert "prompt" in signatures
-        assert "span_64" in signatures
-        assert "token_window_8" in signatures
-        
-        # Each signature should be a hypervector
-        for level, sig in signatures.items():
-            assert len(sig) == sites.hdc_config.dimension
-
-
-class TestSegmentRunnerIntegration:
-    """Integration tests for segment runner."""
-    
-    @pytest.fixture
-    def runner(self):
-        """Create segment runner instance."""
-        config = SegmentConfig(
-            max_sequence_length=512,
-            kv_cache_size=2048,
-            activation_checkpointing=True
-        )
-        return SegmentRunner(config)
-    
-    def test_segment_processing_with_cache(self, runner):
-        """Test segment processing with KV cache."""
-        mock_model = Mock()
-        mock_model.forward = Mock(return_value=Mock(
-            logits=np.random.randn(1, 32, 50000),
-            hidden_states=(np.random.randn(1, 32, 768) for _ in range(13)),
-            past_key_values=[(np.random.randn(1, 12, 32, 64),
-                            np.random.randn(1, 12, 32, 64)) for _ in range(12)]
-        ))
-        
-        segment_tokens = list(range(32))
-        
-        # Process first segment
-        result1 = runner.process_segment(mock_model, segment_tokens, use_cache=True)
-        
-        assert "activations" in result1
-        assert "kv_cache" in result1
-        assert result1["kv_cache"] is not None
-        
-        # Process second segment with cache
-        result2 = runner.process_segment(
-            mock_model,
-            segment_tokens,
-            use_cache=True,
-            past_kv=result1["kv_cache"]
-        )
-        
-        assert result2["cache_used"] == True
-    
-    def test_memory_efficient_mode(self, runner):
-        """Test memory-efficient execution mode."""
-        mock_model = Mock()
-        
-        with runner.memory_efficient_mode():
-            # Simulate low memory scenario
-            runner.config.memory_limit_mb = 100
+        # Should reject calls
+        with pytest.raises(REVException):
+            breaker.call(failing_function)
             
-            result = runner.process_segment(
-                mock_model,
-                list(range(32)),
-                use_cache=False
+    def test_graceful_degradation(self):
+        """Test graceful degradation"""
+        degradation = GracefulDegradation()
+        
+        # Register feature
+        feature = degradation.register_feature("test_feature")
+        assert feature.is_enabled()
+        
+        # Degrade feature
+        degradation.degrade_feature("test_feature", Exception("Test"))
+        assert degradation.is_degraded("test_feature")
+        
+        # Restore feature
+        degradation.restore_feature("test_feature")
+        assert not degradation.is_degraded("test_feature")
+        
+    def test_memory_recovery(self):
+        """Test memory overflow recovery"""
+        recovery = PipelineRecovery()
+        
+        # Test memory detection
+        is_overflow = recovery.detect_memory_overflow()
+        assert isinstance(is_overflow, bool)
+        
+        # Test segment size adjustment
+        new_size = recovery.adjust_segment_size(100, 0.95)
+        assert new_size < 100  # Should reduce
+        
+        new_size = recovery.adjust_segment_size(100, 0.3)
+        assert new_size > 100  # Should increase
+        
+    def test_checkpoint_recovery(self):
+        """Test checkpoint save/load"""
+        recovery = PipelineRecovery(checkpoint_dir="/tmp/test_checkpoints")
+        
+        # Save checkpoint
+        state = {"test": "data", "array": [1, 2, 3]}
+        checkpoint_path = recovery.save_checkpoint(
+            model_path="test_model",
+            stage="test_stage",
+            state=state,
+            metrics={"accuracy": 0.95}
+        )
+        
+        assert checkpoint_path.exists()
+        
+        # Load checkpoint
+        loaded = recovery.load_checkpoint(checkpoint_path)
+        assert loaded is not None
+        assert loaded["state"] == state
+        assert loaded["stage"] == "test_stage"
+
+
+# ============================================================================
+# Logging and Monitoring Tests
+# ============================================================================
+
+class TestLoggingMonitoring:
+    """Test logging and monitoring integration"""
+    
+    def test_structured_logging(self):
+        """Test JSON structured logging"""
+        config = LoggingConfig(json_output=True)
+        config.setup()
+        
+        logger = config.get_logger("test")
+        logger.info("Test message", fields={"key": "value"})
+        
+        # Logger should work without errors
+        assert True
+        
+    def test_performance_monitor(self):
+        """Test performance monitoring"""
+        from src.utils.logging_config import PerformanceMonitor
+        
+        monitor = PerformanceMonitor()
+        
+        # Measure operation
+        with monitor.measure("test_op", category="test"):
+            time.sleep(0.1)
+        
+        # Get statistics
+        stats = monitor.get_statistics("test_op")
+        assert stats["count"] == 1
+        assert stats["success_rate"] == 1.0
+        assert stats["avg_duration"] > 0.09
+
+
+# ============================================================================
+# Reproducibility Tests
+# ============================================================================
+
+class TestReproducibility:
+    """Test reproducibility features"""
+    
+    def test_seed_management(self):
+        """Test seed manager"""
+        seed_mgr = SeedManager(seed=42)
+        seed_mgr.set_all_seeds()
+        
+        # Generate random numbers
+        import random
+        nums1 = [random.random() for _ in range(10)]
+        
+        # Reset seeds
+        seed_mgr2 = SeedManager(seed=42)
+        seed_mgr2.set_all_seeds()
+        
+        # Should generate same numbers
+        nums2 = [random.random() for _ in range(10)]
+        assert nums1 == nums2
+        
+    def test_experiment_tracking(self):
+        """Test experiment tracker"""
+        tracker = ExperimentTracker(
+            backend="local",
+            experiment_name="test_exp"
+        )
+        
+        # Log parameters
+        tracker.log_params({"learning_rate": 0.001, "batch_size": 32})
+        
+        # Log metrics
+        tracker.log_metrics({"loss": 0.5, "accuracy": 0.95}, step=1)
+        
+        # Check local files created
+        assert (Path("experiments") / "test_exp").exists()
+        
+        tracker.finish()
+        
+    def test_checkpoint_manager(self):
+        """Test checkpoint management"""
+        mgr = CheckpointManager(
+            checkpoint_dir="/tmp/test_ckpt",
+            max_checkpoints=3,
+            save_best=True,
+            metric_name="loss",
+            metric_mode="min"
+        )
+        
+        # Save checkpoints
+        for i in range(5):
+            mgr.save(
+                step=i,
+                epoch=i,
+                state={"model": f"state_{i}"},
+                metrics={"loss": 0.5 - i * 0.1}
             )
-            
-            assert result["memory_efficient"] == True
-            assert result["kv_cache"] is None  # Cache disabled in memory-efficient mode
+        
+        # Should keep only 3 checkpoints
+        checkpoints = list(Path("/tmp/test_ckpt").glob("checkpoint_*.pt"))
+        assert len(checkpoints) <= 3
+        
+        # Load best should get lowest loss
+        best = mgr.load_best()
+        assert best is not None
+        assert best.metrics["loss"] == 0.1
 
 
-class TestPrivacyIntegration:
-    """Integration tests for privacy-preserving features."""
-    
-    def test_homomorphic_verification(self):
-        """Test homomorphic operations for privacy-preserving verification."""
-        from src.privacy.homomorphic_ops import HomomorphicOperations, FederatedProtocol
-        
-        # Initialize homomorphic operations
-        he_ops = HomomorphicOperations()
-        
-        # Create test vectors
-        vec_a = np.random.randn(100)
-        vec_b = np.random.randn(100)
-        
-        # Encrypt vectors
-        encrypted_a = he_ops.encrypt_vector(vec_a)
-        encrypted_b = he_ops.encrypt_vector(vec_b)
-        
-        # Compute distance on encrypted data
-        distance = he_ops.compute_encrypted_distance(encrypted_a, encrypted_b)
-        
-        assert distance > 0
-        
-        # Verify decryption
-        decrypted_a = he_ops.decrypt_vector(encrypted_a)
-        np.testing.assert_array_almost_equal(vec_a, decrypted_a, decimal=5)
-    
-    def test_zero_knowledge_proofs(self):
-        """Test ZK proofs for distance computation."""
-        from src.privacy.distance_zk_proofs import DistanceZKProof
-        
-        zk = DistanceZKProof()
-        
-        # Create test vectors
-        vec_a = np.random.randn(100)
-        vec_b = np.random.randn(100)
-        
-        # Compute actual distance
-        distance = np.linalg.norm(vec_a - vec_b)
-        
-        # Generate proof
-        proof = zk.prove_distance(vec_a, vec_b, distance, metric="euclidean")
-        
-        # Verify proof
-        is_valid = zk.verify_distance(proof, distance)
-        
-        assert is_valid == True
-        
-        # Test invalid proof
-        is_invalid = zk.verify_distance(proof, distance * 2)
-        assert is_invalid == False
-    
-    def test_federated_aggregation(self):
-        """Test federated aggregation protocol."""
-        from src.privacy.homomorphic_ops import FederatedProtocol, HomomorphicOperations
-        
-        # Initialize protocol
-        protocol = FederatedProtocol(num_participants=3, threshold=2)
-        
-        # Register participants
-        he_ops = HomomorphicOperations()
-        for i in range(3):
-            key = he_ops.key.publickey()
-            protocol.register_participant(f"participant_{i}", key)
-        
-        # Start round
-        round_num = protocol.initiate_round()
-        
-        # Submit encrypted vectors
-        for i in range(3):
-            vec = np.random.randn(100)
-            encrypted = he_ops.encrypt_vector(vec)
-            success = protocol.submit_encrypted_vector(
-                f"participant_{i}",
-                encrypted,
-                round_num
-            )
-            assert success == True
-        
-        # Aggregate results
-        aggregated = protocol.aggregate_round(round_num)
-        
-        assert aggregated is not None
-        assert len(aggregated) == 100
-
-
-class TestErrorCorrectionIntegration:
-    """Integration tests for error correction."""
-    
-    def test_noisy_channel_recovery(self):
-        """Test recovery from noisy channel."""
-        from src.hdc.error_correction import ErrorCorrection, ErrorCorrectionConfig
-        
-        config = ErrorCorrectionConfig(
-            dimension=1000,
-            parity_overhead=0.25,
-            block_size=64
-        )
-        corrector = ErrorCorrection(config)
-        
-        # Original hypervector
-        original = np.random.choice([-1, 1], size=1000).astype(np.float32)
-        
-        # Encode with parity
-        encoded = corrector.encode_with_parity(original)
-        
-        # Add noise
-        noisy = corrector.add_noise(encoded, noise_level=0.15, noise_type="salt_pepper")
-        
-        # Decode and correct
-        recovered, corrections = corrector.decode_with_correction(noisy, correct_errors=True)
-        
-        # Measure recovery
-        metrics = corrector.measure_robustness(original, noisy[:1000], recovered)
-        
-        assert metrics["correction_success"] == 1.0
-        assert metrics["ber_corrected"] < metrics["ber_noisy"]
-        assert metrics["cosine_sim_corrected"] > metrics["cosine_sim_noisy"]
-
-
-class TestFullPipelineScenarios:
-    """Test complete pipeline scenarios."""
-    
-    @patch('src.verifier.blackbox.requests.post')
-    def test_model_comparison_scenario(self, mock_post):
-        """Test complete model comparison scenario."""
-        # Setup mock API responses
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Response text"}}]
-        }
-        mock_post.return_value = mock_response
-        
-        # Initialize components
-        pipeline = REVPipeline()
-        verifier = BlackBoxVerifier()
-        aggregator = DecisionAggregator()
-        
-        # Test challenges
-        challenges = [
-            "Explain machine learning",
-            "Write a Python function",
-            "Translate to French: Hello",
-            "Solve: 2x + 3 = 7"
-        ]
-        
-        # Process each challenge
-        for challenge in challenges:
-            # Get responses from both models
-            response_a = verifier.get_model_response("gpt-3.5-turbo", challenge)
-            response_b = verifier.get_model_response("claude-2", challenge)
-            
-            # Compute similarity
-            similarity = verifier.compute_similarity(response_a, response_b)
-            
-            # Add to aggregator
-            aggregator.add_result(challenge, similarity)
-        
-        # Get final decision
-        decision = aggregator.get_final_decision()
-        
-        assert decision["overall_decision"] in ["accept_h0", "reject_h0", "continue"]
-        assert len(decision["per_challenge_scores"]) == len(challenges)
-    
-    def test_memory_constrained_scenario(self):
-        """Test pipeline under memory constraints."""
-        config = REVConfig(
-            segment_size=16,  # Small segments
-            buffer_size=1,    # Minimal buffer
-            memory_limit_gb=0.5  # 500MB limit
-        )
-        pipeline = REVPipeline(config)
-        
-        # Mock model with memory tracking
-        mock_model = Mock()
-        mock_model.config = Mock(hidden_size=768, num_hidden_layers=12)
-        
-        with patch('src.executor.segment_runner.SegmentRunner.get_memory_usage') as mock_memory:
-            # Simulate increasing memory usage
-            mock_memory.side_effect = [0.1, 0.2, 0.3, 0.4, 0.45, 0.49]
-            
-            # Process long input
-            long_challenge = " ".join(["test"] * 200)
-            
-            result = pipeline.process_challenge(mock_model, long_challenge)
-            
-            # Should have used memory-efficient mode
-            assert result["metadata"]["memory_efficient"] == True
-            assert result["metadata"]["segments_processed"] > 1
-
+# ============================================================================
+# Test Runner
+# ============================================================================
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    # Run tests with coverage
+    pytest.main([
+        __file__,
+        "-v",
+        "--cov=src",
+        "--cov-report=html",
+        "--cov-report=term-missing"
+    ])

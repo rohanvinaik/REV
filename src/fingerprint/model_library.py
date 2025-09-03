@@ -382,8 +382,16 @@ class ModelFingerprintLibrary:
         Returns:
             Testing strategy configuration
         """
+        # Determine strategy approach based on confidence
+        if identification.confidence >= 0.85:
+            approach = "targeted"
+        elif identification.confidence >= 0.5:
+            approach = "adaptive"
+        else:
+            approach = "exploratory"
+            
         strategy = {
-            "approach": identification.recommended_strategy,
+            "approach": approach,
             "cassettes": [],
             "focus_layers": [],
             "baseline_layers": [],
@@ -391,13 +399,26 @@ class ModelFingerprintLibrary:
             "optimization": {}
         }
         
-        if identification.recommended_strategy == "targeted":
+        if approach == "targeted":
             # Use known vulnerabilities and optimizations
-            if identification.closest_matches:
+            if hasattr(identification, 'closest_matches') and identification.closest_matches:
                 base_fp = self.fingerprints[identification.closest_matches[0][0]]
                 strategy["cassettes"] = base_fp.recommended_cassettes
                 strategy["focus_layers"] = base_fp.vulnerable_layers
                 strategy["baseline_layers"] = base_fp.stable_layers
+            elif identification.reference_model:
+                # Use reference model if available
+                strategy["cassettes"] = ["syntactic", "semantic", "recursive"]
+                strategy["focus_layers"] = list(range(0, 80, 15))  # Every 15th layer
+                strategy["baseline_layers"] = [0, 10, 20, 30]
+            else:
+                # Default targeted strategy
+                strategy["cassettes"] = ["syntactic", "semantic"]
+                strategy["focus_layers"] = list(range(0, 50, 10))
+                strategy["baseline_layers"] = [0, 25, 49]
+            
+            if hasattr(identification, 'closest_matches') and identification.closest_matches:
+                base_fp = self.fingerprints[identification.closest_matches[0][0]]
                 strategy["adversarial_config"] = {
                     "sensitivity": "high",
                     "target_layers": base_fp.vulnerable_layers,
@@ -409,7 +430,7 @@ class ModelFingerprintLibrary:
                     "skip_stable": True
                 }
                 
-        elif identification.recommended_strategy == "adaptive":
+        elif approach == "adaptive":
             # Moderate testing with some assumptions
             strategy["cassettes"] = ["syntactic", "semantic", "transform", "theory_of_mind"]
             strategy["focus_layers"] = list(range(0, 80, 10))  # Sample every 10th layer

@@ -262,7 +262,8 @@ class PoTChallengeGenerator:
     def __init__(self, 
                  master_key: bytes = None,
                  enable_info_selection: bool = True,
-                 min_complexity: ChallengeComplexity = ChallengeComplexity.MODERATE):
+                 min_complexity: ChallengeComplexity = ChallengeComplexity.MODERATE,
+                 reference_topology: Optional[Dict[str, Any]] = None):
         """
         Initialize PoT challenge generator.
         
@@ -270,11 +271,17 @@ class PoTChallengeGenerator:
             master_key: Master key for deterministic generation
             enable_info_selection: Enable information-theoretic selection
             min_complexity: Minimum challenge complexity
+            reference_topology: Reference library topology for guided prompt generation
         """
         self.master_key = master_key or hashlib.sha256(b"REV_POT_DEFAULT").digest()
         self.min_complexity = min_complexity
         self.selector = InformationTheoreticSelector() if enable_info_selection else None
+        self.reference_topology = reference_topology
         self.templates = self._initialize_templates()
+        
+        # If reference topology provided, enhance with targeted templates
+        if self.reference_topology:
+            self._add_topology_guided_templates()
         
     def _initialize_templates(self) -> List[ChallengeTemplate]:
         """Initialize sophisticated challenge templates from PoT paper."""

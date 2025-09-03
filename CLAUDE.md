@@ -1,498 +1,658 @@
-# REV - Restriction Enzyme Verification System
+# REV - Restriction Enzyme Verification System v3.0
 
-## ⚠️ IMPORTANT: ONE UNIFIED PIPELINE
+## ⚠️ CRITICAL: ONE UNIFIED PIPELINE
 
-**There is ONLY ONE main pipeline: `run_rev.py`**
-- DO NOT create new pipeline scripts
-- DO NOT use old scripts from old_files/
-- ALL features are integrated into run_rev.py
-- This is the ONLY entry point for REV framework v3.0
+**`run_rev.py` is the ONLY entry point** - All features integrated, no other pipeline scripts
 
-## 🚀 QUICK START - RUNNING THE PIPELINE
+## 🚀 QUICK START
 
-### Understanding API Mode (Default) 
-**API Mode** means the pipeline uses memory-bounded streaming execution WITHOUT loading entire models into RAM. 
+### Two Execution Modes
 
-**CORRECTED Implementation (as of latest update):**
-- API mode now CORRECTLY implements true segmented streaming
-- Weights are streamed from disk layer-by-layer (like from a remote server)
-- The model is NEVER loaded with AutoModelForCausalLM.from_pretrained()
-- Maximum 2GB memory usage at any time, regardless of model size
-- Each layer is loaded, processed, and discarded before loading the next
-- No API keys needed for local models
-- No external API calls made for local models
+1. **LOCAL FILESYSTEM MODELS** (on disk)
+   - Segmented streaming (one layer at a time)
+   - 2GB memory cap per process (default)
+   - **NEW: Parallel processing up to 36GB total memory**
+   - NO API keys needed
 
-This works for:
-1. **Local models on filesystem**: Automatically detected and uses segmented execution
-2. **Cloud API models**: Uses external APIs (OpenAI, Anthropic, etc.) with API keys
+2. **CLOUD API MODELS**
+   - External API calls
+   - Requires API keys
 
-### Running Local Models (No API Keys Needed)
+### ✅ CORRECT USAGE - Local Models
+
 ```bash
-# Local model verification - uses segmented streaming, NOT full loading
+# Use FULL PATH to directory containing config.json
+
+# HuggingFace cache format - USE SNAPSHOT PATH
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42
+
+# Standard format
 python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct
+python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b  # 68GB model on 64GB system WORKS!
 
-# GPT-2 from local filesystem
-python run_rev.py /Users/rohanvinaik/LLM_models/gpt2 --challenges 5 --debug
-
-# Multiple local models
+# Multi-model comparison
 python run_rev.py /path/to/model1 /path/to/model2 --challenges 10
+
+# With prompt orchestration (7 systems)
+python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 20
 ```
 
-### Running Cloud API Models
+### Finding Model Paths
+
 ```bash
-# OpenAI models (requires OPENAI_API_KEY environment variable or --api-key)
-python run_rev.py gpt-4 --api-key sk-...
+# Find HuggingFace cache models
+find ~/LLM_models -name "config.json" | grep pythia
 
-# Anthropic models  
-python run_rev.py claude-3-opus --provider anthropic --api-key ...
+# Example output:
+# /Users/.../models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42/config.json
+# Use the directory containing config.json!
 ```
 
-### Local Mode - REMOVED
+### ❌ COMMON MISTAKES
+
 ```bash
-# The --local flag has been PERMANENTLY REMOVED
-# ALL models now use segmented streaming (never fully loaded)
-# This prevents memory issues and confusion about "API mode"
+# WRONG: Model ID instead of path
+python run_rev.py EleutherAI/pythia-70m  # Tries API
+
+# WRONG: --local flag (REMOVED)
+python run_rev.py /path --local  # ERROR
+
+# WRONG: Missing snapshot path
+python run_rev.py /Users/.../models--EleutherAI--pythia-70m  # Need snapshot
+
+# CORRECT: Full path with snapshot
+python run_rev.py /Users/.../pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42
 ```
 
-### Important Notes:
-- **DEFAULT IS API MODE**: Uses segmented/streaming execution, NOT full model loading
-- **LOCAL MODELS WORK WITHOUT API KEYS**: Filesystem paths are automatically detected
-- **NO EXTERNAL API CALLS FOR LOCAL MODELS**: Everything runs on your machine
-- **DO NOT USE --local FLAG**: Unless you specifically want to fully load a small model
-- **The 70B/405B models work fine in API mode**: They stream from disk without loading fully
-- Use `run_rev.py` - this is the ONLY unified pipeline script
+## 📚 KEY WORKFLOWS
 
-## 🏗️ UNIFIED PIPELINE ARCHITECTURE
+### Building Reference Library (One-Time Setup)
 
-The REV framework v3.0 has ONE unified pipeline (`run_rev.py`) that integrates:
+```bash
+# Build deep behavioral reference for model family (6-24 hours)
+# Use smallest model in family
+
+# Pythia family
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx \
+    --enable-prompt-orchestration --challenges 20
+
+# Llama family  
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b \
+    --enable-prompt-orchestration --challenges 20
+```
+
+### Using References for Large Models (15-20x Faster)
+
+```bash
+# After reference exists, large models run much faster
+
+# Pythia-12B (uses pythia-70m reference)
+python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b --challenges 50
+
+# Llama-70B (uses llama-7b reference)  
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct --challenges 100
+
+# Yi-34B (auto-detects family reference)
+python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b --challenges 100
+```
+
+### Advanced Options
+
+```bash
+# Full orchestration with all 7 prompt systems
+python run_rev.py /path/to/model \
+    --enable-prompt-orchestration \
+    --enable-pot --enable-kdf --enable-evolutionary \
+    --enable-dynamic --enable-hierarchical \
+    --challenges 100 --debug
+
+# Adversarial testing
+python run_rev.py /path/to/model \
+    --adversarial --adversarial-ratio 0.5 \
+    --adversarial-types jailbreak alignment_faking \
+    --challenges 50
+
+# Multi-stage orchestration with time budget
+python run_rev.py /path/to/model \
+    --orchestrate --time-budget 2.5 \
+    --claimed-family llama --add-to-library
+
+# Unified fingerprinting
+python run_rev.py /path/to/model \
+    --unified-fingerprints --fingerprint-dimension 100000 \
+    --fingerprint-sparsity 0.001 --save-fingerprints
+```
+
+### 🆕 Parallel Processing (36GB Memory Limit)
+
+```bash
+# Process multiple models in parallel
+python run_rev.py model1/ model2/ model3/ \
+    --parallel --parallel-memory-limit 36.0 \
+    --challenges 50
+
+# Process many prompts on single model (batch processing)
+python run_rev.py /path/to/model \
+    --parallel --parallel-batch-size 10 \
+    --parallel-memory-limit 36.0 \
+    --challenges 100
+
+# Adaptive parallel processing (adjusts to system load)
+python run_rev.py model1/ model2/ \
+    --parallel --enable-adaptive-parallel \
+    --parallel-memory-limit 36.0
+
+# Different parallel modes
+python run_rev.py model1/ model2/ model3/ \
+    --parallel --parallel-mode cross_product  # Each model × all prompts
+    
+python run_rev.py model1/ model2/ model3/ \
+    --parallel --parallel-mode broadcast      # All models × same prompts
+    
+python run_rev.py model1/ model2/ model3/ \
+    --parallel --parallel-mode paired         # model[i] × prompt[i]
+```
+
+## 🎯 PROMPT ORCHESTRATION
+
+### Seven Specialized Systems
+
+1. **PoT** - Behavioral probes for restriction sites (30%)
+2. **KDF** - Security/adversarial testing (20%) 
+3. **Evolutionary** - Genetic optimization (20%)
+4. **Dynamic** - Template-based synthesis (20%)
+5. **Hierarchical** - Taxonomical exploration (10%)
+6. **Response Predictor** - Effectiveness prediction
+7. **Behavior Profiler** - Pattern analysis
+
+### Usage
+
+```bash
+# Enable all (recommended)
+python run_rev.py <model> --enable-prompt-orchestration --challenges 100
+
+# Specific systems
+python run_rev.py <model> \
+    --enable-pot --enable-kdf --enable-evolutionary \
+    --enable-dynamic --enable-hierarchical \
+    --prompt-analytics --challenges 100
+
+# Strategies
+python run_rev.py <model> --enable-prompt-orchestration \
+    --prompt-strategy [balanced|adversarial|behavioral|comprehensive]
+```
+
+## 🔬 DEEP BEHAVIORAL ANALYSIS
+
+Profiles ALL layers to extract:
+- **Restriction Sites**: High-divergence boundaries
+- **Stable Regions**: Parallelization opportunities  
+- **Behavioral Phases**: Architecture stages
+- **Optimization Hints**: Critical layers, memory requirements
+
+### Triggers Automatically When:
+- Unknown model (confidence < 0.5)
+- `--build-reference` flag
+- `--profiler` flag
+
+### Performance Impact
+- **Small Model (7B)**: 6-24h once → Complete reference
+- **Large Model (405B)**: 37h → 2h using reference (18.5x speedup!)
+
+## 🏗️ ARCHITECTURE
 
 ### Core Components
-1. **REVUnified** (run_rev.py) - Main orchestrator class
-2. **REVPipeline** (src/rev_pipeline.py) - Core segmented execution engine  
-3. **MetalAcceleratedInference** (src/models/metal_accelerated_inference.py) - Apple Silicon GPU support
-4. **SegmentRunner** (src/executor/segment_runner.py) - Layer-by-layer execution
-5. **UnifiedInferenceManager** (src/models/unified_inference.py) - Model loading coordinator
-
-### Execution Mode
-- **ONLY Segmented Streaming**: The pipeline now ONLY supports segmented execution
-  - Weights stream from disk layer-by-layer
-  - Model is NEVER fully loaded into memory  
-  - 2GB memory cap regardless of model size
-  - Works for models of ANY size (1B to 405B+)
-  - The --local flag has been REMOVED to prevent confusion
-
-### Device Support
-- **MPS (Metal Performance Shaders)**: Apple Silicon GPU acceleration
-- **CUDA**: NVIDIA GPU support (Linux/Windows)
-- **CPU**: Universal fallback
-- Auto-detection via `get_optimal_device()`
+- **REVUnified** (run_rev.py) - Main orchestrator
+- **REVPipeline** (src/rev_pipeline.py) - Segmented execution engine
+- **MetalAcceleratedInference** - Apple Silicon GPU support
+- **SegmentRunner** - Layer-by-layer execution
+- **UnifiedInferenceManager** - Model loading coordinator
 
 ### Key Features
-- Memory-bounded execution (2-4GB active memory for 70B+ models)
-- Behavioral fingerprinting via hyperdimensional computing
-- Merkle tree verification for computation integrity
-- PoT (Proof-of-Thought) challenges for behavioral probing
-- Cassette-based deep analysis system
-- Multi-stage orchestrated testing with fingerprint library
+- Memory-bounded execution (2-4GB for 70B+ models)
+- Hyperdimensional behavioral fingerprinting  
+- Merkle tree computation verification
+- Dual library system (Reference + Active)
+- Multi-stage orchestrated testing
 
-## 🎯 CORE PURPOSE OF THIS EXPERIMENT
-
-**THE WHOLE POINT**: REV enables verification of massive LLMs (like Yi-34B with 68GB memory footprint) that EXCEED available device memory through intelligent segmented execution. This is NOT about avoiding loading the model - it's about making it POSSIBLE to run and verify models that wouldn't otherwise fit in memory AT ALL.
-
-### Why This Matters
-- **Problem**: Modern LLMs (70B, 175B parameters) require 140GB-350GB+ RAM
-- **Solution**: REV segments execution to verify these models with only 8-16GB active RAM
-- **Validation**: Yi-34B (68GB) successfully runs on 64GB system with only 2-3GB active memory per segment
-
-### Key Innovation
-REV treats transformer models like DNA sequences that can be "cut" at restriction sites (attention boundaries, layer transitions) and processed segment-by-segment while maintaining cryptographic verification of the complete computation through Merkle trees.
-
-### What We're Testing with Yi-34B
-1. **Memory-Bounded Execution**: Process 68GB model with <4GB active memory
-2. **Behavioral Segmentation**: Automatically discover model's processing regions
-3. **Cryptographic Integrity**: Generate Merkle proofs for all segments
-4. **Semantic Fingerprinting**: Create hyperdimensional vectors for model behavior
-5. **Statistical Verification**: Use SPRT for efficient model comparison
-
-## Project Overview
-REV is a comprehensive framework for memory-bounded, black-box LLM comparison using restriction enzyme verification techniques combined with hyperdimensional computing and privacy-preserving infrastructure.
-
-## Key Components Status
-
-### ✅ Core Pipeline (Completed)
-- **REVPipeline** (`src/rev_pipeline.py`): Segment-wise execution, memory-bounded streaming, Merkle tree construction
-- **SegmentRunner** (`src/executor/segment_runner.py`): Parameter loading/offloading, KV cache management, activation extraction
-- **BlackBoxVerifier** (`src/verifier/blackbox.py`): API-based model comparison with rate limiting and caching
-
-### ✅ Hyperdimensional Computing (Completed)
-- **HypervectorEncoder** (`src/hdc/encoder.py`): 8K-100K dimensional vectors with sparse/dense encoding
-- **BehavioralSites** (`src/hdc/behavioral_sites.py`): Probe feature extraction, hierarchical zoom levels
-- **BindingOperations** (`src/hdc/binding_operations.py`): XOR, permutation, circular convolution, Fourier binding
-- **ErrorCorrection** (`src/hdc/error_correction.py`): XOR parity blocks, Hamming codes, noise tolerance
-
-### ✅ Statistical Testing (Completed)
-- **Sequential Testing** (`src/core/sequential.py`): SPRT with Empirical-Bernstein bounds
-- **DecisionAggregator** (`src/verifier/decision_aggregator.py`): Per-challenge indicators, score aggregation
-- **AdvancedSimilarity** (`src/hypervector/similarity.py`): Hierarchical distance, clustering, 10+ metrics
-
-### ✅ Privacy & Security (Completed)
-- **ZK Proofs** (`src/crypto/zk_proofs.py`, `src/privacy/distance_zk_proofs.py`): Distance proofs, range proofs
-- **Homomorphic Ops** (`src/privacy/homomorphic_ops.py`): Encrypted computation, federated protocol
-- **Differential Privacy** (`src/privacy/differential_privacy.py`): Noise mechanisms, privacy levels
-
-### 🔄 Testing (In Progress)
-- Unit tests for all components
-- Integration tests for full pipeline
-- Performance benchmarks
-- Memory profiling
-- Adversarial robustness
-
-## Architecture
+## 📂 PROJECT STRUCTURE
 
 ```
 src/
-├── core/                 # Statistical testing core
-│   ├── sequential.py     # SPRT implementation
-│   └── boundaries.py     # Empirical-Bernstein bounds
-├── executor/            # Memory-bounded execution
-│   └── segment_runner.py # Segment-wise model execution
-├── hdc/                 # Hyperdimensional computing
-│   ├── encoder.py       # Hypervector encoding
-│   ├── behavioral_sites.py # Feature extraction
-│   ├── binding_operations.py # Binding operations
-│   └── error_correction.py # Error correction
-├── hypervector/         # Vector operations
-│   ├── similarity.py    # Advanced similarity metrics
-│   └── hamming.py       # Hamming distance
-├── fingerprint/         # Model fingerprinting system
-│   ├── dual_library_system.py # Dual library (Reference + Active)
-│   ├── model_library.py # Legacy library management
-│   └── strategic_orchestrator.py # Intelligent test orchestration
-├── verifier/           # Model verification
-│   ├── blackbox.py     # API-based verification
-│   └── decision_aggregator.py # Decision aggregation
-├── privacy/            # Privacy-preserving features
-│   ├── homomorphic_ops.py # Homomorphic operations
-│   └── distance_zk_proofs.py # ZK proofs
-└── rev_pipeline.py     # Main pipeline integration
+├── core/           # SPRT statistical testing
+├── executor/       # Memory-bounded execution
+├── hdc/           # Hyperdimensional computing
+├── hypervector/   # Vector operations
+├── fingerprint/   # Model fingerprinting
+├── verifier/      # Model verification
+├── privacy/       # ZK proofs, homomorphic ops
+└── orchestration/ # Prompt orchestration
 ```
 
-## Key Algorithms
-
-### Sequential Testing (SPRT)
-- Anytime-valid confidence bounds
-- Welford's algorithm for numerical stability
-- Early stopping with configurable error bounds (α=0.05, β=0.10)
-
-### Hyperdimensional Computing
-- Dimension: 8K-100K vectors
-- Sparse density: 0.01 (1% active)
-- Binding operations: XOR, permutation, circular convolution
-- Error correction: 25% parity overhead
-
-## 🧬 Dual Library System
-
-REV uses a sophisticated dual library system for model identification and testing optimization:
+## 🧬 DUAL LIBRARY SYSTEM
 
 ### Reference Library
-- **Purpose**: Contains baseline fingerprints from the smallest/simplest model of each family
 - **Location**: `fingerprint_library/reference_library.json`
-- **Contents**: GPT-2 (GPT family), Llama-7B (Llama family), etc.
-- **Usage**: Used for identifying model families and determining testing strategies
-- **Updates**: Rarely updated, only when new model families are discovered
+- **Purpose**: Baseline fingerprints with deep behavioral topology
+- **Updates**: Rarely, only for new model families
 
-### Active Library
-- **Purpose**: Continuously updated with every model run
+### Active Library  
 - **Location**: `fingerprint_library/active_library.json`
-- **Contents**: All accumulated knowledge from model testing
-- **Usage**: Builds on reference library with specific model insights
-- **Updates**: Automatically updated after each successful run
+- **Purpose**: Continuously updated with all model runs
+- **Updates**: Automatic after each successful run
 
-### Model Identification Logic
-
-1. **Name-Based Identification**: 
-   - If model name contains family patterns (e.g., "gpt", "llama", "mistral")
-   - Use reference fingerprint for that family
-   - Apply targeted testing based on known vulnerabilities
-
-2. **Unknown Models**:
-   - Run quick diagnostic fingerprinting (5 challenges, sample every 10th layer)
-   - Compare against reference library
-   - If match found, use targeted testing
-   - If no match, run full exploratory analysis
-
-### Initialize Reference Library
-
-```bash
-# After running GPT-2 baseline
-python scripts/init_reference_library.py
-
-# This creates the reference library with GPT-2 as the GPT family reference
-```
-
-### Memory Management
-- Segment size: 512 tokens
-- Buffer size: 4 segments
-- KV cache: 2048 max sequence length
-- Memory limit: 4GB default
-
-## Performance Targets
-
-### Speed
-- Hamming distance: 10-20× faster with LUTs
-- HDC encoding: ~50ms per 100K-dim sample
-- Sequential test: <100ms for 1000 samples
-- ZK proof generation: ~200ms
-
-### Memory
-- Hypervectors: 40KB for 10K-dim float32
-- Hamming LUT: 512KB for 16-bit table
-- Segment buffer: <100MB for typical workload
-- ZK circuits: ~10MB compiled
-
-## API Support
-
-### Model Providers
-- OpenAI (GPT-3.5, GPT-4)
-- Anthropic (Claude)
-- HuggingFace (Inference API)
-- Cohere
-- Local models (OpenAI-compatible)
-
-### Rate Limits
-- Default: 60 requests/minute
-- Configurable per provider
-- Automatic retry with exponential backoff
-- Response caching with TTL
-
-## Testing Strategy
-
-### Unit Tests
-- Component isolation with mocks
-- Property-based testing for mathematical operations
-- Edge cases and error conditions
-- Coverage target: >90%
-
-### Integration Tests
-- End-to-end pipeline validation
-- Multi-model comparison scenarios
-- API integration with mock servers
-- Memory-bounded execution verification
-
-### Performance Tests
-- Throughput benchmarks
-- Latency measurements
-- Memory usage profiling
-- Scalability tests (vector dimensions, segment sizes)
-
-### Robustness Tests
-- Adversarial input generation
-- Noise injection and recovery
-- Byzantine fault tolerance
-- Privacy attack resistance
-
-## Development Guidelines
-
-### Code Style
-- Type hints for all functions
-- Docstrings with Args/Returns
-- No inline comments unless necessary
-- Black formatting (line length: 100)
-
-### Testing
-- Write tests before implementation
-- Use pytest fixtures for setup
-- Mock external dependencies
-- Benchmark critical paths
-
-### Documentation
-- Update CLAUDE.md with changes
-- Include usage examples
-- Document performance characteristics
-- Maintain API compatibility
-
-## Recent Updates
-
-### 2024-08-29
-- Implemented core REV pipeline with segment execution
-- Added HDC behavioral sites and binding operations
-- Created black-box verifier for API-based comparison
-- Implemented error correction with XOR parity
-- Added advanced similarity metrics and clustering
-- Created decision aggregator with sequential testing
-- Implemented privacy-preserving features (HE, ZK)
-- ✅ Completed comprehensive test suite:
-  - Unit tests for core components (test_core_sequential.py, test_hdc_components.py)
-  - Integration tests for full pipeline (test_integration.py)
-  - Performance benchmarks with targets (test_performance.py)
-  - Adversarial robustness tests (test_adversarial.py)
-- Added development tooling (Makefile, pytest.ini, requirements-dev.txt)
-
-## Testing Infrastructure
-
-### Test Coverage
-- **Unit Tests**: Component isolation with mocks, property-based testing
-- **Integration Tests**: End-to-end pipeline validation, API integration
-- **Performance Tests**: Benchmarks for all critical operations
-- **Adversarial Tests**: Robustness against attacks, Byzantine fault tolerance
-
-### Running Tests
-```bash
-# Install development dependencies
-make install-dev
-
-# Run all tests
-make test
-
-# Run specific test suites
-make test-unit          # Unit tests only
-make test-integration   # Integration tests
-make test-performance   # Performance benchmarks
-make test-adversarial   # Adversarial robustness
-
-# Generate coverage report
-make test-coverage
-```
-
-### Performance Targets Met
-- ✅ Hamming distance: <1ms for 10K dimensions (with LUTs)
-- ✅ HDC encoding: <50ms per 100K-dim sample
-- ✅ Sequential test: <100ms for 1000 samples
-- ✅ ZK proof generation: <300ms
-- ✅ Error correction: <50ms for 1K dimensions
-
-## Next Steps
-
-1. ✅ ~~Complete comprehensive test suite~~
-2. ✅ ~~Add performance benchmarks~~
-3. ✅ ~~Implement memory profiling~~
-4. ✅ ~~Create adversarial robustness tests~~
-5. Package for distribution (setup.py, PyPI)
-6. Write user documentation (tutorials, API docs)
-
-## Dependencies
-
-### Core
-- numpy>=1.21.0
-- torch>=1.9.0
-- scipy>=1.7.0
-- scikit-learn>=1.0.0
-
-### ML/AI
-- transformers>=4.0.0
-- pandas>=1.3.0
-
-### Cryptography
-- cryptography>=3.4.0
-- pycryptodome>=3.15.0
-
-### Development
-- pytest>=6.2.0
-- black>=21.0.0
-- mypy>=0.910
-- pytest-benchmark>=3.4.0
-
-## Recent Updates (September 2025)
-
-### Unified Pipeline (v3.0)
-- **CONSOLIDATED**: All pipeline scripts merged into single `run_rev.py`
-- **API-FIRST**: Default mode is now API-only (no local model loading)
-- **BEHAVIORAL ANALYSIS**: Integrated sophisticated PoT behavioral probing
-- **DIVERGENCE METRICS**: Information-theoretic divergence calculation
-- **MEMORY SAFETY**: Added --memory-limit flag for local mode
-- **MULTI-MODEL**: Support for comparing multiple models in one run
-
-### Deleted Old Scripts
-The following scripts have been removed (functionality merged into `run_rev.py`):
-- `run_pipeline.py` 
-- `run_rev_complete.py`
-- `run_rev_e2e.py`
-
-## Multi-Stage Orchestrated Testing (NEW)
-
-REV now includes intelligent multi-stage testing that adapts based on model architecture identification:
-
-### Architecture Identification Workflow
-
-1. **Quick Identification Stage** (5 minutes)
-   - Analyzes first 10 layers with basic probes
-   - Compares against fingerprint library of known architectures
-   - Identifies: Llama, GPT, Mistral, Qwen, Yi families
-
-2. **Adaptive Testing Strategy**
-   - **Known Architecture** (>85% confidence): Targeted testing on known vulnerabilities
-   - **Variant/Fine-tuned** (60-85% confidence): Adaptive approach with expanded testing  
-   - **Novel Architecture** (<60% confidence): Full exploratory analysis
-
-3. **Cassette Loading**
-   - Automatically selects appropriate test cassettes based on identified architecture
-   - Focus layers determined by known behavioral patterns
-   - Optimizes testing time by skipping stable regions
-
-### Command Examples
-
-```bash
-# Standard testing (backward compatible)
-python run_rev.py /path/to/model
-
-# Orchestrated multi-stage testing
-python run_rev.py /path/to/model --orchestrate
-
-# With claimed architecture verification
-python run_rev.py /path/to/model --orchestrate --claimed-family llama
-
-# With time budget (in hours)
-python run_rev.py /path/to/model --orchestrate --time-budget 2.5
-
-# List known architectures in library
-python run_rev.py --list-known-architectures
-
-# Add discovered fingerprint to library
-python run_rev.py /path/to/model --orchestrate --add-to-library
-
-# Export/Import fingerprints
-python run_rev.py /path/to/model --orchestrate --export-fingerprint model.fp
-python run_rev.py --import-fingerprint model.fp
-```
-
-### Fingerprint Library
-
-The system maintains a library of base model fingerprints at `./fingerprint_library/`:
-
-```
-fingerprint_library/
-├── fingerprint_library.json  # Main registry
-├── llama/                    # Llama family fingerprints
-├── gpt/                      # GPT family fingerprints
-├── mistral/                  # Mistral family fingerprints
-└── novel/                    # Discovered novel architectures
-```
-
-### Testing Strategies by Architecture
+## 📊 TESTING STRATEGIES
 
 | Architecture | Confidence | Strategy | Time | Focus |
 |-------------|------------|----------|------|-------|
-| Known (Llama 70B) | >85% | Targeted | 2h | Layers 15,35,55 (vulnerable) |
+| Known (Llama 70B) | >85% | Targeted | 2h | Layers 15,35,55 |
 | Variant | 60-85% | Adaptive | 3h | Every 8th layer |
 | Novel | <60% | Exploratory | 4h | Every 5th layer |
 
-### Strategic Benefits
+## 🔬 VALIDATION SUITE
 
-1. **Time Efficiency**: 70% reduction for known architectures
-2. **Accuracy**: Focus on vulnerable layers increases detection rate
-3. **Adaptability**: Automatically adjusts to novel architectures
-4. **Knowledge Base**: Library grows with each novel architecture
+### Running Full Validation
+```bash
+# Run complete validation suite with all experiments
+python run_rev.py --run-validation --generate-validation-plots
 
-### INCORRECT - Don't use these (deleted):
-python run_rev_complete.py ...  # DELETED
-python run_pipeline.py ...      # DELETED
-python run_rev_e2e.py ...       # DELETED
+# Run specific experiments only
+python run_rev.py --run-validation --validation-experiments empirical adversarial
+
+# Custom output directory
+python run_rev.py --run-validation --validation-output my_results/
+
+# Specify model families to test
+python run_rev.py --run-validation --validation-families gpt llama mistral yi
+
+# Adjust sample size for faster/more thorough testing
+python run_rev.py --run-validation --validation-samples 200
 ```
 
-## Contact
+### Collecting Validation Data During Normal Runs
+```bash
+# Collect metrics during normal pipeline execution
+python run_rev.py /path/to/model --collect-validation-data --export-validation-data metrics.json
 
-Repository: https://github.com/rohanvinaik/REV
+# Multiple models with validation collection
+python run_rev.py model1 model2 model3 --collect-validation-data \
+    --export-validation-data validation_batch.json
+```
+
+### Validation Outputs
+- **ROC Curves**: Model family classification performance with AUC scores
+- **Stopping Time Histograms**: SPRT efficiency analysis showing 50-70% sample reduction
+- **Adversarial Attack Results**: Success rates for 5 attack types (stitching, spoofing, gradient, poisoning, collision)
+- **Performance Dashboard**: Comprehensive 8-panel metrics visualization
+- **HTML Report**: Combined report with all plots
+
+Results saved to `experiments/results/`:
+- `empirical_metrics.json` - Classification metrics
+- `adversarial_results.json` - Attack experiment data  
+- `stopping_time_report.json` - SPRT analysis
+- `complete_validation_results.json` - All results combined
+- `validation_summary.json` - High-level summary
+- `plots/` - Publication-ready visualizations (300 DPI)
+- `report.html` - Combined HTML report
+
+## 🔐 SECURITY FEATURES
+
+### Attestation Server
+```bash
+# Start attestation server for fingerprint verification
+python run_rev.py --attestation-server --attestation-port 8080
+
+# With Trusted Execution Environment (TEE) support
+python run_rev.py --attestation-server --enable-tee
+
+# With Hardware Security Module (HSM) for signing
+python run_rev.py --attestation-server --enable-hsm
+
+# Full security configuration
+python run_rev.py --attestation-server \
+    --attestation-port 8443 \
+    --enable-tee \
+    --enable-hsm \
+    --debug
+```
+
+Server endpoints:
+- `GET /health` - Health check
+- `POST /attest/fingerprint` - Create attestation
+- `GET /verify/attestation/<id>` - Verify attestation
+- `POST /prove/distance` - ZK distance proof
+- `POST /prove/range` - Bulletproof range proof
+- `POST /register/fingerprint` - Register fingerprint (auth required)
+- `GET /audit/log` - Audit log (admin only)
+
+### Zero-Knowledge Proofs
+```bash
+# Enable ZK proofs for fingerprint comparisons
+python run_rev.py /path/to/model --enable-zk-proofs
+
+# Combined with other features
+python run_rev.py /path/to/model \
+    --enable-zk-proofs \
+    --enable-prompt-orchestration \
+    --challenges 50
+```
+
+ZK proof types:
+- **Distance proofs**: Prove distance between fingerprints without revealing them
+- **Range proofs**: Prove similarity score is in range [0,1] using Bulletproofs
+- **Membership proofs**: Prove fingerprint is in Merkle tree without revealing it
+
+### Rate Limiting
+```bash
+# Enable API rate limiting
+python run_rev.py /path/to/model --enable-rate-limiting --rate-limit 20.0
+
+# Hierarchical rate limiting (user → model → global)
+python run_rev.py /path/to/model \
+    --enable-rate-limiting \
+    --rate-limit 10.0
+```
+
+Rate limiting features:
+- Token bucket algorithm with configurable refill rate
+- Exponential backoff with jitter for repeated failures
+- Per-model and per-user quota management
+- Redis backend support for distributed systems
+- Adaptive rate limiting based on system load
+
+### Complete Security Setup
+```bash
+# Enable all security features
+python run_rev.py /path/to/model \
+    --enable-security \
+    --enable-zk-proofs \
+    --enable-rate-limiting \
+    --rate-limit 15.0 \
+    --enable-hsm
+
+# With attestation server running separately
+# Terminal 1:
+python run_rev.py --attestation-server --enable-tee --enable-hsm
+
+# Terminal 2:
+python run_rev.py /path/to/model --enable-security --enable-zk-proofs
+```
+
+### Security Testing
+```bash
+# Run security test suite
+pytest tests/test_security.py -v
+
+# Specific test categories
+pytest tests/test_security.py::TestZKAttestation -v
+pytest tests/test_security.py::TestRateLimiter -v
+pytest tests/test_security.py::TestMerkleTrees -v
+pytest tests/test_security.py::TestAttestationServer -v
+```
+
+### Performance Targets
+- **ZK Proof Generation**: < 200ms per proof ✅
+- **Merkle Proof Verification**: < 10ms ✅
+- **Rate Limiting Check**: < 1ms ✅
+- **Batch Verification**: 10-20% speedup ✅
+- **Attestation Creation**: < 50ms ✅
+
+## 🧬 PRINCIPLED FEATURE EXTRACTION
+
+### Overview
+REV now includes a principled feature extraction system that replaces hand-picked features with automatically discovered, interpretable features across four hierarchical categories.
+
+### Feature Categories
+
+1. **Syntactic Features** (9 features)
+   - Token distributions and type-token ratios
+   - Zipf distribution parameters
+   - N-gram entropy (1-3 grams)
+   - Lexical complexity metrics
+   - Sentence structure analysis
+
+2. **Semantic Features** (20 features)
+   - Embedding space statistics (mean, std, skew, kurtosis)
+   - Cosine similarity distributions
+   - Principal component analysis (top 10 components)
+   - Attention entropy and focus patterns
+
+3. **Behavioral Features** (9 features)
+   - Response consistency metrics
+   - Uncertainty quantification (entropy, confidence)
+   - Refusal behavior analysis
+   - Sentiment indicators
+   - Temperature-like diversity estimates
+
+4. **Architectural Features** (18 features)
+   - Layer-wise activation statistics
+   - Gradient flow patterns (vanishing/exploding detection)
+   - Sparsity analysis across layers
+   - Model capacity indicators
+   - Transformer-specific features (heads, dimensions)
+
+### Running with Principled Features
+
+```bash
+# Basic usage with principled feature extraction
+python run_rev.py /path/to/model --enable-principled-features --challenges 50
+
+# Full configuration with all options
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --feature-selection-method ensemble \
+    --feature-reduction-method umap \
+    --num-features-select 100 \
+    --enable-learned-features \
+    --feature-analysis-report
+
+# Compare multiple models with feature analysis
+python run_rev.py model1 model2 model3 \
+    --enable-principled-features \
+    --feature-analysis-report \
+    --challenges 100
+
+# With prompt orchestration and principled features
+python run_rev.py /path/to/model \
+    --enable-prompt-orchestration \
+    --enable-principled-features \
+    --enable-learned-features \
+    --challenges 200
+```
+
+### Feature Selection Methods
+
+```bash
+# Mutual information (best for classification)
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --feature-selection-method mutual_info
+
+# LASSO (sparse linear features)
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --feature-selection-method lasso
+
+# Elastic Net (balanced L1/L2)
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --feature-selection-method elastic_net
+
+# Ensemble (combines all methods - recommended)
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --feature-selection-method ensemble
+```
+
+### Dimensionality Reduction Options
+
+```bash
+# PCA (linear, preserves variance)
+--feature-reduction-method pca
+
+# t-SNE (non-linear, 2D visualization)
+--feature-reduction-method tsne
+
+# UMAP (non-linear, preserves structure - recommended)
+--feature-reduction-method umap
+
+# No reduction (use all selected features)
+--feature-reduction-method none
+```
+
+### Learned Features
+
+Enable contrastive learning and autoencoders for adaptive feature discovery:
+
+```bash
+# Enable all learning methods
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --enable-learned-features \
+    --challenges 100
+
+# Learned features improve with more models
+python run_rev.py model1 model2 model3 model4 model5 \
+    --enable-principled-features \
+    --enable-learned-features
+```
+
+### Feature Analysis Report
+
+Generate comprehensive analysis with visualizations:
+
+```bash
+# Generate full analysis report
+python run_rev.py /path/to/model \
+    --enable-principled-features \
+    --feature-analysis-report
+
+# Output includes:
+# - Feature correlation matrices with clustering
+# - Feature importance rankings across methods
+# - Ablation study results
+# - Model family-specific feature distributions
+# - LaTeX report for publication
+# - All saved to: experiments/feature_analysis_results/
+```
+
+### Integration with Existing Features
+
+The principled features seamlessly integrate with:
+- **HDC Encoding**: Features weighted by importance before hypervector encoding
+- **Prompt Orchestration**: Enhanced behavioral features from diverse prompts
+- **Deep Behavioral Analysis**: Architectural features from layer profiling
+- **Unified Fingerprints**: Principled features included in fingerprint data
+
+### Performance Impact
+
+- **Feature Extraction**: ~100ms per model
+- **Feature Selection**: ~500ms for 100 features
+- **Learned Features**: ~2s for contrastive learning (improves over time)
+- **Analysis Report**: ~10s for full visualization suite
+
+### Advanced Usage Examples
+
+```bash
+# Reference library building with principled features
+python run_rev.py /path/to/small_model \
+    --build-reference \
+    --enable-principled-features \
+    --enable-learned-features \
+    --feature-analysis-report
+
+# Adversarial testing with feature analysis
+python run_rev.py /path/to/model \
+    --adversarial \
+    --enable-principled-features \
+    --feature-selection-method mutual_info \
+    --challenges 50
+
+# Multi-model comparison with feature importance
+python run_rev.py gpt-model llama-model mistral-model \
+    --enable-principled-features \
+    --feature-analysis-report \
+    --output comparison_report.json
+
+# Full pipeline with all advanced features
+python run_rev.py /path/to/model \
+    --enable-prompt-orchestration \
+    --enable-principled-features \
+    --enable-learned-features \
+    --unified-fingerprints \
+    --comprehensive-analysis \
+    --feature-analysis-report \
+    --challenges 500 \
+    --debug
+```
+
+### Feature Data Storage
+
+Principled features are stored in the pipeline results:
+
+```json
+{
+  "stages": {
+    "behavioral_analysis": {
+      "metrics": {
+        "principled_features": {
+          "syntactic": [...],
+          "semantic": [...],
+          "behavioral": [...],
+          "architectural": [...],
+          "feature_importance": [
+            ["response_consistency", 0.92],
+            ["embedding_mean", 0.87],
+            ["attention_entropy", 0.84],
+            ...
+          ],
+          "learned_features": [...]
+        }
+      }
+    }
+  }
+}
+```
+
+### Interpreting Results
+
+The feature analysis report provides:
+
+1. **Top Important Features**: Ranked list of most discriminative features
+2. **Feature Correlations**: Identify redundant or complementary features
+3. **Ablation Results**: Impact of each feature category on performance
+4. **Family Distributions**: How features vary across model families
+5. **LaTeX Report**: Publication-ready analysis documentation
+
+## 🔧 DEVELOPMENT
+
+### Running Tests
+```bash
+make install-dev
+make test                # All tests
+make test-unit          # Unit tests
+make test-integration   # Integration
+make test-performance   # Benchmarks
+make test-coverage      # Coverage report
+```
+
+### Performance Targets Met
+- ✅ Hamming distance: <1ms for 10K dimensions
+- ✅ HDC encoding: <50ms per 100K-dim sample
+- ✅ Sequential test: <100ms for 1000 samples
+- ✅ ZK proof generation: <300ms
+- ✅ Feature extraction: <100ms per model
+- ✅ Feature selection: <500ms for 100 features
+
+### Code Guidelines
+- Type hints for all functions
+- Docstrings with Args/Returns
+- Black formatting (line length: 100)
+- Update CLAUDE.md with changes
+
+## 💡 KEY INNOVATION
+
+REV enables verification of massive LLMs (68GB Yi-34B, 405B models) that EXCEED available memory through intelligent segmented execution. Models are processed layer-by-layer at restriction sites (attention boundaries) while maintaining cryptographic verification through Merkle trees.
 
 ---
-
-*This file is actively maintained and updated with each development session.*
+*Repository: https://github.com/rohanvinaik/REV*

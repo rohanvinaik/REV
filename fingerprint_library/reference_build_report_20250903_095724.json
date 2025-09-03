@@ -1,0 +1,42 @@
+{
+  "timestamp": "2025-09-03T09:57:24.503763",
+  "duration": 8.052392959594727,
+  "results": [
+    {
+      "family": "pythia",
+      "model": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "success": true,
+      "duration": 8.051417112350464,
+      "challenges": 20
+    }
+  ],
+  "validation": {
+    "families_with_references": [],
+    "families_missing": [
+      "pythia",
+      "gpt",
+      "llama",
+      "falcon",
+      "yi",
+      "mistral",
+      "phi"
+    ],
+    "total_fingerprints": 1,
+    "validation_passed": false
+  },
+  "summary": {
+    "total_families": 7,
+    "successful_builds": 1,
+    "failed_builds": 0,
+    "families_with_references": 0,
+    "families_missing": [
+      "pythia",
+      "gpt",
+      "llama",
+      "falcon",
+      "yi",
+      "mistral",
+      "phi"
+    ]
+  }
+}

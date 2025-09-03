@@ -1,0 +1,85 @@
+{
+  "fingerprints": {
+    "gpt_reference": {
+      "model_family": "gpt",
+      "model_size": "124M",
+      "architecture_version": "gpt-2",
+      "reference_model": "gpt2",
+      "num_layers": 12,
+      "hidden_size": 768,
+      "num_attention_heads": 12,
+      "vocab_size": 50257,
+      "behavioral_patterns": {
+        "hv_entropy": 10.97816317157394,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.56353591160221,
+        "avg_response_length": 36.2
+      },
+      "vulnerable_layers": [
+        3,
+        6,
+        9
+      ],
+      "stable_layers": [
+        0,
+        1,
+        11
+      ],
+      "recommended_cassettes": [
+        "syntactic",
+        "semantic",
+        "arithmetic"
+      ],
+      "memory_footprint_gb": 0.5,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 8,
+      "validation_score": 1.0,
+      "source": "empirical",
+      "is_reference": true,
+      "timestamp": "2025-09-02T20:13:08.596487"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_reference": {
+      "behavioral_patterns": {
+        "hv_entropy": 14.333757530848494,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.510752688172043,
+        "avg_response_length": 37.2
+      },
+      "model_family": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 5,
+      "challenges_processed": 5,
+      "processing_time": 0.07928872108459473,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "is_reference": true,
+      "timestamp": "2025-09-02T21:51:12.014950"
+    },
+    "49c537161a457d5256512f9d2d38a87d81ae0f0e_reference": {
+      "behavioral_patterns": {
+        "hv_entropy": 15.511441002799984,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.4411764705882353,
+        "avg_response_length": 40.8
+      },
+      "model_family": "49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "model_size": "unknown",
+      "architecture_version": "49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "reference_model": "49c537161a457d5256512f9d2d38a87d81ae0f0e",
+      "hypervectors_generated": 5,
+      "challenges_processed": 5,
+      "processing_time": 0.08188605308532715,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "is_reference": true,
+      "timestamp": "2025-09-02T21:51:31.553083"
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "created": "2025-09-02T20:13:08.596472",
+    "last_updated": "2025-09-02T21:51:31.553086"
+  }
+}

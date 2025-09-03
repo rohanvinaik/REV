@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Any, Union, Set, Callable
 import numpy as np
-from collections import OrderedDict, defaultdict, Counter
+from collections import OrderedDict, defaultdict, Counter, deque
 import re
 import itertools
 import time
