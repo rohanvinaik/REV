@@ -18,6 +18,12 @@
    - External API calls
    - Requires API keys
 
+### ⚠️ IMPORTANT: API Mode During Development
+
+**Current Development Setup:** The system shows "API-Only mode" in the logs, but this does NOT mean it's making external API calls. During experimentation and development, the full API pipeline infrastructure is set up but routed to the local filesystem instead of external APIs. This allows testing the complete API workflow without the cost/latency of actual API calls to large models like 405B parameter models.
+
+When development is complete, the routing will be switched back to external APIs. The "API mode" designation refers to the **pipeline architecture**, not the actual data source.
+
 ### ✅ CORRECT USAGE - Local Models
 
 ```bash
