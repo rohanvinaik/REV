@@ -1489,14 +1489,16 @@ class REVPipeline:
     def generate_pot_challenges(self,
                                n: int,
                                focus: str = "balanced",
-                               complexity_range: Optional[Tuple] = None):
+                               complexity_range: Optional[Tuple] = None,
+                               layer_focus: Optional[List[int]] = None):
         """
-        Generate PoT-style challenges for verification.
+        Generate PoT-style challenges for verification with layer-specific targeting.
         
         Args:
             n: Number of challenges to generate
             focus: "coverage", "separation", or "balanced"
             complexity_range: Optional complexity range
+            layer_focus: Optional list of vulnerable/important layers to target
             
         Returns:
             List of generated challenges
@@ -1513,12 +1515,40 @@ class REVPipeline:
                 min_complexity=ChallengeComplexity.MODERATE
             )
         
-        logger.info(f"Generating {n} PoT-style challenges (focus: {focus})")
+        logger.info(f"Generating {n} PoT-style challenges (focus: {focus}, layer_focus: {layer_focus})")
         
-        challenges = self.challenge_generator.generate_verification_challenges(
-            n=n,
-            focus=focus
-        )
+        # If layer focus is provided, generate layer-specific challenges
+        if layer_focus:
+            # Divide challenges across focused layers
+            challenges_per_layer = max(1, n // len(layer_focus))
+            remaining = n - (challenges_per_layer * len(layer_focus))
+            
+            all_challenges = []
+            for i, layer_idx in enumerate(layer_focus):
+                # Add extra challenge to first layers for remainder
+                layer_challenges = challenges_per_layer + (1 if i < remaining else 0)
+                
+                # Generate challenges with layer-specific context
+                layer_specific_challenges = self.challenge_generator.generate_verification_challenges(
+                    n=layer_challenges,
+                    focus=focus
+                )
+                
+                # Tag challenges with layer information
+                for challenge in layer_specific_challenges:
+                    challenge.metadata = challenge.metadata or {}
+                    challenge.metadata["target_layer"] = layer_idx
+                    challenge.metadata["layer_specific"] = True
+                    
+                all_challenges.extend(layer_specific_challenges)
+            
+            challenges = all_challenges
+            logger.info(f"Generated layer-specific challenges for layers: {layer_focus}")
+        else:
+            challenges = self.challenge_generator.generate_verification_challenges(
+                n=n,
+                focus=focus
+            )
         
         # Store in experiment results
         self.experiment_results["challenges"] = {

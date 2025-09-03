@@ -144,15 +144,72 @@ class StrategicTestingOrchestrator:
             total_time += identification_stage.duration_estimate
             reasoning.append("Stage 1: Quick identification to determine architecture")
         
-        # Get initial fingerprint for identification (simulate for now)
-        # In practice, this would run the identification stage first
-        mock_fingerprint = self._create_mock_fingerprint(model_path)
+        # Use dual library system for identification
+        from .dual_library_system import identify_and_strategize
+        identification, strategy = identify_and_strategize(model_path)
         
-        # Identify architecture
-        identification = self.library.identify_model(mock_fingerprint)
+        # Log identification result
+        logger.info(f"Model identification: {identification.identified_family} "
+                   f"(confidence: {identification.confidence:.1%}, method: {identification.method})")
         
-        # Stage 2: Architecture-specific testing
-        if identification.is_novel:
+        if identification.method == "unknown":
+            # Unknown model - need diagnostic first
+            reasoning.append("Unknown model - running diagnostic fingerprinting first")
+            
+            diagnostic_stage = TestingStage(
+                stage_name="Diagnostic Fingerprinting",
+                stage_type="diagnostic",
+                duration_estimate=600,  # 10 minutes
+                required_resources={"memory_gb": 4, "compute": "low"},
+                cassettes=["syntactic"],
+                focus_layers=strategy.get("sample_layers", list(range(0, 100, 10))),
+                configuration={"diagnostic": True, "quick_scan": True},
+                metrics_to_collect=["layer_norms", "attention_patterns"],
+                validation_criteria={"min_challenges": strategy.get("challenges", 5)}
+            )
+            stages.append(diagnostic_stage)
+            total_time += diagnostic_stage.duration_estimate
+            
+            # After diagnostic, run standard analysis
+            analysis_stage = TestingStage(
+                stage_name="Standard Behavioral Analysis",
+                stage_type="standard",
+                duration_estimate=1200,  # 20 minutes
+                required_resources={"memory_gb": 8, "compute": "medium"},
+                cassettes=["syntactic", "semantic", "arithmetic"],
+                focus_layers=list(range(0, 100, 5)),
+                configuration={"standard": True},
+                metrics_to_collect=["divergence", "attention", "mlp"],
+                validation_criteria={"min_challenges": 10}
+            )
+            stages.append(analysis_stage)
+            total_time += analysis_stage.duration_estimate
+            
+        elif identification.method == "name_match":
+            # Known family - use targeted testing
+            reasoning.append(f"Identified as {identification.identified_family} family - using targeted testing")
+            reasoning.append(f"Reference model: {identification.reference_model}")
+            
+            targeted_stage = TestingStage(
+                stage_name=f"Targeted {identification.identified_family.upper()} Testing",
+                stage_type="targeted",
+                duration_estimate=900,  # 15 minutes
+                required_resources={"memory_gb": 6, "compute": "medium"},
+                cassettes=strategy.get("cassettes", ["syntactic", "semantic"]),
+                focus_layers=strategy.get("focus_layers", []),
+                configuration={
+                    "targeted": True,
+                    "family": identification.identified_family,
+                    "reference": identification.reference_model
+                },
+                metrics_to_collect=["divergence", "family_specific"],
+                validation_criteria={"min_challenges": strategy.get("challenges", 10)}
+            )
+            stages.append(targeted_stage)
+            total_time += targeted_stage.duration_estimate
+        
+        # Additional exploratory stage if confidence is low
+        if identification.confidence < 0.5:
             # Novel architecture - exploratory approach
             reasoning.append("Novel architecture detected - using exploratory approach")
             
@@ -461,7 +518,12 @@ class StrategicTestingOrchestrator:
             pathway_hypervector=np.random.randn(10000),
             response_hypervector=np.random.randn(10000),
             model_id=Path(model_path).stem,
+            prompt_text="Mock prompt for orchestration",
+            response_text="Mock response for orchestration",
+            layer_count=32,  # Default for testing
+            layers_sampled=list(range(0, 32, 4)),  # Sample every 4th layer
             fingerprint_quality=0.9,
+            divergence_stats={'mean': 0.5, 'std': 0.1, 'max': 0.7, 'min': 0.3},
             binding_strength=0.85
         )
     

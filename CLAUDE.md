@@ -1,36 +1,99 @@
 # REV - Restriction Enzyme Verification System
 
+## ⚠️ IMPORTANT: ONE UNIFIED PIPELINE
+
+**There is ONLY ONE main pipeline: `run_rev.py`**
+- DO NOT create new pipeline scripts
+- DO NOT use old scripts from old_files/
+- ALL features are integrated into run_rev.py
+- This is the ONLY entry point for REV framework v3.0
+
 ## 🚀 QUICK START - RUNNING THE PIPELINE
 
-### Default Mode: API-Only (Recommended)
+### Understanding API Mode (Default) 
+**API Mode** means the pipeline uses memory-bounded streaming execution WITHOUT loading entire models into RAM. 
+
+**CORRECTED Implementation (as of latest update):**
+- API mode now CORRECTLY implements true segmented streaming
+- Weights are streamed from disk layer-by-layer (like from a remote server)
+- The model is NEVER loaded with AutoModelForCausalLM.from_pretrained()
+- Maximum 2GB memory usage at any time, regardless of model size
+- Each layer is loaded, processed, and discarded before loading the next
+- No API keys needed for local models
+- No external API calls made for local models
+
+This works for:
+1. **Local models on filesystem**: Automatically detected and uses segmented execution
+2. **Cloud API models**: Uses external APIs (OpenAI, Anthropic, etc.) with API keys
+
+### Running Local Models (No API Keys Needed)
 ```bash
-# Single model verification (uses API, no local loading)
-python run_rev.py meta-llama/Llama-3.3-70B-Instruct
+# Local model verification - uses segmented streaming, NOT full loading
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct
 
-# Compare multiple models
-python run_rev.py gpt-4 claude-3-opus meta-llama/Llama-3.3-70B
+# GPT-2 from local filesystem
+python run_rev.py /Users/rohanvinaik/LLM_models/gpt2 --challenges 5 --debug
 
-# With more challenges and debug output
-python run_rev.py meta-llama/Llama-3.3-70B-Instruct --challenges 10 --debug
-
-# Specify API provider explicitly
-python run_rev.py gpt-4 --provider openai --api-key sk-...
+# Multiple local models
+python run_rev.py /path/to/model1 /path/to/model2 --challenges 10
 ```
 
-### Local Mode (Only for Small Models)
+### Running Cloud API Models
 ```bash
-# WARNING: Only use --local for models <20GB. Larger models will exhaust memory!
-python run_rev.py meta-llama/Llama-2-7b-hf --local --device cpu --quantize 4bit
+# OpenAI models (requires OPENAI_API_KEY environment variable or --api-key)
+python run_rev.py gpt-4 --api-key sk-...
 
-# With memory limit (still may fail for very large models)
-python run_rev.py /path/to/small-model --local --memory-limit 20
+# Anthropic models  
+python run_rev.py claude-3-opus --provider anthropic --api-key ...
+```
+
+### Local Mode - REMOVED
+```bash
+# The --local flag has been PERMANENTLY REMOVED
+# ALL models now use segmented streaming (never fully loaded)
+# This prevents memory issues and confusion about "API mode"
 ```
 
 ### Important Notes:
-- **DEFAULT IS API-ONLY**: The pipeline uses APIs by default, no local model loading
-- **DO NOT USE --local FOR LARGE MODELS**: Models >20GB will crash your system
-- **The 70B/405B models should ONLY be run via API**
+- **DEFAULT IS API MODE**: Uses segmented/streaming execution, NOT full model loading
+- **LOCAL MODELS WORK WITHOUT API KEYS**: Filesystem paths are automatically detected
+- **NO EXTERNAL API CALLS FOR LOCAL MODELS**: Everything runs on your machine
+- **DO NOT USE --local FLAG**: Unless you specifically want to fully load a small model
+- **The 70B/405B models work fine in API mode**: They stream from disk without loading fully
 - Use `run_rev.py` - this is the ONLY unified pipeline script
+
+## 🏗️ UNIFIED PIPELINE ARCHITECTURE
+
+The REV framework v3.0 has ONE unified pipeline (`run_rev.py`) that integrates:
+
+### Core Components
+1. **REVUnified** (run_rev.py) - Main orchestrator class
+2. **REVPipeline** (src/rev_pipeline.py) - Core segmented execution engine  
+3. **MetalAcceleratedInference** (src/models/metal_accelerated_inference.py) - Apple Silicon GPU support
+4. **SegmentRunner** (src/executor/segment_runner.py) - Layer-by-layer execution
+5. **UnifiedInferenceManager** (src/models/unified_inference.py) - Model loading coordinator
+
+### Execution Mode
+- **ONLY Segmented Streaming**: The pipeline now ONLY supports segmented execution
+  - Weights stream from disk layer-by-layer
+  - Model is NEVER fully loaded into memory  
+  - 2GB memory cap regardless of model size
+  - Works for models of ANY size (1B to 405B+)
+  - The --local flag has been REMOVED to prevent confusion
+
+### Device Support
+- **MPS (Metal Performance Shaders)**: Apple Silicon GPU acceleration
+- **CUDA**: NVIDIA GPU support (Linux/Windows)
+- **CPU**: Universal fallback
+- Auto-detection via `get_optimal_device()`
+
+### Key Features
+- Memory-bounded execution (2-4GB active memory for 70B+ models)
+- Behavioral fingerprinting via hyperdimensional computing
+- Merkle tree verification for computation integrity
+- PoT (Proof-of-Thought) challenges for behavioral probing
+- Cassette-based deep analysis system
+- Multi-stage orchestrated testing with fingerprint library
 
 ## 🎯 CORE PURPOSE OF THIS EXPERIMENT
 
@@ -101,6 +164,10 @@ src/
 ├── hypervector/         # Vector operations
 │   ├── similarity.py    # Advanced similarity metrics
 │   └── hamming.py       # Hamming distance
+├── fingerprint/         # Model fingerprinting system
+│   ├── dual_library_system.py # Dual library (Reference + Active)
+│   ├── model_library.py # Legacy library management
+│   └── strategic_orchestrator.py # Intelligent test orchestration
 ├── verifier/           # Model verification
 │   ├── blackbox.py     # API-based verification
 │   └── decision_aggregator.py # Decision aggregation
@@ -122,6 +189,46 @@ src/
 - Sparse density: 0.01 (1% active)
 - Binding operations: XOR, permutation, circular convolution
 - Error correction: 25% parity overhead
+
+## 🧬 Dual Library System
+
+REV uses a sophisticated dual library system for model identification and testing optimization:
+
+### Reference Library
+- **Purpose**: Contains baseline fingerprints from the smallest/simplest model of each family
+- **Location**: `fingerprint_library/reference_library.json`
+- **Contents**: GPT-2 (GPT family), Llama-7B (Llama family), etc.
+- **Usage**: Used for identifying model families and determining testing strategies
+- **Updates**: Rarely updated, only when new model families are discovered
+
+### Active Library
+- **Purpose**: Continuously updated with every model run
+- **Location**: `fingerprint_library/active_library.json`
+- **Contents**: All accumulated knowledge from model testing
+- **Usage**: Builds on reference library with specific model insights
+- **Updates**: Automatically updated after each successful run
+
+### Model Identification Logic
+
+1. **Name-Based Identification**: 
+   - If model name contains family patterns (e.g., "gpt", "llama", "mistral")
+   - Use reference fingerprint for that family
+   - Apply targeted testing based on known vulnerabilities
+
+2. **Unknown Models**:
+   - Run quick diagnostic fingerprinting (5 challenges, sample every 10th layer)
+   - Compare against reference library
+   - If match found, use targeted testing
+   - If no match, run full exploratory analysis
+
+### Initialize Reference Library
+
+```bash
+# After running GPT-2 baseline
+python scripts/init_reference_library.py
+
+# This creates the reference library with GPT-2 as the GPT family reference
+```
 
 ### Memory Management
 - Segment size: 512 tokens

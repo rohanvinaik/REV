@@ -30,9 +30,7 @@ from .optimization_integration import (
     ExecutionBudget,
     ExecutionPlan,
     InformationGainEstimator,
-    PromptExecutionItem,
-    CostBenefitAnalyzer,
-    PriorityQueue
+    PromptExecutionItem
 )
 
 from .online_learning import (

@@ -1,0 +1,543 @@
+{
+  "fingerprints": {
+    "4900a8f7df44927f": {
+      "model_family": "llama",
+      "model_size": "70B",
+      "architecture_version": "llama-3",
+      "num_layers": 80,
+      "hidden_size": 8192,
+      "num_attention_heads": 64,
+      "vocab_size": 128256,
+      "layer_transitions": [
+        0,
+        20,
+        40,
+        60
+      ],
+      "behavioral_phases": [
+        [
+          0,
+          20,
+          "encoding"
+        ],
+        [
+          20,
+          60,
+          "reasoning"
+        ],
+        [
+          60,
+          80,
+          "decoding"
+        ]
+      ],
+      "recommended_cassettes": [
+        "recursive",
+        "theory_of_mind",
+        "counterfactual"
+      ],
+      "vulnerable_layers": [
+        15,
+        35,
+        55
+      ],
+      "stable_layers": [
+        5,
+        25,
+        45,
+        65
+      ],
+      "memory_footprint_gb": 1310.72,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 4,
+      "fingerprint_id": "4900a8f7df44927f",
+      "creation_date": "2025-09-02 20:52:58.973435",
+      "validation_score": 1.0,
+      "source": "empirical"
+    },
+    "db7e79c97a4226f1": {
+      "model_family": "llama",
+      "model_size": "7B",
+      "architecture_version": "llama-3",
+      "num_layers": 32,
+      "hidden_size": 4096,
+      "num_attention_heads": 32,
+      "vocab_size": 128256,
+      "layer_transitions": [
+        0,
+        8,
+        16,
+        24
+      ],
+      "behavioral_phases": [
+        [
+          0,
+          8,
+          "encoding"
+        ],
+        [
+          8,
+          24,
+          "reasoning"
+        ],
+        [
+          24,
+          32,
+          "decoding"
+        ]
+      ],
+      "recommended_cassettes": [
+        "syntactic",
+        "semantic",
+        "transform"
+      ],
+      "vulnerable_layers": [
+        6,
+        14,
+        22
+      ],
+      "stable_layers": [
+        2,
+        10,
+        18,
+        26
+      ],
+      "memory_footprint_gb": 262.144,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 4,
+      "fingerprint_id": "db7e79c97a4226f1",
+      "creation_date": "2025-09-02 20:52:58.974100",
+      "validation_score": 1.0,
+      "source": "empirical"
+    },
+    "dcb6c8653f25673c": {
+      "model_family": "gpt",
+      "model_size": "175B",
+      "architecture_version": "gpt-3",
+      "num_layers": 96,
+      "hidden_size": 12288,
+      "num_attention_heads": 96,
+      "vocab_size": 50257,
+      "layer_transitions": [
+        0,
+        24,
+        48,
+        72
+      ],
+      "behavioral_phases": [
+        [
+          0,
+          24,
+          "encoding"
+        ],
+        [
+          24,
+          72,
+          "reasoning"
+        ],
+        [
+          72,
+          96,
+          "decoding"
+        ]
+      ],
+      "recommended_cassettes": [
+        "recursive",
+        "meta",
+        "counterfactual"
+      ],
+      "vulnerable_layers": [
+        20,
+        44,
+        68
+      ],
+      "stable_layers": [
+        8,
+        32,
+        56,
+        80
+      ],
+      "memory_footprint_gb": 2359.296,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 4,
+      "fingerprint_id": "dcb6c8653f25673c",
+      "creation_date": "2025-09-02 20:52:58.974737",
+      "validation_score": 1.0,
+      "source": "empirical"
+    },
+    "34dc03d61c42fb0f": {
+      "model_family": "mistral",
+      "model_size": "7B",
+      "architecture_version": "mistral-v0.1",
+      "num_layers": 32,
+      "hidden_size": 4096,
+      "num_attention_heads": 32,
+      "vocab_size": 32000,
+      "layer_transitions": [
+        0,
+        10,
+        20,
+        28
+      ],
+      "behavioral_phases": [
+        [
+          0,
+          10,
+          "encoding"
+        ],
+        [
+          10,
+          28,
+          "reasoning"
+        ],
+        [
+          28,
+          32,
+          "decoding"
+        ]
+      ],
+      "recommended_cassettes": [
+        "semantic",
+        "transform",
+        "theory_of_mind"
+      ],
+      "vulnerable_layers": [
+        8,
+        16,
+        24
+      ],
+      "stable_layers": [
+        4,
+        12,
+        20,
+        28
+      ],
+      "memory_footprint_gb": 262.144,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 4,
+      "fingerprint_id": "34dc03d61c42fb0f",
+      "creation_date": "2025-09-02 20:52:58.975423",
+      "validation_score": 1.0,
+      "source": "empirical"
+    },
+    "7c5fdea6e4466c99": {
+      "model_family": "yi",
+      "model_size": "34B",
+      "architecture_version": "yi-1.5",
+      "num_layers": 60,
+      "hidden_size": 7168,
+      "num_attention_heads": 56,
+      "vocab_size": 64000,
+      "layer_transitions": [
+        0,
+        15,
+        30,
+        45
+      ],
+      "behavioral_phases": [
+        [
+          0,
+          15,
+          "encoding"
+        ],
+        [
+          15,
+          45,
+          "reasoning"
+        ],
+        [
+          45,
+          60,
+          "decoding"
+        ]
+      ],
+      "recommended_cassettes": [
+        "recursive",
+        "transform",
+        "meta"
+      ],
+      "vulnerable_layers": [
+        12,
+        28,
+        44
+      ],
+      "stable_layers": [
+        5,
+        20,
+        35,
+        50
+      ],
+      "memory_footprint_gb": 860.16,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 4,
+      "fingerprint_id": "7c5fdea6e4466c99",
+      "creation_date": "2025-09-02 20:52:58.976105",
+      "validation_score": 1.0,
+      "source": "empirical"
+    },
+    "dbd94d309c22ca0f": {
+      "model_family": "qwen",
+      "model_size": "72B",
+      "architecture_version": "qwen-2",
+      "num_layers": 80,
+      "hidden_size": 8192,
+      "num_attention_heads": 64,
+      "vocab_size": 152064,
+      "layer_transitions": [
+        0,
+        18,
+        40,
+        62
+      ],
+      "behavioral_phases": [
+        [
+          0,
+          18,
+          "encoding"
+        ],
+        [
+          18,
+          62,
+          "reasoning"
+        ],
+        [
+          62,
+          80,
+          "decoding"
+        ]
+      ],
+      "recommended_cassettes": [
+        "syntactic",
+        "recursive",
+        "counterfactual"
+      ],
+      "vulnerable_layers": [
+        14,
+        36,
+        58
+      ],
+      "stable_layers": [
+        7,
+        28,
+        49,
+        70
+      ],
+      "memory_footprint_gb": 1310.72,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 4,
+      "fingerprint_id": "dbd94d309c22ca0f",
+      "creation_date": "2025-09-02 20:52:58.976840",
+      "validation_score": 1.0,
+      "source": "empirical"
+    }
+  },
+  "family_index": {
+    "llama": [
+      "15c9fbbd53b0fc6b",
+      "a2e1ddcc0761e4a6",
+      "8cfb3e1ab7f94123",
+      "75a9301f3ebd649a",
+      "d73225f2501f745a",
+      "c18a4469735a6a20",
+      "cfcfb74801e15c67",
+      "9c6a770793994eca",
+      "023e5923ca924153",
+      "c83445bb12a4e58c",
+      "525f1db9a5d47dc5",
+      "3290f4be361e132d",
+      "f3aa56ecb42d5c21",
+      "f1733eb45588569f",
+      "2dbf29791a9c8ea4",
+      "c2b34fc3952326f0",
+      "7bad7f130dc4e346",
+      "34a83d133acede93",
+      "f31d9fc3d55746fe",
+      "e41429fba36cbdc3",
+      "df83283497c6c289",
+      "0118e787c384dc61",
+      "ed1a869a51373be8",
+      "7ebe338965d4bdd5",
+      "1badb2d6e85e7ac7",
+      "48a2d69f8b1ebbbc",
+      "c866197884cd2f53",
+      "c1165e9be37584d9",
+      "2ab37f2f58df2e4a",
+      "c0ff3d342a76a61f",
+      "ee85ed1546e77bd6",
+      "83b934b4fc21c575",
+      "1384a269b94d88eb",
+      "061627b5a8ba6d37",
+      "204ddc0737de1715",
+      "c7dd0930346f064c",
+      "e55068224a563802",
+      "936c1ebdd787c52f",
+      "464732e97cec248a",
+      "edb73cb0e36f4b21",
+      "0f2e8024b870e554",
+      "513328da6e8e8a8a",
+      "338e8b82c4bfce19",
+      "779312e85668b1dc",
+      "ba33a751f2b13128",
+      "dbc30bc71afb8d0e",
+      "87e615920567ed92",
+      "d55c05fb7071f8f4",
+      "5568e85479d42de9",
+      "abf434546d4e66a5",
+      "6fc78e0b4abf5632",
+      "c8ab3358f7da7df1",
+      "3c8f5246c2cf90ea",
+      "8fe3bc843a815b24",
+      "567b31f7d9cc94f8",
+      "d10b6694557f809c",
+      "2708211edbafc314",
+      "839a93ccbcc3ce66",
+      "62ce71396f1304bd",
+      "8ddd22794b74f3ba",
+      "ad97ae2dd8f7628d",
+      "0a409e2ded536605",
+      "4900a8f7df44927f",
+      "db7e79c97a4226f1"
+    ],
+    "gpt": [
+      "ed16ca0663f6a24e",
+      "d3561b153db95f86",
+      "518382da671d8aa2",
+      "dc4650f62db3460b",
+      "ef3d882310ed7829",
+      "7c3d992c6ada5a78",
+      "750013ddd6c1a886",
+      "aaa0f0352b658ea0",
+      "f518700a7b4f60a0",
+      "1565adb3fd453257",
+      "d12b6150bce1be29",
+      "47edbc58a957ae64",
+      "e483d61ea1bced05",
+      "2bc4c21c32d9f87a",
+      "95b4d4ece0e468ca",
+      "060ee48973a6b6fe",
+      "e46a43a7745fa7dd",
+      "5bc53a026a2956b1",
+      "562c726e8e047e8e",
+      "46af7afcd9c9e49f",
+      "329268cef2243fbc",
+      "de03ebd75d727bdb",
+      "8de37360ac59ae9c",
+      "a3e6b82ba061de9e",
+      "f520f8e41c7e1302",
+      "e44637d195d4f12f",
+      "b4c05d57acdf48cc",
+      "be384252ce446303",
+      "bc74fac017411a12",
+      "f7b61f5a95cc893f",
+      "57e2f58c0bab0162",
+      "dcb6c8653f25673c"
+    ],
+    "mistral": [
+      "23e17c6896bd9ea1",
+      "85c4c15640d9f2ae",
+      "bf6a07a8a3892377",
+      "82fbedc692c9046f",
+      "48bf2d066c9cec3b",
+      "a208b7e60eeb1c31",
+      "0d2c5d4bb7f8ff62",
+      "5f32725321707793",
+      "2e1e75d60187284f",
+      "27e560f8f265d11c",
+      "479a333df6a8e200",
+      "7f0f5890f468abe1",
+      "283a0b40d1a48d3c",
+      "d9243f4422b40c07",
+      "508fac0835c10df1",
+      "e7485d6ef78bfa91",
+      "4344814b29551e73",
+      "d78c62b1f1d7da80",
+      "431efe514129a9a8",
+      "196c35ef01deb45a",
+      "b601471c197cd7a7",
+      "d7eca596add359cc",
+      "1447707eaf66d78b",
+      "06a2807519ba4453",
+      "f73baa4894d82fb5",
+      "babfba5e5a3dec13",
+      "d2f87af821517fd9",
+      "c4ecd78bff1f3bef",
+      "3dcfd36bd5383514",
+      "eabe2807dc6f3c93",
+      "c821a8b7ee650b28",
+      "34dc03d61c42fb0f"
+    ],
+    "yi": [
+      "4ee626055b37447d",
+      "0fc1737a68d2eba5",
+      "ddc1343cc4d73e23",
+      "c7d83558cd077fdd",
+      "1c923297229dffe3",
+      "9c86799ebecb76a2",
+      "e2c41c97af2314d5",
+      "4d18d7ad46e5f220",
+      "c7eefdd0cc31d3fb",
+      "e35eefe0cbeda1e4",
+      "06d41f6555e67cb4",
+      "c37a00ef1837776c",
+      "68368f894acdbc32",
+      "e839fcf366605811",
+      "bb98ed8bb7be823e",
+      "01dabb5c8d3b8045",
+      "dc6db0a5a93c9346",
+      "578f5464f1c77b7c",
+      "70e363a283aad20a",
+      "167df3bd1c3b98be",
+      "02caf0dac924da1b",
+      "9634547211080040",
+      "7ab7b9b117e81380",
+      "6152e0ac39ed5743",
+      "52ac0023483337d8",
+      "a7b8e8449120a5d9",
+      "b3e2a6239218a924",
+      "6504e6b1e1da2164",
+      "b6c5904d61a1b9e6",
+      "ca24c0de1e175ca8",
+      "2c0bcd8cb7bf1e70",
+      "7c5fdea6e4466c99"
+    ],
+    "qwen": [
+      "753990a5164f7be4",
+      "6e803ffaa663d284",
+      "9f4bc6dadd3a7168",
+      "7d99231d3657dad4",
+      "697cf38e54785be6",
+      "873d2af3b830ab02",
+      "9928ccd4ac79c1c1",
+      "f85838d8f97189c7",
+      "cbbe4279651530d9",
+      "5ff0356cb9f1667d",
+      "c7c30371041e6bac",
+      "113b151ebb3141b0",
+      "e7b89ba153f93b1c",
+      "73d3f0a54639d3ab",
+      "f2b0e53ee40aa512",
+      "07dedef6be9e7e3b",
+      "e17c1bec147d1592",
+      "01f99ffbfab76e45",
+      "6fd3e8b203beb0e8",
+      "e47785c4715e7977",
+      "3759df8b783a89d6",
+      "227f21c099c818f0",
+      "d7c6b730b4c0761d",
+      "7f643b4b5c505faa",
+      "396e6bb217423f8a",
+      "898a193e535e11f3",
+      "dad4631af097441a",
+      "21d0bdb2f75adc7a",
+      "8de71390d0fadb5d",
+      "f3015830eceac389",
+      "f556391bf743405a",
+      "dbd94d309c22ca0f"
+    ]
+  },
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2025-09-02 20:52:58.976913",
+    "num_fingerprints": 6
+  }
+}

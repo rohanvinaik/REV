@@ -56,7 +56,7 @@ class HypervectorConfig:
     dimension: int = DEFAULT_DIMENSION
     encoding_mode: EncodingMode = "rev"
     projection_type: ProjectionType = ProjectionType.SPARSE_RANDOM
-    sparsity: float = 0.15  # Increased default for better semantic fingerprinting
+    sparsity: float = 0.01  # 1% sparsity for efficient hypervector computation
     seed: Optional[int] = None
     normalize: bool = True
     quantize: bool = False

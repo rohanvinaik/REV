@@ -131,6 +131,7 @@ class REVUnified:
         self.memory_limit_gb = memory_limit_gb or 36  # Default 36GB as per paper
         self.enable_unified_fingerprints = enable_unified_fingerprints
         self.fingerprint_config = fingerprint_config or {}
+        self.save_fingerprints = fingerprint_config.get('save_fingerprints', False) if fingerprint_config else False
         self.enable_adversarial_detection = enable_adversarial_detection
         self.adversarial_detection_config = adversarial_detection_config or {}
         
@@ -153,7 +154,7 @@ class REVUnified:
         # Initialize HDC components
         self.hdc_config = HypervectorConfig(
             dimension=10000,
-            sparsity=0.15,
+            sparsity=0.01,  # 1% sparsity for efficient hypervector computation
             encoding_mode="rev"
         )
         self.encoder = HypervectorEncoder(self.hdc_config)
@@ -170,7 +171,10 @@ class REVUnified:
         # Initialize unified fingerprint generator if enabled
         self.fingerprint_generator = None
         if enable_unified_fingerprints:
-            fp_config = FingerprintConfig(**self.fingerprint_config)
+            # Filter out non-FingerprintConfig fields
+            fp_config_dict = {k: v for k, v in self.fingerprint_config.items() 
+                             if k != 'save_fingerprints'}
+            fp_config = FingerprintConfig(**fp_config_dict)
             self.fingerprint_generator = UnifiedFingerprintGenerator(
                 config=fp_config,
                 hdc_encoder=self.encoder
@@ -275,13 +279,36 @@ class REVUnified:
         """
         model_name = Path(model_path).name if Path(model_path).exists() else model_path
         
+        # Use dual library system for intelligent testing
+        from src.fingerprint.dual_library_system import identify_and_strategize
+        identification, strategy = identify_and_strategize(model_path)
+        
         print(f"\n{'='*80}")
         print(f"Processing Model: {model_name}")
         print(f"Mode: {'Local Loading' if use_local else 'API-Only (No Local Loading)'}")
+        
+        # Show identification results
+        if identification.identified_family:
+            print(f"Architecture: {identification.identified_family.upper()} family (confidence: {identification.confidence:.0%})")
+            if strategy.get('focus_layers'):
+                print(f"  Focus Layers: {strategy['focus_layers']}")
+            if strategy.get('reference_model'):
+                print(f"  Using Reference: {strategy['reference_model']}")
+            # Adjust challenge count based on strategy
+            if strategy.get('challenges'):
+                challenges = strategy['challenges']
+                print(f"  Adjusted Challenges: {challenges} (from reference)")
+        else:
+            print(f"Architecture: Unknown - will run diagnostic fingerprinting")
+            if strategy.get('strategy') == 'diagnostic':
+                challenges = min(challenges, 5)  # Quick diagnostic
+                print(f"  Diagnostic Mode: {challenges} quick challenges")
+        
         print(f"{'='*80}")
         
         self.logger.info(f"[START] Processing model: {model_path}")
         self.logger.info(f"[CONFIG] Local: {use_local}, Device: {device}, Quantize: {quantize}")
+        self.logger.info(f"[IDENTIFICATION] Family: {identification.identified_family}, Confidence: {identification.confidence:.1%}")
         
         log_memory_usage("Initial")
         
@@ -290,6 +317,13 @@ class REVUnified:
             "model_name": model_name,
             "mode": "local" if use_local else "api",
             "timestamp": datetime.now().isoformat(),
+            "identification": {
+                "family": identification.identified_family,
+                "confidence": identification.confidence,
+                "method": identification.method,
+                "reference_model": identification.reference_model
+            },
+            "strategy": strategy,
             "stages": {}
         }
         
@@ -299,43 +333,51 @@ class REVUnified:
         
         try:
             if use_local:
-                # Local model loading
-                self.logger.info("[LOCAL] Loading model locally")
-                
-                # Create config with memory limit
-                config = LargeModelConfig(
-                    model_path=model_path,
-                    device=device,
-                    load_in_8bit=(quantize == "8bit"),
-                    load_in_4bit=(quantize == "4bit"),
-                    low_cpu_mem_usage=True,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    max_memory={
-                        0: f"{self.memory_limit_gb}GB",
-                        "cpu": f"{self.memory_limit_gb}GB"
-                    }
+                # REMOVED: Full model loading is no longer supported
+                raise NotImplementedError(
+                    "\n❌ Full model loading has been permanently removed.\n"
+                    "   The --local flag is no longer supported.\n"
+                    "   \n"
+                    "   API mode now correctly implements segmented streaming:\n"
+                    "   • Weights stream from disk layer-by-layer\n"
+                    "   • Model is NEVER fully loaded into memory\n"
+                    "   • Memory usage capped at 2GB regardless of model size\n"
+                    "   \n"
+                    "   Please remove the --local flag and run again.\n"
                 )
-                
-                # Use unified manager
-                inference = UnifiedInferenceManager(
-                    model_path=model_path,
-                    config=config,
-                    prefer_cloud=False
-                )
-                
-                success, message = inference.load_model()
-                if not success:
-                    raise Exception(f"Failed to load model: {message}")
-                
-                print(f"✅ Model loaded locally: {message}")
                 
             else:
                 # API-only mode (default)
                 self.logger.info("[API] Using API-only mode")
                 
-                # Determine provider and API key
-                if not provider:
+                # Check if this is a local model path first
+                if os.path.exists(model_path) or model_path.startswith('/'):
+                    # Local model - use TRUE segmented streaming (NEVER load full model)
+                    self.logger.info("[SEGMENTED] Model will be streamed layer-by-layer from disk")
+                    self.logger.info("[SEGMENTED] Full model will NEVER be loaded into memory")
+                    
+                    # Import the proper segmented inference that NEVER loads the full model
+                    from src.models.segmented_inference import SegmentedModelInference
+                    
+                    # Create segmented inference with strict memory limit
+                    # This streams weights from disk as if from a remote server
+                    inference = SegmentedModelInference(
+                        model_path=model_path,
+                        max_memory_mb=2048  # 2GB max at any time (NOT the full model)
+                    )
+                    
+                    # No load_model() call because we NEVER load the full model
+                    # Weights are streamed on-demand during generation
+                    
+                    print(f"✅ Segmented streaming ready: Weights will stream from disk")
+                    print(f"   📦 Model location: {model_path}")
+                    print(f"   💾 Memory limit: 2GB (model NEVER fully loaded)")
+                    print(f"   🔄 Execution: Layer-by-layer streaming")
+                    
+                    provider = "local"  # Mark as local for later logic
+                    
+                # Otherwise, determine cloud provider
+                elif not provider:
                     # Auto-detect from environment or model name
                     if "gpt" in model_path.lower():
                         provider = "openai"
@@ -344,25 +386,27 @@ class REVUnified:
                     else:
                         provider = "huggingface"  # Default
                 
-                if not api_key:
-                    # Try to get from environment
-                    env_keys = {
-                        "openai": "OPENAI_API_KEY",
-                        "anthropic": "ANTHROPIC_API_KEY",
-                        "huggingface": "HF_TOKEN",
-                        "cohere": "COHERE_API_KEY"
-                    }
-                    api_key = os.environ.get(env_keys.get(provider, "HF_TOKEN"))
-                
-                api_config = APIOnlyConfig(
-                    provider=provider,
-                    api_key=api_key,
-                    model_id=model_path,
-                    max_tokens=max_new_tokens
-                )
-                
-                inference = APIOnlyInference(model_path, api_config)
-                print(f"✅ API interface ready: {provider}/{model_path}")
+                # Only configure cloud API if not local
+                if provider != "local":
+                    if not api_key:
+                        # Try to get from environment
+                        env_keys = {
+                            "openai": "OPENAI_API_KEY",
+                            "anthropic": "ANTHROPIC_API_KEY",
+                            "huggingface": "HF_TOKEN",
+                            "cohere": "COHERE_API_KEY"
+                        }
+                        api_key = os.environ.get(env_keys.get(provider, "HF_TOKEN"))
+                    
+                    api_config = APIOnlyConfig(
+                        provider=provider,
+                        api_key=api_key,
+                        model_id=model_path,
+                        max_tokens=max_new_tokens
+                    )
+                    
+                    inference = APIOnlyInference(model_path, api_config)
+                    print(f"✅ API interface ready: {provider}/{model_path}")
             
             self.inference_managers[model_name] = inference
             
@@ -459,9 +503,12 @@ class REVUnified:
                 # Generate regular challenges
                 if n_regular > 0:
                     if self.enable_pot_challenges:
+                        # Pass layer focus from strategy if available
+                        layer_focus = strategy.get('focus_layers', []) if strategy else []
                         regular_challenges = self.pipeline.generate_pot_challenges(
                             n=n_regular,
-                            focus=challenge_focus
+                            focus=challenge_focus,
+                            layer_focus=layer_focus
                         )
                     else:
                         regular_challenges = [
@@ -473,9 +520,12 @@ class REVUnified:
                 print(f"✅ Generated {len(adversarial_challenges)} adversarial + {len(regular_challenges)} regular challenges")
         
         elif self.enable_pot_challenges:
+            # Pass layer focus from strategy if available
+            layer_focus = strategy.get('focus_layers', []) if strategy else []
             challenges_list = self.pipeline.generate_pot_challenges(
                 n=challenges, 
-                focus=challenge_focus
+                focus=challenge_focus,
+                layer_focus=layer_focus
             )
             print(f"✅ Generated {len(challenges_list)} PoT challenges")
         else:
@@ -516,46 +566,8 @@ class REVUnified:
                     prompt = str(challenge)
                 
                 if use_local:
-                    # Local processing with REV
-                    rev_result = inference.process_for_rev(
-                        prompt=prompt,
-                        extract_activations=True,
-                        hdc_encoder=self.encoder,
-                        adaptive_encoder=self.adaptive_encoder
-                    )
-                    
-                    if rev_result["success"]:
-                        response = rev_result.get("response", "")
-                        responses.append(response)
-                        
-                        if "hypervector" in rev_result:
-                            hypervectors.append(rev_result["hypervector"])
-                        if "divergence" in rev_result:
-                            divergence_scores.append(rev_result["divergence"])
-                        
-                        # Generate unified fingerprint if enabled
-                        if self.enable_unified_fingerprints and self.fingerprint_generator:
-                            try:
-                                layer_activations = rev_result.get("layer_activations", {})
-                                if layer_activations:
-                                    unified_fp = self.fingerprint_generator.generate_unified_fingerprint(
-                                        model_interface=inference,
-                                        prompt=prompt,
-                                        layer_activations=layer_activations,
-                                        response=response,
-                                        model_id=model_name
-                                    )
-                                    unified_fingerprints.append(unified_fp)
-                                    print(" ✓ (+ fingerprint)")
-                                else:
-                                    print(" ✓ (no activations)")
-                            except Exception as e:
-                                self.logger.warning(f"Failed to generate unified fingerprint: {e}")
-                                print(" ✓ (fingerprint failed)")
-                        else:
-                            print(" ✓")
-                    else:
-                        print(" ✗")
+                    # This should never be reached due to earlier check
+                    raise RuntimeError("Local mode should have been caught earlier")
                 else:
                     # API-only processing
                     response = inference.generate(prompt)
@@ -573,7 +585,18 @@ class REVUnified:
         
         # Combine hypervectors and unified fingerprints
         if hypervectors:
-            combined_hv = np.mean(hypervectors, axis=0)
+            # Use majority voting to preserve sparsity instead of mean
+            # This preserves the sparse nature of hypervectors
+            stacked = np.stack(hypervectors)
+            # For binary vectors, use majority voting
+            if np.all((stacked == 0) | (stacked == 1)):
+                combined_hv = (np.sum(stacked, axis=0) > len(hypervectors) / 2).astype(float)
+            else:
+                # For real-valued, use thresholded mean to maintain sparsity
+                mean_hv = np.mean(stacked, axis=0)
+                threshold = np.percentile(np.abs(mean_hv), 99)  # Keep top 1% to maintain sparsity
+                combined_hv = np.where(np.abs(mean_hv) > threshold, mean_hv, 0)
+            
             self.hypervectors[model_name] = combined_hv
             
             sparsity = np.count_nonzero(combined_hv) / len(combined_hv)
@@ -595,7 +618,7 @@ class REVUnified:
             print(f"   Average binding strength: {avg_binding:.3f}")
             
             # Save fingerprints to file if requested
-            if self.fingerprint_config.get('save_fingerprints', False):
+            if hasattr(self, 'save_fingerprints') and self.save_fingerprints:
                 fingerprint_dir = Path("fingerprints") / model_name
                 fingerprint_dir.mkdir(parents=True, exist_ok=True)
                 
@@ -1272,6 +1295,16 @@ Examples:
         action="store_true",
         help="List all known architectures in fingerprint library"
     )
+    parser.add_argument(
+        "--diagnostic-only",
+        action="store_true",
+        help="Run quick diagnostic fingerprint only (no behavioral testing)"
+    )
+    parser.add_argument(
+        "--diagnostic-scan",
+        action="store_true",
+        help="Scan all models in LLM_models for architectural profiles"
+    )
     
     # Adversarial prompt generation
     parser.add_argument(
@@ -1359,6 +1392,15 @@ Examples:
             print(f"  Time Budget: {args.time_budget:.1f} hours")
     print("=" * 80)
     
+    # Handle diagnostic operations first
+    if args.diagnostic_scan:
+        from scripts.diagnostic_fingerprint import DiagnosticScanner
+        scanner = DiagnosticScanner()
+        profiles = scanner.scan_all_architectures()
+        scanner.save_profiles("fingerprint_library/diagnostic_profiles.json")
+        scanner.compare_architectures()
+        return 0
+    
     # Handle fingerprint library operations first
     if args.list_known_architectures:
         library = ModelFingerprintLibrary(args.library_path)
@@ -1383,10 +1425,10 @@ Examples:
         "layer_sampling": args.layer_sampling,
         "max_layers_sampled": args.max_layers_sampled,
         "enable_cross_scale_analysis": args.enable_scaling_analysis,
-        "save_fingerprints": args.save_fingerprints,
         "prompt_weight": args.fingerprint_weights[0],
         "pathway_weight": args.fingerprint_weights[1], 
-        "response_weight": args.fingerprint_weights[2]
+        "response_weight": args.fingerprint_weights[2],
+        "save_fingerprints": args.save_fingerprints  # Store separately for handling
     }
     
     # Prepare analysis configuration
@@ -1471,19 +1513,19 @@ Examples:
         for model_path in args.models:
             try:
                 result = rev.process_model(
-                model_path=model_path,
-                use_local=args.local,
-                device=args.device,
-                quantize=args.quantize,
-                challenges=args.challenges,
-                max_new_tokens=args.max_tokens,
-                challenge_focus=args.challenge_focus,
-                provider=args.provider,
-                api_key=args.api_key
-            )
-            
-            if "error" not in result:
-                print(f"\n✅ Successfully processed {result['model_name']}")
+                    model_path=model_path,
+                    use_local=args.local,
+                    device=args.device,
+                    quantize=args.quantize,
+                    challenges=args.challenges,
+                    max_new_tokens=args.max_tokens,
+                    challenge_focus=args.challenge_focus,
+                    provider=args.provider,
+                    api_key=args.api_key
+                )
+                
+                if "error" not in result:
+                    print(f"\n✅ Successfully processed {result['model_name']}")
                 
                 # Run cassette analysis if enabled and topology available
                 if args.cassettes:
@@ -1502,13 +1544,13 @@ Examples:
                     else:
                         print(f"⚠️  Topology file not found: {topology_file}")
                         print("    Run Phase 1 analysis first or provide --cassette-topology")
-            else:
-                print(f"\n❌ Failed to process {model_path}: {result['error']}")
-                
-        except Exception as e:
-            logger.error(f"Failed to process {model_path}: {e}")
-            logger.error(traceback.format_exc())
-            print(f"\n❌ Failed to process {model_path}: {e}")
+                else:
+                    print(f"\n❌ Failed to process {model_path}: {result['error']}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to process {model_path}: {e}")
+                logger.error(traceback.format_exc())
+                print(f"\n❌ Failed to process {model_path}: {e}")
     
     # Generate report
     output_file = args.output or f"rev_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

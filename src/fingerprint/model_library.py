@@ -216,7 +216,12 @@ class ModelFingerprintLibrary:
             pathway_hypervector=np.random.randn(10000),
             response_hypervector=np.random.randn(10000),
             model_id=f"{kwargs['family']}-{kwargs['size']}",
+            prompt_text="Template prompt for fingerprint generation",
+            response_text="Template response",
+            layer_count=kwargs['num_layers'],
+            layers_sampled=list(range(0, kwargs['num_layers'], max(1, kwargs['num_layers']//10))),
             fingerprint_quality=0.95,
+            divergence_stats={'mean': 0.5, 'std': 0.1, 'max': 0.7, 'min': 0.3},
             binding_strength=0.9
         )
         

@@ -1,0 +1,50 @@
+{
+  "fingerprints": {
+    "gpt2_20250902_201308": {
+      "model_family": "gpt",
+      "model_size": "124M",
+      "architecture_version": "gpt-2",
+      "reference_model": "gpt2",
+      "num_layers": 12,
+      "hidden_size": 768,
+      "num_attention_heads": 12,
+      "vocab_size": 50257,
+      "behavioral_patterns": {
+        "hv_entropy": 10.97816317157394,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.56353591160221,
+        "avg_response_length": 36.2
+      },
+      "vulnerable_layers": [
+        3,
+        6,
+        9
+      ],
+      "stable_layers": [
+        0,
+        1,
+        11
+      ],
+      "recommended_cassettes": [
+        "syntactic",
+        "semantic",
+        "arithmetic"
+      ],
+      "memory_footprint_gb": 0.5,
+      "optimal_segment_size": 512,
+      "optimal_batch_size": 8,
+      "validation_score": 1.0,
+      "source": "empirical",
+      "model_name": "gpt2",
+      "model_path": "/Users/rohanvinaik/LLM_models/gpt2",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-02T20:13:08.596972"
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "created": "2025-09-02T20:13:08.596481",
+    "last_updated": "2025-09-02T20:13:08.596973",
+    "num_fingerprints": 1
+  }
+}

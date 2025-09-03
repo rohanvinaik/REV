@@ -19,7 +19,8 @@ from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
-from sklearn.neighbors import LocalOutlierFactor, IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.ensemble import IsolationForest
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from scipy.spatial.distance import cosine, euclidean
 from scipy.stats import zscore

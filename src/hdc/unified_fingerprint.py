@@ -31,10 +31,11 @@ from sklearn.preprocessing import StandardScaler
 # REV components
 from .encoder import HypervectorEncoder, HypervectorConfig, DEFAULT_DIMENSION
 from .behavioral_sites import BehavioralSites
-from .binding_operations import BindingOperations, BindingType
+from .binding_operations import BindingOperations
+from .binding import BindingType
 from ..crypto.merkle import build_merkle_tree, generate_merkle_proof
 from ..hypervector.similarity import AdvancedSimilarity
-from ..analysis.pattern_recognition import PatternRecognizer
+# from ..analysis.pattern_recognition import PatternRecognizer  # Not needed for now
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class FingerprintConfig:
     """Configuration for unified fingerprint generation"""
     # Core hypervector settings
     dimension: int = DEFAULT_DIMENSION
-    sparsity: float = 0.15
+    sparsity: float = 0.01  # 1% sparsity for efficient hypervector computation
     
     # Fingerprint composition weights
     prompt_weight: float = 0.3      # Input prompt contribution
@@ -57,7 +58,7 @@ class FingerprintConfig:
     boundary_sensitivity: float = 0.1 # For boundary detection
     
     # Binding configuration
-    binding_type: BindingType = BindingType.CIRCULAR_CONVOLUTION
+    binding_type: BindingType = BindingType.CIRCULAR
     enable_temporal_binding: bool = True
     enable_hierarchical_binding: bool = True
     
@@ -150,15 +151,14 @@ class UnifiedFingerprintGenerator:
         
         # Initialize binding operations
         self.binder = BindingOperations(
-            dimension=self.config.dimension,
-            binding_type=self.config.binding_type
+            dimension=self.config.dimension
         )
         
         # Initialize behavioral sites analyzer
         self.behavioral_sites = BehavioralSites()
         
         # Initialize pattern recognizer for scaling analysis
-        self.pattern_recognizer = PatternRecognizer()
+        # self.pattern_recognizer = PatternRecognizer()  # Not implemented yet
         
         # Storage for intermediate results
         self.intermediate_cache = {} if self.config.cache_intermediate else None
