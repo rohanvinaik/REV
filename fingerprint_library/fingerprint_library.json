@@ -1,6 +1,6 @@
 {
   "fingerprints": {
-    "ab3ec82935c7b287": {
+    "a9ebc2c89efd888f": {
       "model_family": "llama",
       "model_size": "70B",
       "architecture_version": "llama-3",
@@ -50,12 +50,12 @@
       "memory_footprint_gb": 1310.72,
       "optimal_segment_size": 512,
       "optimal_batch_size": 4,
-      "fingerprint_id": "ab3ec82935c7b287",
-      "creation_date": "2025-09-03 20:47:25.313839",
+      "fingerprint_id": "a9ebc2c89efd888f",
+      "creation_date": "2025-09-04 11:29:26.397966",
       "validation_score": 1.0,
       "source": "empirical"
     },
-    "b01f66d617c27915": {
+    "b42db52bb7e968c7": {
       "model_family": "llama",
       "model_size": "7B",
       "architecture_version": "llama-3",
@@ -105,12 +105,12 @@
       "memory_footprint_gb": 262.144,
       "optimal_segment_size": 512,
       "optimal_batch_size": 4,
-      "fingerprint_id": "b01f66d617c27915",
-      "creation_date": "2025-09-03 20:47:25.314508",
+      "fingerprint_id": "b42db52bb7e968c7",
+      "creation_date": "2025-09-04 11:29:26.398612",
       "validation_score": 1.0,
       "source": "empirical"
     },
-    "8a2551f02c6e1b34": {
+    "6a02cf410d55632f": {
       "model_family": "gpt",
       "model_size": "175B",
       "architecture_version": "gpt-3",
@@ -160,12 +160,12 @@
       "memory_footprint_gb": 2359.296,
       "optimal_segment_size": 512,
       "optimal_batch_size": 4,
-      "fingerprint_id": "8a2551f02c6e1b34",
-      "creation_date": "2025-09-03 20:47:25.315168",
+      "fingerprint_id": "6a02cf410d55632f",
+      "creation_date": "2025-09-04 11:29:26.399294",
       "validation_score": 1.0,
       "source": "empirical"
     },
-    "79de7c79116042c3": {
+    "7bdf68dbca72fd15": {
       "model_family": "mistral",
       "model_size": "7B",
       "architecture_version": "mistral-v0.1",
@@ -215,12 +215,12 @@
       "memory_footprint_gb": 262.144,
       "optimal_segment_size": 512,
       "optimal_batch_size": 4,
-      "fingerprint_id": "79de7c79116042c3",
-      "creation_date": "2025-09-03 20:47:25.315827",
+      "fingerprint_id": "7bdf68dbca72fd15",
+      "creation_date": "2025-09-04 11:29:26.400035",
       "validation_score": 1.0,
       "source": "empirical"
     },
-    "100a52a37c7c1942": {
+    "0b7f745207edec37": {
       "model_family": "yi",
       "model_size": "34B",
       "architecture_version": "yi-1.5",
@@ -270,12 +270,12 @@
       "memory_footprint_gb": 860.16,
       "optimal_segment_size": 512,
       "optimal_batch_size": 4,
-      "fingerprint_id": "100a52a37c7c1942",
-      "creation_date": "2025-09-03 20:47:25.316494",
+      "fingerprint_id": "0b7f745207edec37",
+      "creation_date": "2025-09-04 11:29:26.400746",
       "validation_score": 1.0,
       "source": "empirical"
     },
-    "1fa2f3eba52839fe": {
+    "7e5e6820ddfb3d5a": {
       "model_family": "qwen",
       "model_size": "72B",
       "architecture_version": "qwen-2",
@@ -325,8 +325,8 @@
       "memory_footprint_gb": 1310.72,
       "optimal_segment_size": 512,
       "optimal_batch_size": 4,
-      "fingerprint_id": "1fa2f3eba52839fe",
-      "creation_date": "2025-09-03 20:47:25.317153",
+      "fingerprint_id": "7e5e6820ddfb3d5a",
+      "creation_date": "2025-09-04 11:29:26.401441",
       "validation_score": 1.0,
       "source": "empirical"
     }
@@ -396,7 +396,43 @@
       "2c6b279434f47940",
       "854b7b22559000af",
       "ab3ec82935c7b287",
-      "b01f66d617c27915"
+      "b01f66d617c27915",
+      "12838d3a60e246c8",
+      "cfab9c7cde4f7be3",
+      "7dc57d0921c934cf",
+      "f32d5fe950aefa29",
+      "2d74539d978dd819",
+      "7e64dd051582d156",
+      "dc5e8faab8daccd3",
+      "6fc06171774bc466",
+      "be70cb7d38fdd216",
+      "b8c32bce7abcd90e",
+      "d537c23e9d0b7ddd",
+      "289da302448cffab",
+      "3c00486bea1cde6e",
+      "1e62f52ef939598d",
+      "3c966d4e7cb9fcb9",
+      "43795b37c16a2d38",
+      "d3c62f9f476845e6",
+      "98f6a322381a820c",
+      "7a7c452015f3ceab",
+      "e1bf75734e2a4e41",
+      "a63cd62df133c401",
+      "3b29da2892d7fbe7",
+      "7ff0b3d183f78db7",
+      "7671544b7ff8852b",
+      "5c86f54abb9e54d2",
+      "210c80509a5c5604",
+      "b145c260ac11b21d",
+      "9d307020104354ec",
+      "5c6b92c01fb0a991",
+      "95f2c5d0fc368144",
+      "edbefdfbba281fef",
+      "acf49c59cf720b43",
+      "c0009658de162ed0",
+      "0709d62be0fcd063",
+      "a9ebc2c89efd888f",
+      "b42db52bb7e968c7"
     ],
     "gpt": [
       "4ad7fc42f963bcc9",
@@ -430,7 +466,25 @@
       "dc07c1ef043b6a7b",
       "0ade93c28424e51f",
       "f78b80309b8d0a31",
-      "8a2551f02c6e1b34"
+      "8a2551f02c6e1b34",
+      "0bd6d22b1f89c34f",
+      "d5e913965c457385",
+      "54f9b542e8b4d762",
+      "377fa5831a6323b8",
+      "4a8315760916913d",
+      "9b8e5754d3ebc1fd",
+      "86753b75dd29bfe0",
+      "e768ae0048312f61",
+      "4b55c39d36202a2a",
+      "f2de3bedc1d035df",
+      "86f7899899914977",
+      "fb8cfa22d30ce7a4",
+      "8d9d9bf0837b2187",
+      "dadc76f43eb5fa6e",
+      "16513de3326ba923",
+      "0b2cb056854ef96b",
+      "85a6797223e62f70",
+      "6a02cf410d55632f"
     ],
     "mistral": [
       "8d7a2ba9ce731548",
@@ -464,7 +518,25 @@
       "5cdae9d9b9e8b8cb",
       "8f200fc787a9ba79",
       "f8e828cde88fefb8",
-      "79de7c79116042c3"
+      "79de7c79116042c3",
+      "3a1362c63c4dba2d",
+      "6ecc2edbec5ddc93",
+      "456c9d82a97edf8d",
+      "e25329f09dd12356",
+      "3c5c22b8661a4335",
+      "4b3469ec4820a97a",
+      "591cf31882e865fc",
+      "1173675539dc2644",
+      "6675c6f07d569944",
+      "95b348be75fdb412",
+      "04b6c72c340c1f9f",
+      "1bd61e8ee4932fb4",
+      "d9d5103a86dfc070",
+      "e4ef4fac447fe5a9",
+      "b1cdfa3df3b20900",
+      "d293e9fc695c74bc",
+      "bc8974bc2e7366f4",
+      "7bdf68dbca72fd15"
     ],
     "yi": [
       "8b8cb406320166f3",
@@ -498,7 +570,25 @@
       "51e6049ab344c0b4",
       "23a50087c7b7db09",
       "f67a1c1f3b335842",
-      "100a52a37c7c1942"
+      "100a52a37c7c1942",
+      "498b1b9753279348",
+      "260cf337b693dc77",
+      "b521c323018973f0",
+      "97b7df2c0a3af7d2",
+      "7fca1fa12cfaf513",
+      "5dce18a11c722130",
+      "1e0c8929f436d8c2",
+      "1da4800a9ceeb419",
+      "301bb52ed45343d5",
+      "ec9e47c8cc47b35b",
+      "c773b27b369475aa",
+      "c0156c5ace64f0a5",
+      "654af744ea206782",
+      "95727a1ba7bf7856",
+      "f888132dae7aaf6b",
+      "554136046915d562",
+      "a0cd7c312fdb0939",
+      "0b7f745207edec37"
     ],
     "qwen": [
       "ce5cb773f086bb68",
@@ -532,12 +622,30 @@
       "63b6e3a3c46f0b74",
       "83d9bb30d13983a1",
       "4087d10bfc243ef4",
-      "1fa2f3eba52839fe"
+      "1fa2f3eba52839fe",
+      "09cb2b660bff109f",
+      "cdf3a986ed258e15",
+      "87173efb65be7654",
+      "aec0b5b6f3d04cea",
+      "154ed1fb217d8900",
+      "1b6b8e145c28b894",
+      "a0fec5c7205dbf12",
+      "cbb6de65fc1f409a",
+      "0b7ea2081758c70e",
+      "b6b07b2431522d70",
+      "2057bf077838192f",
+      "09a51ea23acb87f4",
+      "3d46d96c72a5d098",
+      "2432b85342319d15",
+      "6cd940c1864961c4",
+      "b62d4ceba16c45ca",
+      "f6985b59ad014cd1",
+      "7e5e6820ddfb3d5a"
     ]
   },
   "metadata": {
     "version": "1.0",
-    "last_updated": "2025-09-03 20:47:25.317171",
+    "last_updated": "2025-09-04 11:29:26.401471",
     "num_fingerprints": 6
   }
 }

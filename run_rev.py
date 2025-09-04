@@ -642,9 +642,13 @@ class REVUnified:
                 print(f"  Adjusted Challenges: {challenges} (from reference)")
         else:
             print(f"Architecture: Unknown - will run diagnostic fingerprinting")
-            if strategy.get('strategy') == 'diagnostic':
+            # Only limit challenges in diagnostic mode if NOT using orchestration
+            if strategy.get('strategy') == 'diagnostic' and not self.enable_pot_challenges:
                 challenges = min(challenges, 5)  # Quick diagnostic
                 print(f"  Diagnostic Mode: {challenges} quick challenges")
+            elif self.enable_pot_challenges:
+                # Using full orchestration, keep requested challenge count
+                print(f"  Orchestrated Mode: {challenges} comprehensive challenges")
         
         # Show deep analysis status
         if needs_deep_analysis:
@@ -714,7 +718,6 @@ class REVUnified:
                                 LayerSegmentExecutor, 
                                 SegmentExecutionConfig
                             )
-                            from src.challenges.pot_challenge_generator import PoTChallengeGenerator
                             
                             # Configure for deep behavioral analysis
                             deep_config = SegmentExecutionConfig(
@@ -729,14 +732,24 @@ class REVUnified:
                             deep_executor = LayerSegmentExecutor(deep_config)
                             self.logger.info(f"[DEEP-ANALYSIS] Initialized for {deep_executor.n_layers} layer model")
                             
-                            # Generate PoT challenges for deep probing
-                            pot_gen = PoTChallengeGenerator()
+                            # Use the unified prompt orchestrator for comprehensive probing
+                            # This ensures consistency with the main processing pipeline
+                            if not hasattr(self, 'prompt_orchestrator'):
+                                # Initialize orchestrator if not already done
+                                self.prompt_orchestrator = UnifiedPromptOrchestrator(
+                                    enable_all_systems=True,  # Enable all systems for comprehensive coverage
+                                    reference_library_path="fingerprint_library/reference_library.json",
+                                    enable_analytics=True
+                                )
+                                self.logger.info("[DEEP-ANALYSIS] Initialized UnifiedPromptOrchestrator with all systems enabled")
                             
                             # For reference library building, generate COMPREHENSIVE probe set
-                            # No shortcuts - we want complete behavioral coverage
-                            probe_prompts_dict = pot_gen.generate_behavioral_probes(
-                                n_layers=deep_executor.n_layers,
-                                probes_per_category=100  # This will generate ~1000 total probes
+                            # Request more prompts to get complete behavioral coverage
+                            # The orchestrator will distribute across all 7 systems
+                            target_prompts = deep_executor.n_layers * 15  # ~15 prompts per layer for comprehensive coverage
+                            probe_prompts_dict = self.prompt_orchestrator.generate_orchestrated_prompts(
+                                model_family="unknown",  # Force comprehensive probing
+                                total_prompts=max(target_prompts, 400)  # At least 400 prompts for good coverage
                             )
                             
                             # Flatten the dictionary to a list of prompts

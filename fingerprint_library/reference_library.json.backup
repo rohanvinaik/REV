@@ -1,6 +1,6 @@
 {
   "fingerprints": {
-    "pythia_reference": {
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_reference": {
       "behavioral_patterns": {
         "hv_entropy": 13.639114289545807,
         "hv_sparsity": 0.01,
@@ -8,11 +8,10 @@
         "avg_response_length": 20.0,
         "principled_features": {}
       },
-      "model_family": "pythia",
-      "model_size": "70m",
-      "architecture_version": "pythia-70m",
-      "reference_model": "pythia-70m",
-      "snapshot_id": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_family": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
       "hypervectors_generated": 3,
       "challenges_processed": 3,
       "processing_time": 0.030232906341552734,
@@ -57,7 +56,7 @@
       ],
       "stable_regions": [],
       "behavioral_topology": {
-        "model": "pythia-70m",
+        "model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
         "timestamp": "2025-09-03T19:15:44.901930",
         "total_layers": 6,
         "restriction_sites": [
@@ -201,12 +200,31 @@
       "deep_analysis_time_hours": 0.0007474908563825819,
       "is_reference": true,
       "timestamp": "2025-09-03T19:15:46.608916"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_reference": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.319753487211702,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.8070175438596491,
+        "avg_response_length": 19.0,
+        "principled_features": {}
+      },
+      "model_family": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 3,
+      "challenges_processed": 3,
+      "processing_time": 0.06896615028381348,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "is_reference": true,
+      "timestamp": "2025-09-04T08:34:06.265656"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-03T19:15:46.608506",
-    "last_updated": "2025-09-04T11:29:31.075138",
-    "notes": "Reference library contains ONLY the smallest model from each family for behavioral baseline. All other models should be in active_library.json"
+    "last_updated": "2025-09-04T08:34:06.265659"
   }
 }

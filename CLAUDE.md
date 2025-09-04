@@ -72,19 +72,26 @@ python run_rev.py /Users/.../pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f478
 
 ## 📚 KEY WORKFLOWS
 
-### Building Reference Library (One-Time Setup)
+### Building Reference Library (One-Time Setup per Family)
+
+**CRITICAL**: Use `--build-reference --enable-prompt-orchestration` together!
 
 ```bash
-# Build deep behavioral reference for model family (6-24 hours)
-# Use smallest model in family
+# Build deep behavioral reference for model family
+# ALWAYS use smallest model in family
+# Ignores --challenges flag (uses 400+ probes automatically)
 
-# Pythia family
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx \
-    --enable-prompt-orchestration --challenges 20
+# Pythia family (70M parameters - smallest)
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 \
+    --build-reference --enable-prompt-orchestration
 
-# Llama family  
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b \
-    --enable-prompt-orchestration --challenges 20
+# GPT family (DistilGPT2 - smallest)  
+python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 \
+    --build-reference --enable-prompt-orchestration
+    
+# Llama family (7B - smallest available)
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf \
+    --build-reference --enable-prompt-orchestration
 ```
 
 ### Using References for Large Models (15-20x Faster)
@@ -131,6 +138,8 @@ python run_rev.py /path/to/model \
 
 ### 🆕 Parallel Processing (36GB Memory Limit)
 
+**IMPORTANT UPDATE (v3.1)**: Parallel processing now uses the unified prompt orchestration system with all 7 specialized generators for better prompt diversity and comprehensive behavioral coverage.
+
 ```bash
 # Process multiple models in parallel
 python run_rev.py model1/ model2/ model3/ \
@@ -142,6 +151,12 @@ python run_rev.py /path/to/model \
     --parallel --parallel-batch-size 10 \
     --parallel-memory-limit 36.0 \
     --challenges 100
+
+# Parallel reference building with orchestration
+python run_rev.py /path/to/model \
+    --build-reference --parallel \
+    --parallel-workers 4 \
+    --enable-prompt-orchestration
 
 # Adaptive parallel processing (adjusts to system load)
 python run_rev.py model1/ model2/ \
@@ -157,6 +172,12 @@ python run_rev.py model1/ model2/ model3/ \
     
 python run_rev.py model1/ model2/ model3/ \
     --parallel --parallel-mode paired         # model[i] × prompt[i]
+
+# Parallel with full orchestration (7 prompt systems)
+python run_rev.py model1/ model2/ \
+    --parallel --enable-prompt-orchestration \
+    --parallel-memory-limit 36.0 \
+    --challenges 200  # Distributed across all 7 systems
 ```
 
 ## 🎯 PROMPT ORCHESTRATION
@@ -213,19 +234,34 @@ When running `--build-reference`, the system:
 3. **Takes appropriate time** (18 min for pythia-70m, 41 min for GPT-2)
 4. **Uses cryptographic challenge generation** via PoTChallengeGenerator
 
-#### Tested Reference Builds:
+#### CRITICAL: Reference Library Building Commands
+
+⚠️ **MUST USE --enable-prompt-orchestration WITH --build-reference**
+
+Without orchestration, reference builds generate 0 challenges and are useless!
+
 ```bash
-# Pythia-70m (6 layers, 388 probes, ~18 minutes)
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 --build-reference
+# CORRECT - Pythia family reference (smallest model)
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 \
+    --build-reference --enable-prompt-orchestration
 
-# GPT-2 (12 layers, 406 probes, ~41 minutes)  
-python run_rev.py /Users/rohanvinaik/LLM_models/gpt2 --build-reference
+# CORRECT - GPT family reference (smallest model)  
+python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 \
+    --build-reference --enable-prompt-orchestration
 
-# DistilGPT2 (6 layers, should use 400+ probes NOT 20)
-python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 --build-reference
+# CORRECT - Llama family reference (smallest model)
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf \
+    --build-reference --enable-prompt-orchestration
+
+# WRONG - Missing orchestration (generates 0 challenges)
+python run_rev.py /path/to/model --build-reference  # ❌ NO CHALLENGES!
 ```
 
-⚠️ **IMPORTANT**: The system should NEVER use only 20 hardcoded probes. If analysis completes in <5 minutes for reference building, something is wrong!
+**Expected Behavior**:
+- Generates 400+ orchestrated prompts
+- Processes ALL transformer layers comprehensively
+- Takes 20+ minutes for small models, hours for larger ones
+- Creates deep behavioral topology with restriction sites
 
 ## 🏗️ ARCHITECTURE
 
@@ -257,17 +293,215 @@ src/
 └── orchestration/ # Prompt orchestration
 ```
 
+## 🔧 REFERENCE LIBRARY MANAGEMENT & TROUBLESHOOTING
+
+### ⚠️ CRITICAL ISSUES IDENTIFIED & SOLUTIONS
+
+#### Issue 1: UnifiedFingerprint Initialization Errors
+**Problem**: Library loading fails with error:
+```
+UnifiedFingerprint.__init__() missing 5 required positional arguments: 'prompt_text', 'response_text', 'layer_count', 'layers_sampled', and 'divergence_stats'
+```
+
+**Root Cause**: The `UnifiedFingerprint` dataclass requires specific fields that old library JSON doesn't contain.
+
+**Solution**: Clean library initialization when loading fails:
+```bash
+# Check library status
+ls -la fingerprint_library/
+
+# If corrupted, the system will automatically:
+# 1. Create fresh libraries with default fingerprints
+# 2. Log "Starting with fresh library" message
+# 3. Initialize 6 default model fingerprints (llama, gpt, mistral, yi, qwen)
+```
+
+#### Issue 2: Reference Builds Using ALL Probes Instead of --challenges Parameter
+**Problem**: `--build-reference` ignores `--challenges 20` and uses ALL generated probes (388-443)
+
+**Expected vs Actual Behavior**:
+```bash
+# Command: --challenges 20 --build-reference
+# Expected: 20 challenges for quick reference
+# Actual: 388-443 probes (6-24 hour analysis)
+```
+
+**Logs Showing Issue**:
+```
+[REFERENCE-BUILD] Generated 388 behavioral probes across 10 categories
+[REFERENCE-BUILD] Using ALL 388 generated probes
+[REFERENCE-BUILD] Ignoring --challenges parameter for comprehensive analysis
+```
+
+**Solution**: This is **intentional behavior** for reference builds! Reference libraries need comprehensive analysis:
+
+- **For Reference Building**: Always uses ALL probes (comprehensive analysis)
+- **For Regular Runs**: Uses `--challenges` parameter (faster execution)
+
+#### Issue 3: Multiple Concurrent Reference Builds Causing System Load
+**Problem**: Running 15+ reference builds simultaneously exhausts system resources
+
+**Current Status Check**:
+```bash
+# Count running REV processes
+ps aux | grep python | grep run_rev | wc -l
+
+# Check specific reference builds
+ps aux | grep "build-reference"
+```
+
+**Solutions**:
+```bash
+# Stop all current reference builds
+pkill -f "python run_rev.py.*--build-reference"
+
+# Check system load
+top | grep "python run_rev"
+
+# Run ONE reference build at a time
+python run_rev.py /path/to/smallest/model/in/family --build-reference
+```
+
+### 📋 PROPER REFERENCE LIBRARY WORKFLOW
+
+#### Step 1: Choose the RIGHT Model for Each Family
+**Critical Rule**: Always use the SMALLEST model in each family for reference building
+
+```bash
+# CORRECT Reference Models (smallest in family)
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx --build-reference
+python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 --build-reference  
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf --build-reference
+python run_rev.py /Users/rohanvinaik/LLM_models/phi-2 --build-reference
+
+# WRONG (don't build references for large models)
+python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b --build-reference    # NO!
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-70b --build-reference     # NO!
+```
+
+#### Step 2: Monitor Reference Build Progress
+```bash
+# Check running builds
+ps aux | grep "build-reference"
+
+# Monitor logs (look for these progress indicators)
+tail -f *_reference_build.log | grep -E "(PROBE SUCCESS|Layer.*Divergence|Expected analysis time)"
+
+# Key progress markers:
+# - "Generated XXX behavioral probes" (setup complete)
+# - "Expected analysis time: X hours" (time estimate)
+# - "PROBE SUCCESS: Layer X | Divergence: X.XXX" (active progress)
+```
+
+#### Step 3: Verify Successful Reference Creation
+```bash
+# Check reference library
+ls -la fingerprint_library/reference_library.json
+
+# Verify reference contains your model
+python -c "
+import json
+with open('fingerprint_library/reference_library.json', 'r') as f:
+    data = json.load(f)
+    for name, info in data['fingerprints'].items():
+        print(f'{name}: {info.get(\"model_family\", \"unknown\")} - {info.get(\"challenges_processed\", 0)} challenges')
+"
+```
+
+#### Step 4: Use References for Large Models (15-20x Speedup!)
+```bash
+# After pythia-70m reference exists
+python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b --challenges 100      # Uses reference!
+
+# After llama-7b reference exists  
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-70b --challenges 200       # Uses reference!
+
+# Verify speedup in logs:
+# Look for: "Using reference baseline from family: pythia"
+#          "Precision targeting enabled: 15-20x speedup expected"
+```
+
+### 🚨 COMMON TROUBLESHOOTING
+
+#### Problem: Reference Build Stuck/No Progress
+```bash
+# Check if process is actually running
+ps aux | grep "build-reference" | grep -v grep
+
+# Check for memory issues
+top -p $(pgrep -f "build-reference")
+
+# Look for actual probe execution in logs
+tail -f build_log.log | grep "PROBE SUCCESS"
+
+# If no PROBE SUCCESS for >5 minutes, kill and restart:
+pkill -f "python run_rev.py.*build-reference.*specific-model"
+```
+
+#### Problem: "Error loading library" on Every Run
+```bash
+# This is EXPECTED when libraries are incompatible
+# System automatically creates fresh libraries with defaults
+
+# Verify fresh library creation:
+ls -la fingerprint_library/
+# Should see recently created reference_library.json and active_library.json
+```
+
+#### Problem: Large Model Not Using Reference (Slow Execution)
+```bash
+# Check logs for:
+grep -i "using reference baseline" your_run.log
+grep -i "precision targeting" your_run.log
+
+# If not found, ensure:
+# 1. Reference for that family exists
+# 2. Large model is correctly identified (family confidence >50%)
+```
+
+### 📊 REFERENCE BUILD TIME ESTIMATES
+
+| Model Size | Layers | Expected Time | Memory Usage | Probes Generated |
+|------------|--------|---------------|--------------|------------------|
+| pythia-70m | 6      | 20 minutes    | 1-2GB        | ~390 probes      |
+| distilgpt2 | 6      | 15 minutes    | 1GB          | ~380 probes      |
+| llama-7b   | 32     | 2-3 hours     | 3-4GB        | ~440 probes      |
+| phi-2      | 32     | 2-3 hours     | 2-3GB        | ~440 probes      |
+
+### 🎯 CURRENT LIBRARY STATUS (September 2024)
+
+**Reference Library**: Contains 1 complete reference (pythia-70m)
+- File: `fingerprint_library/reference_library.json` (5.7KB)
+- Challenges processed: 3 (minimal - needs rebuild!)
+- Behavioral topology: Complete with restriction sites
+
+**Active Library**: Contains multiple model runs  
+- File: `fingerprint_library/active_library.json` (4.1KB)
+- Continuously updated with each model run
+
+**Recommendation**: The current pythia reference has only 3 challenges processed - this should be rebuilt with the full comprehensive analysis for maximum effectiveness.
+
 ## 🧬 DUAL LIBRARY SYSTEM
 
 ### Reference Library
 - **Location**: `fingerprint_library/reference_library.json`
-- **Purpose**: Baseline fingerprints with deep behavioral topology
-- **Updates**: Rarely, only for new model families
+- **Purpose**: ONE reference per model family (smallest model only)
+- **Contents**: Deep behavioral topology with restriction sites
+- **Updates**: Rarely, only when adding new model families
+- **Build Command**: `--build-reference --enable-prompt-orchestration`
 
 ### Active Library  
 - **Location**: `fingerprint_library/active_library.json`
-- **Purpose**: Continuously updated with all model runs
+- **Purpose**: ALL other model runs (including larger models from same family)
+- **Contents**: Standard fingerprints for verification
 - **Updates**: Automatic after each successful run
+- **Build Command**: Any normal run without `--build-reference`
+
+### Library Management Rules
+1. **One reference per family**: Only the smallest model (pythia-70m, distilgpt2, etc.)
+2. **Never duplicate**: If pythia-70m is reference, pythia-160m/12b go to active library
+3. **Reference builds are special**: Use `--build-reference --enable-prompt-orchestration`
+4. **Active library for everything else**: All non-reference runs automatically added
 
 ## 📊 TESTING STRATEGIES
 

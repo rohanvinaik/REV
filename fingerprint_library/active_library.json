@@ -21,12 +21,78 @@
       "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
       "run_type": "reference_baseline",
       "timestamp": "2025-09-03T19:15:46.608626"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_20250904_083406": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.319753487211702,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.8070175438596491,
+        "avg_response_length": 19.0,
+        "principled_features": {}
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 3,
+      "challenges_processed": 3,
+      "processing_time": 0.06896615028381348,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-160m/snapshots/50f5173d932e8e61f858120bcb800b97af589f46",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-04T08:34:06.265413"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_20250904_112149": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.83516577679282,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.7586206896551724,
+        "avg_response_length": 19.333333333333332,
+        "principled_features": {}
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 3,
+      "challenges_processed": 3,
+      "processing_time": 0.06243300437927246,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-160m/snapshots/50f5173d932e8e61f858120bcb800b97af589f46",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-04T11:21:49.139458"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_20250904_112931": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.607785077989057,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.38222222222222224,
+        "avg_response_length": 18.243243243243242,
+        "principled_features": {}
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 37,
+      "challenges_processed": 37,
+      "processing_time": 0.42281007766723633,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-160m/snapshots/50f5173d932e8e61f858120bcb800b97af589f46",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-04T11:29:31.074639"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-03T19:15:46.608513",
-    "last_updated": "2025-09-03T19:15:46.608627",
-    "num_fingerprints": 1
+    "last_updated": "2025-09-04T11:29:31.074642",
+    "num_fingerprints": 4
   }
 }

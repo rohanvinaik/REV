@@ -1,0 +1,304 @@
+{
+  "timestamp": "2025-09-04T03:45:44.342102",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "falcon-7b"
+  ],
+  "total_models": 1,
+  "results": {
+    "falcon-7b": {
+      "model": "/Users/rohanvinaik/LLM_models/falcon-7b",
+      "model_name": "falcon-7b",
+      "mode": "api",
+      "timestamp": "2025-09-03T21:36:01.934274",
+      "identification": {
+        "family": null,
+        "confidence": 0.0,
+        "method": "pending_behavioral_analysis",
+        "reference_model": null
+      },
+      "strategy": {
+        "strategy": "diagnostic",
+        "challenges": 5,
+        "sample_layers": [
+          0,
+          10,
+          20,
+          30,
+          40,
+          50,
+          60,
+          70,
+          80,
+          90
+        ],
+        "notes": "Behavioral analysis required for secure identification"
+      },
+      "stages": {
+        "deep_behavioral_analysis": {
+          "success": true,
+          "restriction_sites_found": 9,
+          "layers_profiled": 32,
+          "behavioral_topology": {
+            "model": "falcon-7b",
+            "timestamp": "2025-09-04T03:45:44.317723",
+            "total_layers": 32,
+            "restriction_sites": [
+              {
+                "layer": 1,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 2,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 3,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 4,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 5,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 6,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 7,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              },
+              {
+                "layer": 8,
+                "divergence_delta": 0.0,
+                "percent_change": 0.0,
+                "before": 0.0484,
+                "after": 0.0484
+              }
+            ],
+            "stable_regions": [],
+            "phase_boundaries": [],
+            "behavioral_phases": [
+              {
+                "phase": "embedding",
+                "layers": [
+                  0
+                ],
+                "avg_divergence": 0.0484,
+                "description": "Input embedding and tokenization"
+              },
+              {
+                "phase": "early_processing",
+                "layers": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "avg_divergence": 0.0484,
+                "description": "Rapid feature extraction and initial processing"
+              }
+            ],
+            "layer_profiles": {
+              "0": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "1": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "2": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "3": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "4": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "5": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "6": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "7": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              },
+              "8": {
+                "mean": 0.0484375,
+                "std": 0.012,
+                "min": 0.0,
+                "max": 0.09843750000000001,
+                "samples": 8
+              }
+            },
+            "optimization_hints": {
+              "critical_layers": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "parallel_safe_layers": [
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31
+              ],
+              "memory_per_layer_gb": 0.5,
+              "parallel_speedup_potential": "4x",
+              "skip_stable_region": []
+            },
+            "precision_targeting": {
+              "large_model_strategy": "target_restriction_sites_only",
+              "expected_speedup": "15-20x",
+              "accuracy_retention": "95%+"
+            }
+          },
+          "time": 22181.723124027252,
+          "enables_precision_targeting": true
+        },
+        "initialization": {
+          "success": true,
+          "time": 22182.388506174088,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenge_generation": {
+          "orchestrated": true,
+          "prompt_types": [],
+          "target_layers": null
+        },
+        "challenges": {
+          "count": 0,
+          "time": 0.00017523765563964844,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": false,
+          "hypervectors_generated": 0,
+          "responses_generated": 0,
+          "unified_fingerprints_generated": 0,
+          "time": 5.245208740234375e-06,
+          "sparsity": null,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {},
+          "time": 1.1920928955078125e-06
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": false,
+              "count": 0
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 0
+            },
+            "behavioral_analysis": {
+              "validated": false,
+              "metrics_count": 0
+            }
+          },
+          "time": 8.106231689453125e-06
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 44364.11181998253
+  }
+}
