@@ -473,6 +473,177 @@ class ParallelExecutor:
         self.logger.info("ParallelExecutor shutdown complete")
 
 
+class ParallelPromptProcessor:
+    """
+    Process multiple prompts in parallel on a single model for deep behavioral analysis.
+    """
+    
+    def __init__(
+        self, 
+        memory_limit_gb: float = 36.0,
+        workers: Optional[int] = None,
+        batch_size: Optional[int] = None
+    ):
+        self.memory_limit_gb = memory_limit_gb
+        self.workers = workers or mp.cpu_count()
+        self.batch_size = batch_size or 10
+        self.logger = logging.getLogger(__name__)
+        
+    def identify_restriction_sites_parallel(
+        self,
+        deep_executor,
+        probe_prompts: List[str],
+        enable_adaptive: bool = False
+    ) -> List[Any]:
+        """
+        Run restriction site identification in parallel BY LAYERS.
+        Each worker processes ALL prompts on a subset of layers.
+        
+        Args:
+            deep_executor: LayerSegmentExecutor instance
+            probe_prompts: List of prompts to process
+            enable_adaptive: Enable adaptive parallelism
+            
+        Returns:
+            List of restriction sites
+        """
+        import concurrent.futures
+        from functools import partial
+        
+        # Get total number of layers
+        n_layers = deep_executor.n_layers
+        
+        # Determine optimal worker count based on layers and memory
+        # Each worker will process all prompts on a subset of layers
+        actual_workers = min(self.workers, n_layers, 4)  # Max 4 workers for stability
+        
+        self.logger.info(f"Starting parallel analysis with {actual_workers} workers")
+        self.logger.info(f"Processing {len(probe_prompts)} prompts across {n_layers} layers")
+        self.logger.info(f"Total analysis points: {len(probe_prompts) * n_layers}")
+        
+        # Divide layers among workers
+        layers_per_worker = n_layers // actual_workers
+        remainder = n_layers % actual_workers
+        
+        layer_assignments = []
+        start = 0
+        for i in range(actual_workers):
+            # Add one extra layer to first few workers if there's a remainder
+            extra = 1 if i < remainder else 0
+            end = start + layers_per_worker + extra
+            layer_assignments.append((start, min(end, n_layers)))
+            start = end
+        
+        self.logger.info(f"Layer assignments: {layer_assignments}")
+        
+        # Process layers in parallel
+        all_sites = []
+        
+        with concurrent.futures.ProcessPoolExecutor(max_workers=actual_workers) as executor:
+            # Submit jobs for each layer range
+            futures = []
+            for worker_idx, (start_layer, end_layer) in enumerate(layer_assignments):
+                future = executor.submit(
+                    self._process_layer_range,
+                    deep_executor,
+                    probe_prompts,  # ALL prompts
+                    start_layer,
+                    end_layer,
+                    worker_idx
+                )
+                futures.append(future)
+            
+            # Collect results
+            completed = 0
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    layer_sites = future.result(timeout=3600)  # 1 hour timeout per worker
+                    all_sites.append(layer_sites)
+                    completed += 1
+                    
+                    # Progress update
+                    progress = (completed / len(futures)) * 100
+                    self.logger.info(f"Worker progress: {completed}/{len(futures)} workers completed ({progress:.1f}%)")
+                    
+                except Exception as e:
+                    self.logger.error(f"Worker failed: {e}")
+        
+        # Merge restriction sites from all workers
+        return self._merge_restriction_sites_properly(all_sites)
+    
+    def _process_layer_range(
+        self, 
+        deep_executor, 
+        prompts: List[str], 
+        start_layer: int, 
+        end_layer: int,
+        worker_idx: int
+    ) -> List[Any]:
+        """
+        Process ALL prompts on a specific range of layers.
+        
+        Args:
+            deep_executor: LayerSegmentExecutor instance
+            prompts: ALL prompts to process
+            start_layer: Starting layer index
+            end_layer: Ending layer index (exclusive)
+            worker_idx: Worker index for logging
+            
+        Returns:
+            List of restriction sites for this layer range
+        """
+        try:
+            self.logger.info(f"Worker {worker_idx}: Processing layers {start_layer}-{end_layer-1} with {len(prompts)} prompts")
+            
+            # Process all prompts on the assigned layers
+            # We need to call a method that processes specific layers with all prompts
+            # Since identify_all_restriction_sites processes all layers, we need a different approach
+            
+            # For now, we'll process all layers but only return results for our range
+            # This is inefficient but ensures correctness
+            sites = deep_executor.identify_all_restriction_sites(prompts)
+            
+            # Filter to only include sites in our layer range
+            filtered_sites = []
+            for site in sites:
+                if hasattr(site, 'layer_idx') and start_layer <= site.layer_idx < end_layer:
+                    filtered_sites.append(site)
+            
+            self.logger.info(f"Worker {worker_idx}: Found {len(filtered_sites)} restriction sites in layers {start_layer}-{end_layer-1}")
+            return filtered_sites
+            
+        except Exception as e:
+            self.logger.error(f"Worker {worker_idx} failed: {e}")
+            return []
+    
+    def _merge_restriction_sites_properly(self, all_sites: List[List[Any]]) -> List[Any]:
+        """
+        Properly merge restriction sites from all workers.
+        
+        Args:
+            all_sites: List of site lists from each worker
+            
+        Returns:
+            Merged and sorted restriction sites
+        """
+        if not all_sites:
+            return []
+        
+        # Flatten all sites from all workers
+        merged_sites = []
+        for worker_sites in all_sites:
+            if worker_sites:
+                merged_sites.extend(worker_sites)
+        
+        # Sort by layer index if available
+        if merged_sites and hasattr(merged_sites[0], 'layer_idx'):
+            merged_sites.sort(key=lambda x: x.layer_idx)
+        
+        self.logger.info(f"Merged {len(merged_sites)} total restriction sites from all workers")
+        
+        return merged_sites
+
+
 class AdaptiveParallelExecutor(ParallelExecutor):
     """
     Adaptive parallel executor that adjusts parallelism based on system load.

@@ -29,12 +29,25 @@ This guide covers deploying the REV (Restriction Enzyme Verification) System v3.
 - 16GB+ RAM minimum (64GB+ recommended)
 - 500GB+ storage for models
 
+### ⚠️ SECURITY WARNING
+
+**IMPORTANT**: Before deploying to production:
+1. Copy `deployment/.env.example` to `deployment/.env`
+2. Replace ALL placeholder passwords with secure values
+3. NEVER commit `.env` file to version control
+4. Use strong, unique passwords for each service
+5. Consider using a secrets management system (e.g., HashiCorp Vault, AWS Secrets Manager)
+
 ### Rapid Deployment
 
 ```bash
 # Clone repository
 git clone https://github.com/rohanvinaik/REV.git
 cd REV
+
+# CRITICAL: Set up environment variables
+cp deployment/.env.example deployment/.env
+# Edit deployment/.env and replace ALL passwords!
 
 # Install production dependencies
 pip install -r requirements.txt -r requirements-prod.txt
@@ -152,7 +165,7 @@ docker-compose -f deployment/docker-compose.yml down
 - **API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 - **GraphQL**: http://localhost:8000/graphql
-- **Grafana**: http://localhost:3000 (admin/admin)
+- **Grafana**: http://localhost:3000 (default: admin/password from .env)
 - **Kibana**: http://localhost:5601
 - **Jaeger**: http://localhost:16686
 - **MLflow**: http://localhost:5000
@@ -380,6 +393,21 @@ Actions taken:
 4. Enable memory-mapped loading
 
 ## 🔒 Security
+
+### Environment Variables
+
+**CRITICAL**: Always use environment variables for sensitive data:
+
+```bash
+# Copy and configure environment file
+cp deployment/.env.example deployment/.env
+
+# Required variables to configure:
+# - POSTGRES_PASSWORD: Database password
+# - GRAFANA_PASSWORD: Grafana admin password
+# - JWT_SECRET: JWT signing key
+# - API_KEYS: External service API keys
+```
 
 ### Authentication
 

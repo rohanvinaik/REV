@@ -21,9 +21,11 @@ import websocket
 import ssl
 
 # API Configuration (from docker-compose.yml)
-API_BASE_URL = "http://localhost:8000"  # Internal API
-API_PUBLIC_URL = "https://api.rev.example.com"  # Public API via Traefik
-JWT_SECRET = "your-jwt-secret"  # Should match Docker secrets
+import os
+
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")  # Internal API
+API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "https://api.rev.example.com")  # Public API via Traefik
+JWT_SECRET = os.getenv("JWT_SECRET")  # Must be set via environment variable
 
 class REVAPIClient:
     """
@@ -48,6 +50,8 @@ class REVAPIClient:
         self.response_times = []
         
     def generate_token(self, username: str = "demo_user") -> str:
+        if not JWT_SECRET:
+            raise ValueError("JWT_SECRET environment variable must be set")
         """Generate JWT token for authentication."""
         payload = {
             'sub': username,

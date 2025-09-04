@@ -571,6 +571,7 @@ class REVUnified:
         max_new_tokens: int = 50,
         challenge_focus: str = "balanced",
         provider: Optional[str] = None,
+        parallel_config: Optional[Dict[str, Any]] = None,
         api_key: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -761,11 +762,35 @@ class REVUnified:
                             print(f"   📊 Total analysis points: {deep_executor.n_layers * len(probe_prompts)}")
                             print(f"   ⏱️  Estimated time: {deep_executor.n_layers * 0.5:.1f} hours")
                             
-                            # Run the EXACT SAME deep analysis as the 70B test!
-                            # This profiles ALL layers and finds restriction sites
-                            deep_start = time.time()
-                            restriction_sites = deep_executor.identify_all_restriction_sites(probe_prompts)
-                            deep_time = time.time() - deep_start
+                            # Check if parallel processing is enabled
+                            if parallel_config and parallel_config.get('enabled'):
+                                print(f"   🚀 Parallel processing enabled: {parallel_config.get('memory_limit', 36.0)}GB limit")
+                                print(f"   🔄 Workers: {parallel_config.get('workers', 'auto')}")
+                                
+                                # Import parallel executor for single-model parallel processing
+                                from src.executor.parallel_executor import ParallelPromptProcessor
+                                
+                                parallel_processor = ParallelPromptProcessor(
+                                    memory_limit_gb=parallel_config.get('memory_limit', 36.0),
+                                    workers=parallel_config.get('workers'),
+                                    batch_size=parallel_config.get('batch_size')
+                                )
+                                
+                                # Run deep analysis with parallel processing
+                                deep_start = time.time()
+                                restriction_sites = parallel_processor.identify_restriction_sites_parallel(
+                                    deep_executor, 
+                                    probe_prompts,
+                                    enable_adaptive=parallel_config.get('enable_adaptive', False)
+                                )
+                                deep_time = time.time() - deep_start
+                                print(f"   ⚡ Parallel analysis completed in {deep_time/60:.1f} minutes")
+                            else:
+                                # Run the EXACT SAME deep analysis as the 70B test!
+                                # This profiles ALL layers and finds restriction sites
+                                deep_start = time.time()
+                                restriction_sites = deep_executor.identify_all_restriction_sites(probe_prompts)
+                                deep_time = time.time() - deep_start
                             
                             # Extract COMPREHENSIVE behavioral topology for reference library
                             # This MUST match the llama70b_topology.json standard!
@@ -2774,6 +2799,17 @@ Examples:
         # Process each model
         for model_path in args.models:
             try:
+                # Prepare parallel configuration
+                parallel_config = None
+                if args.parallel:
+                    parallel_config = {
+                        'enabled': True,
+                        'memory_limit': args.parallel_memory_limit,
+                        'workers': args.parallel_workers,
+                        'batch_size': args.parallel_batch_size,
+                        'enable_adaptive': args.enable_adaptive_parallel
+                    }
+                
                 result = rev.process_model(
                     model_path=model_path,
                     use_local=args.local,
@@ -2783,6 +2819,7 @@ Examples:
                     max_new_tokens=args.max_tokens,
                     challenge_focus=args.challenge_focus,
                     provider=args.provider,
+                    parallel_config=parallel_config,
                     api_key=args.api_key
                 )
                 

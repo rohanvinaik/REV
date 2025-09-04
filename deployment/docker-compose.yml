@@ -66,7 +66,7 @@ services:
     container_name: rev-postgres
     environment:
       - POSTGRES_USER=rev
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-rev123}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=rev_db
     ports:
       - "5432:5432"
@@ -146,7 +146,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
       - GF_INSTALL_PLUGINS=redis-datasource
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -181,7 +181,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - BACKEND_STORE_URI=postgresql://rev:${POSTGRES_PASSWORD:-rev123}@postgres/rev_db
+      - BACKEND_STORE_URI=postgresql://rev:${POSTGRES_PASSWORD}@postgres/rev_db
       - ARTIFACT_ROOT=/mlflow/artifacts
     volumes:
       - mlflow-data:/mlflow/artifacts
