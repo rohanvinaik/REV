@@ -101,43 +101,59 @@ class DualLibrarySystem:
         """
         Identify a model using the dual library system.
         
-        Step 1: Try name-based identification
-        Step 2: If no match, return "needs_diagnostic" 
+        SECURITY: Name-based identification is DISABLED for security.
+        All models must undergo behavioral verification.
         """
         model_name = Path(model_path).name.lower()
         
-        # Step 1: Try name-based identification
+        # SECURITY FIX: Disable path-based identification
+        # Path names can be easily spoofed and provide no security guarantee.
+        # All models MUST undergo behavioral analysis for proper verification.
+        
+        # Store potential family for reference, but DO NOT use for identification
+        potential_family = None
+        potential_pattern = None
         for family, patterns in self.FAMILY_PATTERNS.items():
             for pattern in patterns:
                 if pattern in model_name:
-                    # Found a family match!
-                    reference_model = self.REFERENCE_MODELS.get(family)
-                    
-                    # Check if we have this reference in our library
-                    if self._has_reference_fingerprint(family):
-                        return ModelIdentification(
-                            identified_family=family,
-                            confidence=0.95,  # High confidence from name match
-                            method="name_match",
-                            reference_model=reference_model,
-                            notes=f"Matched pattern '{pattern}' in model name"
-                        )
-                    else:
-                        return ModelIdentification(
-                            identified_family=family,
-                            confidence=0.85,
-                            method="name_match_no_reference",
-                            reference_model=reference_model,
-                            notes=f"Matched pattern '{pattern}' but no reference fingerprint available"
-                        )
+                    potential_family = family
+                    potential_pattern = pattern
+                    break
+            if potential_family:
+                break
         
-        # No name match - need diagnostic fingerprinting
+        # Always return unknown to force behavioral analysis
+        notes = "Behavioral analysis required for secure identification"
+        if potential_family:
+            notes += f" (path suggests {potential_family} family, but verification needed)"
+        
+        return ModelIdentification(
+            identified_family=None,  # Never identify from path
+            confidence=0.0,  # Zero confidence without behavioral analysis
+            method="pending_behavioral_analysis",
+            reference_model=None,
+            notes=notes
+        )
+    
+    def identify_from_behavioral_analysis(self, fingerprint_data: Dict) -> ModelIdentification:
+        """
+        Identify a model based on behavioral analysis results.
+        This should be called AFTER deep behavioral analysis completes.
+        
+        Args:
+            fingerprint_data: The behavioral fingerprint data from analysis
+            
+        Returns:
+            ModelIdentification with actual confidence based on behavior
+        """
+        # TODO: Implement actual behavioral matching against reference library
+        # For now, return unknown to maintain security
         return ModelIdentification(
             identified_family=None,
             confidence=0.0,
-            method="unknown",
+            method="behavioral_analysis_complete",
             reference_model=None,
-            notes="No family pattern matched - diagnostic fingerprinting required"
+            notes="Behavioral analysis complete - family identification pending implementation"
         )
     
     def _has_reference_fingerprint(self, family: str) -> bool:
@@ -228,6 +244,15 @@ class DualLibrarySystem:
                     "challenges": 15,
                     "notes": "Family identified but no reference available"
                 }
+        
+        elif identification.method == "pending_behavioral_analysis":
+            # SECURITY: Always require behavioral analysis for identification
+            return {
+                "strategy": "diagnostic",
+                "challenges": 5,  # Will be overridden by deep analysis
+                "sample_layers": list(range(0, 100, 10)),  # Sample every 10th layer
+                "notes": "Behavioral analysis required for secure identification"
+            }
         
         elif identification.method == "unknown":
             # Need diagnostic first

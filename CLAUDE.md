@@ -202,8 +202,30 @@ Profiles ALL layers to extract:
 - `--profiler` flag
 
 ### Performance Impact
-- **Small Model (7B)**: 6-24h once → Complete reference
+- **Small Model (70M-125M)**: 15-20 minutes for complete reference
+- **Medium Model (7B)**: 6-24h once → Complete reference  
 - **Large Model (405B)**: 37h → 2h using reference (18.5x speedup!)
+
+### Reference Library Build Settings (CRITICAL)
+When running `--build-reference`, the system:
+1. **Automatically generates 400+ behavioral probes** (NOT manually selected)
+2. **Profiles ALL layers** comprehensively (6 for pythia-70m, 12 for GPT-2, etc.)
+3. **Takes appropriate time** (18 min for pythia-70m, 41 min for GPT-2)
+4. **Uses cryptographic challenge generation** via PoTChallengeGenerator
+
+#### Tested Reference Builds:
+```bash
+# Pythia-70m (6 layers, 388 probes, ~18 minutes)
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 --build-reference
+
+# GPT-2 (12 layers, 406 probes, ~41 minutes)  
+python run_rev.py /Users/rohanvinaik/LLM_models/gpt2 --build-reference
+
+# DistilGPT2 (6 layers, should use 400+ probes NOT 20)
+python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 --build-reference
+```
+
+⚠️ **IMPORTANT**: The system should NEVER use only 20 hardcoded probes. If analysis completes in <5 minutes for reference building, something is wrong!
 
 ## 🏗️ ARCHITECTURE
 
