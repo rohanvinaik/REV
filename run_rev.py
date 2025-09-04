@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-REV Framework - Unified Central Pipeline
-=========================================
-This is the MAIN entry point for the REV (Restriction Enzyme Verification) framework.
-Combines all functionality from previous scripts into one comprehensive pipeline.
+REV Framework - Main Entry Point (run_rev.py)
+==============================================
+THIS IS THE ONLY FILE YOU SHOULD RUN DIRECTLY!
 
-Default Mode: API-only (no local model loading)
-Optional: Local model loading with --local flag
+This is the main CLI entry point and orchestrator for the REV framework.
+It coordinates all high-level workflows including model identification,
+fingerprinting, verification, and integrates with all subsystems.
 
+Architecture:
+- run_rev.py (THIS FILE): Main orchestrator and CLI interface
+- src/rev_pipeline.py: Core pipeline module (used internally, not run directly)
+
+Usage:
+  python run_rev.py /path/to/model [options]
+  
 Author: REV Framework Team
 Version: 3.0 (Unified)
 """

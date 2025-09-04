@@ -75,6 +75,21 @@ cd REV
 pip install -r requirements.txt
 ```
 
+### Pipeline Architecture
+
+REV uses a clean two-layer architecture:
+
+1. **`run_rev.py`** - Main CLI entry point and orchestrator
+   - Handles all command-line arguments and user interaction
+   - Coordinates high-level workflow (model identification, fingerprinting, verification)
+   - Integrates with prompt orchestration, parallel processing, and security features
+   - **THIS IS THE ONLY FILE YOU SHOULD RUN DIRECTLY**
+
+2. **`src/rev_pipeline.py`** - Core pipeline module (internal use only)
+   - Provides the `REVPipeline` class for segment-wise model execution
+   - Handles low-level pipeline operations and challenge generation
+   - Used internally by `run_rev.py` - NOT meant to be run directly
+
 ### ⚠️ CRITICAL: Understanding How to Run Models
 
 **IMPORTANT: There is NO --local flag anymore. It has been PERMANENTLY REMOVED.**

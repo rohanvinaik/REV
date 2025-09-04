@@ -1,9 +1,21 @@
 """
-REV Pipeline - Core integration for memory-bounded LLM verification.
+REV Pipeline - Core Pipeline Module (Internal Use Only)
+========================================================
+DO NOT RUN THIS FILE DIRECTLY! Use run_rev.py instead.
 
-This module implements the main pipeline for REV (Restriction Enzyme Verification),
-providing segment-wise model execution with memory-bounded streaming and
-Merkle tree construction for verifiable computation.
+This module provides the REVPipeline class which implements core pipeline
+functionality for the REV framework. It handles:
+- Segment-wise model execution with memory-bounded streaming
+- PoT challenge generation
+- Merkle tree construction for verifiable computation
+- Low-level pipeline operations
+
+This is used internally by run_rev.py and should not be executed directly.
+All user interaction should go through run_rev.py.
+
+Architecture:
+- run_rev.py: Main orchestrator and CLI interface (run this!)
+- src/rev_pipeline.py (THIS FILE): Core pipeline module (internal only)
 
 Enhanced with true memory-bounded execution from Section 4.3-4.4 of the REV paper.
 """
