@@ -537,14 +537,19 @@ class ModelFingerprintLibrary:
             
             # Reconstruct fingerprints (with mock arrays for now)
             for fp_id, fp_data in library_data.get("fingerprints", {}).items():
-                # Create mock unified fingerprint
+                # Create mock unified fingerprint with all required fields
                 mock_fp = UnifiedFingerprint(
                     unified_hypervector=np.random.randn(10000),
                     prompt_hypervector=np.random.randn(10000),
                     pathway_hypervector=np.random.randn(10000),
                     response_hypervector=np.random.randn(10000),
                     model_id=f"{fp_data['model_family']}-{fp_data['model_size']}",
+                    prompt_text="loaded_prompt",
+                    response_text="loaded_response",
+                    layer_count=fp_data.get('num_layers', 12),
+                    layers_sampled=list(range(0, fp_data.get('num_layers', 12), 2)),
                     fingerprint_quality=0.95,
+                    divergence_stats={'mean': 0.1, 'std': 0.05, 'max': 0.3},
                     binding_strength=0.9
                 )
                 

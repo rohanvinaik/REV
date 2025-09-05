@@ -1,212 +1,50 @@
 {
   "fingerprints": {
-    "pythia_reference": {
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_reference": {
       "behavioral_patterns": {
-        "hv_entropy": 13.639114289545807,
+        "hv_entropy": 13.216024370343694,
         "hv_sparsity": 0.01,
-        "response_diversity": 0.8,
-        "avg_response_length": 20.0,
+        "response_diversity": 0.8103448275862069,
+        "avg_response_length": 19.333333333333332,
         "principled_features": {}
       },
-      "model_family": "pythia",
-      "model_size": "70m",
-      "architecture_version": "pythia-70m",
-      "reference_model": "pythia-70m",
-      "snapshot_id": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_family": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
       "hypervectors_generated": 3,
       "challenges_processed": 3,
-      "processing_time": 0.030232906341552734,
+      "processing_time": 0.02901601791381836,
       "validation_score": 1.0,
       "source": "pipeline_generated",
-      "restriction_sites": [
-        {
-          "layer": 1,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0417,
-          "after": 0.0417
-        },
-        {
-          "layer": 2,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0417,
-          "after": 0.0417
-        },
-        {
-          "layer": 3,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0417,
-          "after": 0.0417
-        },
-        {
-          "layer": 4,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0417,
-          "after": 0.0417
-        },
-        {
-          "layer": 5,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0417,
-          "after": 0.0417
-        }
-      ],
-      "stable_regions": [],
-      "behavioral_topology": {
-        "model": "pythia-70m",
-        "timestamp": "2025-09-03T19:15:44.901930",
-        "total_layers": 6,
-        "restriction_sites": [
-          {
-            "layer": 1,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0417,
-            "after": 0.0417
-          },
-          {
-            "layer": 2,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0417,
-            "after": 0.0417
-          },
-          {
-            "layer": 3,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0417,
-            "after": 0.0417
-          },
-          {
-            "layer": 4,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0417,
-            "after": 0.0417
-          },
-          {
-            "layer": 5,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0417,
-            "after": 0.0417
-          }
-        ],
-        "stable_regions": [],
-        "phase_boundaries": [],
-        "behavioral_phases": [
-          {
-            "phase": "embedding",
-            "layers": [
-              0
-            ],
-            "avg_divergence": 0.0417,
-            "description": "Input embedding and tokenization"
-          },
-          {
-            "phase": "early_processing",
-            "layers": [
-              1,
-              2,
-              3,
-              4,
-              5
-            ],
-            "avg_divergence": 0.0417,
-            "description": "Rapid feature extraction and initial processing"
-          }
-        ],
-        "layer_profiles": {
-          "0": {
-            "mean": 0.041666666666666664,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09166666666666667,
-            "samples": 8
-          },
-          "1": {
-            "mean": 0.041666666666666664,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09166666666666667,
-            "samples": 8
-          },
-          "2": {
-            "mean": 0.041666666666666664,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09166666666666667,
-            "samples": 8
-          },
-          "3": {
-            "mean": 0.041666666666666664,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09166666666666667,
-            "samples": 8
-          },
-          "4": {
-            "mean": 0.041666666666666664,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09166666666666667,
-            "samples": 8
-          },
-          "5": {
-            "mean": 0.041666666666666664,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09166666666666667,
-            "samples": 8
-          }
-        },
-        "optimization_hints": {
-          "critical_layers": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
-          "parallel_safe_layers": [],
-          "memory_per_layer_gb": 0.5,
-          "parallel_speedup_potential": "4x",
-          "skip_stable_region": []
-        },
-        "precision_targeting": {
-          "large_model_strategy": "target_restriction_sites_only",
-          "expected_speedup": "15-20x",
-          "accuracy_retention": "95%+"
-        }
-      },
-      "optimization_hints": {
-        "critical_layers": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "parallel_safe_layers": [],
-        "memory_per_layer_gb": 0.5,
-        "parallel_speedup_potential": "4x",
-        "skip_stable_region": []
-      },
-      "enables_precision_targeting": true,
-      "deep_analysis_time_hours": 0.0007474908563825819,
       "is_reference": true,
-      "timestamp": "2025-09-03T19:15:46.608916"
+      "timestamp": "2025-09-04T19:25:21.466417"
+    },
+    "distilgpt2_reference": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.31297476975365,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.8070175438596491,
+        "avg_response_length": 19.0,
+        "principled_features": {}
+      },
+      "model_family": "distilgpt2",
+      "model_size": "unknown",
+      "architecture_version": "distilgpt2",
+      "reference_model": "distilgpt2",
+      "hypervectors_generated": 3,
+      "challenges_processed": 3,
+      "processing_time": 0.02814316749572754,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "is_reference": true,
+      "timestamp": "2025-09-04T19:26:01.642409"
     }
   },
   "metadata": {
     "version": "2.0",
-    "created": "2025-09-03T19:15:46.608506",
-    "last_updated": "2025-09-04T11:29:31.075138",
+    "created": "2025-09-04T15:41:00.000000",
+    "last_updated": "2025-09-04T19:26:01.642411",
     "notes": "Reference library contains ONLY the smallest model from each family for behavioral baseline. All other models should be in active_library.json"
   }
 }

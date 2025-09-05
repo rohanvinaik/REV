@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
 """
-REV Framework - Main Entry Point (run_rev.py)
-==============================================
-THIS IS THE ONLY FILE YOU SHOULD RUN DIRECTLY!
+REV Framework - Unified Central Pipeline
+=========================================
+This is the MAIN entry point for the REV (Restriction Enzyme Verification) framework.
+Combines all functionality from previous scripts into one comprehensive pipeline.
 
-This is the main CLI entry point and orchestrator for the REV framework.
-It coordinates all high-level workflows including model identification,
-fingerprinting, verification, and integrates with all subsystems.
+Default Mode: API-only (no local model loading)
+Optional: Local model loading with --local flag
 
-Architecture:
-- run_rev.py (THIS FILE): Main orchestrator and CLI interface
-- src/rev_pipeline.py: Core pipeline module (used internally, not run directly)
-
-Usage:
-  python run_rev.py /path/to/model [options]
-  
 Author: REV Framework Team
 Version: 3.0 (Unified)
 """
@@ -761,11 +754,6 @@ class REVUnified:
                             
                             # Flatten the dictionary to a list of prompts
                             probe_prompts = []
-                            # Ensure probe_prompts_dict is actually a dictionary
-                            if not isinstance(probe_prompts_dict, dict):
-                                self.logger.warning(f"Unexpected type for prompts: {type(probe_prompts_dict)}")
-                                probe_prompts_dict = {"default": [probe_prompts_dict] if not isinstance(probe_prompts_dict, list) else probe_prompts_dict}
-                            
                             for category, prompts in probe_prompts_dict.items():
                                 # Handle both string prompts and GeneratedChallenge objects
                                 for prompt in prompts:
@@ -1441,7 +1429,7 @@ class REVUnified:
                             weighted_features = feature_vector
                         
                         # Encode to hypervector with enhanced features
-                        enhanced_hypervector = self.encoder.encode(weighted_features)
+                        enhanced_hypervector = self.encoder.encode_vector(weighted_features)
                         
                         # Add principled features to metrics
                         metrics['principled_features'] = {
@@ -2869,8 +2857,7 @@ Examples:
                         print(f"⚠️  Topology file not found: {topology_file}")
                         print("    Run Phase 1 analysis first or provide --cassette-topology")
                 else:
-                    error_msg = result.get('error', 'Unknown error')
-                    print(f"\n❌ Failed to process {model_path}: {error_msg}")
+                    print(f"\n❌ Failed to process {model_path}: {result['error']}")
                     
             except Exception as e:
                 logger.error(f"Failed to process {model_path}: {e}")

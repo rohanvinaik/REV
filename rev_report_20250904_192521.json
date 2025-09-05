@@ -1,0 +1,114 @@
+{
+  "timestamp": "2025-09-04T19:25:21.469896",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42"
+  ],
+  "total_models": 1,
+  "results": {
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42": {
+      "model": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_name": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "mode": "api",
+      "timestamp": "2025-09-04T19:25:17.702162",
+      "identification": {
+        "family": null,
+        "confidence": 0.0,
+        "method": "pending_behavioral_analysis",
+        "reference_model": null
+      },
+      "strategy": {
+        "strategy": "diagnostic",
+        "challenges": 5,
+        "sample_layers": [
+          0,
+          10,
+          20,
+          30,
+          40,
+          50,
+          60,
+          70,
+          80,
+          90
+        ],
+        "notes": "Behavioral analysis required for secure identification"
+      },
+      "stages": {
+        "initialization": {
+          "success": true,
+          "time": 3.719270944595337,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenge_generation": {
+          "orchestrated": true,
+          "prompt_types": [
+            "dynamic",
+            "evolutionary",
+            "kdf_adversarial"
+          ],
+          "target_layers": null
+        },
+        "challenges": {
+          "count": 3,
+          "time": 0.015167951583862305,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": true,
+          "hypervectors_generated": 3,
+          "responses_generated": 3,
+          "unified_fingerprints_generated": 0,
+          "time": 0.02901601791381836,
+          "sparsity": 0.01,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {
+            "avg_response_length": 19.333333333333332,
+            "unique_tokens": 47,
+            "response_diversity": 0.8103448275862069,
+            "hv_entropy": 13.216024370343694,
+            "hv_active_dims": 100,
+            "hv_sparsity": 0.01
+          },
+          "time": 0.0001289844512939453
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": true,
+              "count": 3
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 3
+            },
+            "behavioral_analysis": {
+              "validated": true,
+              "metrics_count": 6
+            }
+          },
+          "time": 4.291534423828125e-06
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 3.7635881900787354
+  }
+}
