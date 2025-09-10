@@ -754,23 +754,40 @@ class REVUnified:
                             # Request more prompts to get complete behavioral coverage
                             # The orchestrator will distribute across all 7 systems
                             target_prompts = deep_executor.n_layers * 15  # ~15 prompts per layer for comprehensive coverage
-                            probe_prompts_dict = self.prompt_orchestrator.generate_orchestrated_prompts(
+                            orchestration_result = self.prompt_orchestrator.generate_orchestrated_prompts(
                                 model_family="unknown",  # Force comprehensive probing
                                 total_prompts=max(target_prompts, 400)  # At least 400 prompts for good coverage
                             )
                             
+                            # Extract the actual prompts from the orchestration result
+                            # The orchestrator returns {"prompts_by_type": {...}, "total_prompts": N, ...}
+                            if isinstance(orchestration_result, dict) and "prompts_by_type" in orchestration_result:
+                                probe_prompts_dict = orchestration_result["prompts_by_type"]
+                                self.logger.info(f"[REFERENCE-BUILD] Orchestrator generated {len(probe_prompts_dict)} prompt categories")
+                            else:
+                                self.logger.warning(f"Unexpected orchestration result: {type(orchestration_result)}")
+                                probe_prompts_dict = {}
+                            
                             # Flatten the dictionary to a list of prompts
                             probe_prompts = []
-                            # Ensure probe_prompts_dict is actually a dictionary
-                            if not isinstance(probe_prompts_dict, dict):
-                                self.logger.warning(f"Unexpected type for prompts: {type(probe_prompts_dict)}")
-                                probe_prompts_dict = {"default": [probe_prompts_dict] if not isinstance(probe_prompts_dict, list) else probe_prompts_dict}
                             
                             for category, prompts in probe_prompts_dict.items():
                                 # Handle both string prompts and GeneratedChallenge objects
+                                # First check if prompts is actually iterable (not a slice or other object)
+                                if not hasattr(prompts, '__iter__') or isinstance(prompts, (str, bytes)):
+                                    self.logger.warning(f"Skipping non-iterable prompts in category {category}: {type(prompts)}")
+                                    continue
+                                    
                                 for prompt in prompts:
-                                    if isinstance(prompt, str):
+                                    # Skip slice objects and other non-processable types
+                                    if isinstance(prompt, slice):
+                                        self.logger.warning(f"Skipping slice object in prompts: {prompt}")
+                                        continue
+                                    elif isinstance(prompt, str):
                                         probe_prompts.append(prompt)
+                                    elif isinstance(prompt, dict) and 'prompt' in prompt:
+                                        # Extract prompt text from dictionary format
+                                        probe_prompts.append(prompt['prompt'])
                                     elif hasattr(prompt, 'prompt'):
                                         probe_prompts.append(prompt.prompt)
                                     else:
@@ -1056,6 +1073,12 @@ class REVUnified:
         # Stage 3: Generate Challenges (Using Unified Orchestrator)
         print(f"\n[Stage 3/7] Generating Orchestrated Challenges...")
         start = time.time()
+        
+        # When building reference library, ensure we generate MANY challenges
+        if self.build_reference and challenges < 200:
+            self.logger.info(f"[REFERENCE-BUILD] Increasing challenges from {challenges} to 200 minimum for comprehensive reference")
+            challenges = max(challenges, 200)  # Minimum 200 for reference library
+            print(f"📚 Reference library mode: Using {challenges} comprehensive challenges")
         
         # Use unified prompt orchestrator if available
         if self.prompt_orchestrator and (self.enable_pot_challenges or self.enable_adversarial):

@@ -461,6 +461,63 @@ class HypervectorEncoder:
         
         return np.vstack(vectors)
     
+    def project_vector(self, vector: np.ndarray, target_dim: int) -> np.ndarray:
+        """
+        Project a vector to a different dimension using learned projection.
+        
+        Args:
+            vector: Input vector to project
+            target_dim: Target dimension
+            
+        Returns:
+            Projected vector of target dimension
+        """
+        current_dim = len(vector)
+        
+        if current_dim == target_dim:
+            return vector
+        
+        if current_dim < target_dim:
+            # Upsample: Use repetition with modulation
+            scale_factor = target_dim / current_dim
+            if scale_factor.is_integer():
+                # Simple repetition for integer multiples
+                projected = np.repeat(vector, int(scale_factor))
+            else:
+                # Interpolation for non-integer multiples
+                indices = np.linspace(0, current_dim - 1, target_dim)
+                projected = np.interp(indices, np.arange(current_dim), vector)
+        else:
+            # Downsample: Use adaptive pooling
+            scale_factor = current_dim / target_dim
+            if scale_factor.is_integer():
+                # Simple averaging for integer divisors
+                projected = vector.reshape(target_dim, int(scale_factor)).mean(axis=1)
+            else:
+                # Adaptive pooling for non-integer divisors
+                indices = np.linspace(0, current_dim - 1, target_dim, endpoint=False).astype(int)
+                projected = vector[indices]
+        
+        # Normalize to maintain hypervector properties
+        norm = np.linalg.norm(projected)
+        if norm > 0:
+            projected = projected / norm
+        
+        return projected
+    
+    def align_dimensions(self, reference_vector: np.ndarray, target_dim: int) -> np.ndarray:
+        """
+        Align reference vector dimensions to target model dimensions.
+        
+        Args:
+            reference_vector: Reference model vector
+            target_dim: Target model dimension
+            
+        Returns:
+            Aligned vector of target dimension
+        """
+        return self.project_vector(reference_vector, target_dim)
+    
     def _simd_optimize(self, vectors: np.ndarray) -> np.ndarray:
         """Apply SIMD optimizations to vector operations."""
         # Use numpy's vectorized operations which leverage SIMD

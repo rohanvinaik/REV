@@ -131,12 +131,1038 @@
       "model_path": "/Users/rohanvinaik/LLM_models/distilgpt2",
       "run_type": "reference_baseline",
       "timestamp": "2025-09-04T19:26:01.641952"
+    },
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_20250909_110502": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.087238336727113,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.4892703862660944,
+        "avg_response_length": 16.642857142857142,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "hypervectors_generated": 14,
+      "challenges_processed": 14,
+      "processing_time": 0.09018898010253906,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T11:05:02.442354"
+    },
+    "50f5173d932e8e61f858120bcb800b97af589f46_20250909_110547": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.957136860315995,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.5211864406779662,
+        "avg_response_length": 16.857142857142858,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "hypervectors_generated": 14,
+      "challenges_processed": 14,
+      "processing_time": 0.1651289463043213,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "50f5173d932e8e61f858120bcb800b97af589f46",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-160m/snapshots/50f5173d932e8e61f858120bcb800b97af589f46",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T11:05:47.497420"
+    },
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_20250909_112026": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.868150058030546,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.19547169811320755,
+        "avg_response_length": 19.343065693430656,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 0.7731359004974365,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T11:20:26.631400"
+    },
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_20250909_113431": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.423785508422988,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.1855747558226897,
+        "avg_response_length": 19.43065693430657,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 0.6964607238769531,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T11:34:31.713928"
+    },
+    "distilgpt2_20250909_121050": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.510834749962633,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.19649515287099178,
+        "avg_response_length": 19.576642335766422,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "distilgpt2",
+      "reference_model": "distilgpt2",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 0.9016780853271484,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "distilgpt2",
+      "model_path": "/Users/rohanvinaik/LLM_models/distilgpt2",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T12:10:50.958410"
+    },
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_20250909_121304": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.82926208474496,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.1906379765949415,
+        "avg_response_length": 19.335766423357665,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 1.148545742034912,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T12:13:04.087301"
+    },
+    "gpt-neo-125m_20250909_122640": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.190017797835363,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.18787878787878787,
+        "avg_response_length": 19.27007299270073,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "gpt-neo-125m",
+      "reference_model": "gpt-neo-125m",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 2.8820080757141113,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "gpt-neo-125m",
+      "model_path": "/Users/rohanvinaik/LLM_models/gpt-neo-125m",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T12:26:40.126401"
+    },
+    "falcon-7b_20250909_134842": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.241287909091945,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.18900602409638553,
+        "avg_response_length": 19.386861313868614,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "falcon-7b",
+      "reference_model": "falcon-7b",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 177.83149790763855,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "falcon-7b",
+      "model_path": "/Users/rohanvinaik/LLM_models/falcon-7b",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T13:48:42.940020"
+    },
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_20250909_144925": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.79807620817651,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.19315589353612167,
+        "avg_response_length": 19.197080291970803,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 0.9264531135559082,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-09T14:49:25.181780"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-03T19:15:46.608513",
-    "last_updated": "2025-09-04T19:26:01.641955",
-    "num_fingerprints": 6
+    "last_updated": "2025-09-09T14:49:25.181791",
+    "num_fingerprints": 15
   }
 }
