@@ -1157,12 +1157,240 @@
       "model_path": "/Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42",
       "run_type": "reference_baseline",
       "timestamp": "2025-09-09T14:49:25.181780"
+    },
+    "gpt2-medium_20250910_212737": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.934875223263022,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.7627118644067796,
+        "avg_response_length": 19.666666666666668,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "gpt2-medium",
+      "reference_model": "gpt2-medium",
+      "hypervectors_generated": 3,
+      "challenges_processed": 3,
+      "processing_time": 1.0537819862365723,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "gpt2-medium",
+      "model_path": "/Users/rohanvinaik/LLM_models/gpt2-medium",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-10T21:27:37.361317"
+    },
+    "gpt2-medium_20250910_233627": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.10392804716512,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.626984126984127,
+        "avg_response_length": 18.0,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": null,
+      "model_size": "unknown",
+      "architecture_version": "gpt2-medium",
+      "reference_model": "gpt2-medium",
+      "hypervectors_generated": 7,
+      "challenges_processed": 7,
+      "processing_time": 0.7285599708557129,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "gpt2-medium",
+      "model_path": "/Users/rohanvinaik/LLM_models/gpt2-medium",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-10T23:36:27.397000"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-03T19:15:46.608513",
-    "last_updated": "2025-09-09T14:49:25.181791",
-    "num_fingerprints": 15
+    "last_updated": "2025-09-10T23:36:27.397002",
+    "num_fingerprints": 17
   }
 }

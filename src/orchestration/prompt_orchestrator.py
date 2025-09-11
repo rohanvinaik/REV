@@ -179,23 +179,120 @@ class UnifiedPromptOrchestrator:
         ]
         return sum(1 for s in systems if s is not None)
     
+    def discover_restriction_sites(self, model_family: str, layer_count: int = None) -> Tuple[List[int], int]:
+        """
+        Dynamically discover restriction sites and determine optimal prompt count.
+        
+        Args:
+            model_family: The identified model family (llama, gpt, etc.)
+            layer_count: Number of layers in the model (for initial probing)
+            
+        Returns:
+            Tuple of (restriction_sites, recommended_prompt_count)
+        """
+        # Check if we have reference topology for this family
+        if model_family in self.reference_library.get("families", {}):
+            topology = self.reference_library["families"][model_family]
+            sites = topology.get("restriction_sites", [])
+            if sites:
+                # We have reference sites - use them directly
+                site_layers = [s["layer"] for s in sites[:20]]  # Max 20 sites
+                prompts_per_site = 50  # Dense probing at known sites
+                logger.info(f"Using {len(site_layers)} reference restriction sites for {model_family}")
+                return site_layers, len(site_layers) * prompts_per_site
+        
+        # No reference - need to discover sites dynamically
+        if layer_count is None:
+            # Estimate based on model family patterns
+            family_patterns = {
+                "gpt": 12,  # GPT-2 family typically has 12 layers
+                "llama": 32,  # Llama models typically have 32 layers
+                "mistral": 32,  # Mistral similar to Llama
+                "pythia": 6,  # Small Pythia has 6 layers
+                "falcon": 32,  # Falcon similar structure
+                "phi": 32,  # Phi-2 has 32 layers
+            }
+            layer_count = family_patterns.get(model_family, 24)  # Default estimate
+        
+        # Heuristic for site discovery based on layer count
+        # Behavioral boundaries typically occur at:
+        # - Early layers (1-3): Input processing
+        # - Mid-early layers (25%): Feature extraction
+        # - Middle layers (50%): Abstraction boundaries
+        # - Mid-late layers (75%): Output preparation
+        # - Final layers: Output generation
+        
+        if layer_count <= 6:
+            # Small models - probe every layer
+            restriction_sites = list(range(layer_count))
+            prompts_per_site = 70  # More prompts per site for small models
+        elif layer_count <= 12:
+            # Medium models - probe every 2nd layer plus boundaries
+            restriction_sites = [0, 1] + list(range(2, layer_count-2, 2)) + [layer_count-2, layer_count-1]
+            prompts_per_site = 60
+        elif layer_count <= 24:
+            # Large models - focus on known behavioral boundaries
+            restriction_sites = [
+                0, 1,  # Input layers
+                layer_count // 4,  # 25% mark
+                layer_count // 2 - 1, layer_count // 2,  # 50% mark
+                3 * layer_count // 4,  # 75% mark
+                layer_count - 2, layer_count - 1  # Output layers
+            ]
+            prompts_per_site = 55
+        else:
+            # Very large models - strategic sampling
+            restriction_sites = [
+                0, 1, 2,  # Early layers
+                layer_count // 8,  # 12.5%
+                layer_count // 4,  # 25%
+                3 * layer_count // 8,  # 37.5%
+                layer_count // 2,  # 50%
+                5 * layer_count // 8,  # 62.5%
+                3 * layer_count // 4,  # 75%
+                7 * layer_count // 8,  # 87.5%
+                layer_count - 3, layer_count - 2, layer_count - 1  # Final layers
+            ]
+            prompts_per_site = 45
+        
+        # Remove duplicates and sort
+        restriction_sites = sorted(list(set(restriction_sites)))
+        
+        # Calculate dynamic prompt count
+        total_prompts = len(restriction_sites) * prompts_per_site
+        
+        logger.info(f"Discovered {len(restriction_sites)} potential restriction sites for {layer_count}-layer model")
+        logger.info(f"Will generate {total_prompts} total prompts ({prompts_per_site} per site)")
+        
+        return restriction_sites, total_prompts
+    
     def generate_orchestrated_prompts(self,
                                      model_family: str,
                                      target_layers: Optional[List[int]] = None,
-                                     total_prompts: int = 100,
-                                     strategy: Optional[PromptStrategy] = None) -> Dict[str, Any]:
+                                     total_prompts: int = None,
+                                     strategy: Optional[PromptStrategy] = None,
+                                     layer_count: int = None) -> Dict[str, Any]:
         """
         Generate a comprehensive set of prompts using all systems.
         
         Args:
             model_family: The identified model family (llama, gpt, etc.)
             target_layers: Specific layers to target (from reference library)
-            total_prompts: Total number of prompts to generate
+            total_prompts: Total number of prompts to generate (if None, determined dynamically)
             strategy: Custom strategy or use defaults
+            layer_count: Number of layers in the model (for dynamic discovery)
             
         Returns:
             Dictionary containing prompts organized by type and metadata
         """
+        # Dynamically determine restriction sites and prompt count if not specified
+        if total_prompts is None:
+            discovered_sites, dynamic_prompt_count = self.discover_restriction_sites(model_family, layer_count)
+            if target_layers is None:
+                target_layers = discovered_sites
+            total_prompts = dynamic_prompt_count
+            logger.info(f"Dynamically determined {total_prompts} prompts for {len(target_layers)} restriction sites")
+        
         if strategy is None:
             strategy = self._determine_strategy(model_family, target_layers)
         
@@ -207,10 +304,13 @@ class UnifiedPromptOrchestrator:
             "model_family": model_family,
             "target_layers": target_layers or [],
             "total_prompts": total_prompts,
+            "restriction_sites": target_layers or [],  # Store discovered sites
+            "prompts_per_site": total_prompts // len(target_layers) if target_layers else 0,
             "prompts_by_type": {},
             "metadata": {
                 "generation_time": time.time(),
-                "strategy": strategy.__dict__
+                "strategy": strategy.__dict__,
+                "dynamic_discovery": total_prompts is not None  # Track if dynamically determined
             }
         }
         

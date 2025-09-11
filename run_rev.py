@@ -2031,12 +2031,13 @@ Examples:
         help="Memory limit in GB for local loading (default: 36)"
     )
     
-    # Challenge configuration
+    # Challenge configuration (DEPRECATED - kept for backward compatibility)
+    # The orchestrator now automatically determines the number of prompts
     parser.add_argument(
         "--challenges",
         type=int,
-        default=5,
-        help="Number of PoT challenges to generate (default: 5)"
+        default=None,
+        help=argparse.SUPPRESS  # Hidden - orchestrator handles this automatically
     )
     parser.add_argument(
         "--challenge-focus",
@@ -2503,7 +2504,25 @@ Examples:
         print(f"Device: {args.device}")
         print(f"Quantization: {args.quantize}")
         print(f"Memory Limit: {args.memory_limit}GB")
-    print(f"Challenges: {args.challenges} ({args.challenge_focus} focus)")
+    # Determine number of challenges based on use case
+    if args.challenges is None:
+        if args.build_reference:
+            # Building reference: need hundreds of prompts for fingerprinting
+            challenges = 400  # Default for reference building
+        elif args.enable_prompt_orchestration:
+            # Using orchestration: more prompts for better coverage
+            challenges = 100  # Default for orchestrated runs
+        else:
+            # Basic run: minimal prompts
+            challenges = 10  # Default for basic runs
+    else:
+        # User specified a value (backward compatibility)
+        challenges = args.challenges
+    
+    if args.build_reference:
+        print(f"Reference Build Mode: {challenges} prompts for fingerprinting")
+    else:
+        print(f"Challenges: {challenges} ({args.challenge_focus} focus)")
     print(f"Debug: {args.debug}")
     if args.cassettes:
         print(f"Cassettes: Enabled (Types: {args.cassette_types or 'all'})")
@@ -2740,10 +2759,23 @@ Examples:
         if args.enable_prompt_orchestration:
             from src.orchestration.prompt_orchestrator import PromptOrchestrator
             orchestrator = PromptOrchestrator()
-            prompts = orchestrator.generate_prompts(n=args.challenges)
+            # Determine number of prompts
+            if args.challenges is None:
+                if args.build_reference:
+                    n_prompts = 400  # Reference builds need hundreds
+                else:
+                    n_prompts = 100  # Normal orchestrated runs
+            else:
+                n_prompts = args.challenges
+            prompts = orchestrator.generate_prompts(n=n_prompts)
         else:
             # Use default prompts
-            prompts = [f"Test prompt {i}" for i in range(args.challenges)]
+            # Default prompts when orchestration is disabled
+            if args.challenges is None:
+                n_prompts = 10  # Basic default
+            else:
+                n_prompts = args.challenges
+            prompts = [f"Test prompt {i}" for i in range(n_prompts)]
         
         print(f"\nProcessing {len(args.models)} models with {len(prompts)} prompts each")
         print(f"Mode: {args.parallel_mode}")
@@ -2863,7 +2895,7 @@ Examples:
                     use_local=args.local,
                     device=args.device,
                     quantize=args.quantize,
-                    challenges=args.challenges,
+                    challenges=challenges if 'challenges' in locals() else (args.challenges or 10),
                     max_new_tokens=args.max_tokens,
                     challenge_focus=args.challenge_focus,
                     provider=args.provider,

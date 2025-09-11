@@ -9,10 +9,12 @@
 ### Two Execution Modes
 
 1. **LOCAL FILESYSTEM MODELS** (on disk)
-   - Segmented streaming (one layer at a time)
+   - **Segmented STREAMING** - models are NEVER loaded fully into memory
+   - Streams one layer at a time from disk at "restriction sites" (behavioral boundaries)
    - 2GB memory cap per process (default)
    - **NEW: Parallel processing up to 36GB total memory**
    - NO API keys needed
+   - Enables running 68GB+ models on 64GB systems
 
 2. **CLOUD API MODELS**
    - External API calls
@@ -37,10 +39,13 @@ python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct
 python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b  # 68GB model on 64GB system WORKS!
 
 # Multi-model comparison
-python run_rev.py /path/to/model1 /path/to/model2 --challenges 10
+python run_rev.py /path/to/model1 /path/to/model2
 
-# With prompt orchestration (7 systems)
-python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 20
+# With prompt orchestration (7 systems) - DYNAMICALLY generates prompts based on model architecture
+python run_rev.py /path/to/model --enable-prompt-orchestration
+# Small models (6 layers): ~420 prompts automatically
+# Medium models (12 layers): ~480 prompts automatically  
+# Large models (32+ layers): ~585+ prompts automatically
 ```
 
 ### Finding Model Paths
@@ -70,26 +75,52 @@ python run_rev.py /Users/.../models--EleutherAI--pythia-70m  # Need snapshot
 python run_rev.py /Users/.../pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42
 ```
 
+## 🧬 KEY CONCEPTS
+
+### Restriction Sites & Fingerprinting
+
+**Restriction Sites**: Behavioral boundaries in model layers where significant changes occur (similar to restriction enzyme cut sites in DNA). The system identifies these automatically.
+
+**How It Works**:
+1. **Dynamic Site Discovery**: Automatically identifies restriction sites based on model layer count
+   - Small models (≤6 layers): Every layer is a potential site
+   - Medium models (7-12 layers): Every 2nd layer + boundaries
+   - Large models (13-24 layers): Key behavioral boundaries (25%, 50%, 75%)
+   - Very large models (>24 layers): Strategic sampling at critical points
+2. **Adaptive Prompt Generation**: Generates prompts dynamically: sites × prompts_per_site
+   - More prompts per site for small models (70 per site)
+   - Fewer prompts per site for large models (45 per site)
+3. **Fingerprinting**: At each restriction site, injects targeted prompts to build unique behavioral signature
+4. **Active Library**: When testing larger models, uses reference to know WHERE to probe intensively
+
+**Why This Matters**:
+- **Dynamic, Not Fixed**: System discovers sites and generates appropriate prompts (not hardcoded 400)
+- Without reference: Must probe ALL layers exhaustively (slow)
+- With reference: Knows exactly where restriction sites are (15-20x faster)
+- Cross-architecture: References work across different model sizes in same architecture
+- Cross-dimension: Even works when models have different dimensions (768D → 1024D)
+
 ## 📚 KEY WORKFLOWS
 
-### Building Reference Library (One-Time Setup per Family)
+### Building Reference Library (One-Time Setup per Architecture)
 
 **CRITICAL**: Use `--build-reference --enable-prompt-orchestration` together!
 
 ```bash
-# Build deep behavioral reference for model family
-# ALWAYS use smallest model in family
-# Ignores --challenges flag (uses 400+ probes automatically)
+# Build deep behavioral reference for model architecture
+# ALWAYS use smallest model in architecture family
+# Automatically generates 400+ probes at restriction sites
+# Reference works across ALL models sharing architecture (even different sizes!)
 
-# Pythia family (70M parameters - smallest)
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 \
+# Pythia/GPT-NeoX architecture (70M parameters - smallest)
+python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx \
     --build-reference --enable-prompt-orchestration
 
-# GPT family (DistilGPT2 - smallest)  
+# GPT-2 architecture (DistilGPT2 - smallest, works for GPT2-medium, GPT2-large, etc)  
 python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 \
     --build-reference --enable-prompt-orchestration
     
-# Llama family (7B - smallest available)
+# Llama architecture (7B - smallest available, works for 13B, 70B, 405B)
 python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf \
     --build-reference --enable-prompt-orchestration
 ```
@@ -97,33 +128,37 @@ python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf \
 ### Using References for Large Models (15-20x Faster)
 
 ```bash
-# After reference exists, large models run much faster
+# After reference exists, large models run MUCH faster
+# Reference provides educated assumptions about restriction sites
+# Works even across different model dimensions (768D → 1024D)
 
 # Pythia-12B (uses pythia-70m reference)
-python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b --challenges 50
+python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b
 
 # Llama-70B (uses llama-7b reference)  
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct --challenges 100
+python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct
 
-# Yi-34B (auto-detects family reference)
-python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b --challenges 100
+# GPT2-medium (can use distilgpt2 reference despite dimension difference)
+python run_rev.py /Users/rohanvinaik/LLM_models/gpt2-medium
+
+# Yi-34B (auto-detects architecture reference)
+python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b
 ```
 
 ### Advanced Options
 
 ```bash
-# Full orchestration with all 7 prompt systems
+# Full orchestration with all 7 prompt systems (auto-generates hundreds of prompts)
 python run_rev.py /path/to/model \
     --enable-prompt-orchestration \
     --enable-pot --enable-kdf --enable-evolutionary \
     --enable-dynamic --enable-hierarchical \
-    --challenges 100 --debug
+    --debug
 
 # Adversarial testing
 python run_rev.py /path/to/model \
     --adversarial --adversarial-ratio 0.5 \
-    --adversarial-types jailbreak alignment_faking \
-    --challenges 50
+    --adversarial-types jailbreak alignment_faking
 
 # Multi-stage orchestration with time budget
 python run_rev.py /path/to/model \
@@ -143,14 +178,12 @@ python run_rev.py /path/to/model \
 ```bash
 # Process multiple models in parallel
 python run_rev.py model1/ model2/ model3/ \
-    --parallel --parallel-memory-limit 36.0 \
-    --challenges 50
+    --parallel --parallel-memory-limit 36.0
 
 # Process many prompts on single model (batch processing)
 python run_rev.py /path/to/model \
     --parallel --parallel-batch-size 10 \
-    --parallel-memory-limit 36.0 \
-    --challenges 100
+    --parallel-memory-limit 36.0
 
 # Parallel reference building with orchestration
 python run_rev.py /path/to/model \

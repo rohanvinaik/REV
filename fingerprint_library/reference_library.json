@@ -1,527 +1,124 @@
 {
-  "fingerprints": {
-    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_reference": {
-      "behavioral_patterns": {
-        "hv_entropy": 13.216024370343694,
-        "hv_sparsity": 0.01,
-        "response_diversity": 0.8103448275862069,
-        "avg_response_length": 19.333333333333332,
-        "principled_features": {}
+  "timestamp": "2025-09-02T21:22:09.418899",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "distilgpt2"
+  ],
+  "total_models": 1,
+  "results": {
+    "distilgpt2": {
+      "model": "/Users/rohanvinaik/LLM_models/distilgpt2",
+      "model_name": "distilgpt2",
+      "mode": "api",
+      "timestamp": "2025-09-02T21:22:09.325030",
+      "identification": {
+        "family": "gpt",
+        "confidence": 0.95,
+        "method": "name_match",
+        "reference_model": "gpt2"
       },
-      "model_family": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
-      "model_size": "unknown",
-      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
-      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
-      "hypervectors_generated": 3,
-      "challenges_processed": 3,
-      "processing_time": 0.02901601791381836,
-      "validation_score": 1.0,
-      "source": "pipeline_generated",
-      "is_reference": true,
-      "timestamp": "2025-09-04T19:25:21.466417"
-    },
-    "distilgpt2_reference": {
-      "behavioral_patterns": {
-        "hv_entropy": 13.31297476975365,
-        "hv_sparsity": 0.01,
-        "response_diversity": 0.8070175438596491,
-        "avg_response_length": 19.0,
-        "principled_features": {}
-      },
-      "model_family": "distilgpt2",
-      "model_size": "unknown",
-      "architecture_version": "distilgpt2",
-      "reference_model": "distilgpt2",
-      "hypervectors_generated": 3,
-      "challenges_processed": 3,
-      "processing_time": 0.02814316749572754,
-      "validation_score": 1.0,
-      "source": "pipeline_generated",
-      "is_reference": true,
-      "timestamp": "2025-09-04T19:26:01.642409"
-    },
-    "50f5173d932e8e61f858120bcb800b97af589f46_reference": {
-      "behavioral_patterns": {
-        "hv_entropy": 12.957136860315995,
-        "hv_sparsity": 0.01,
-        "response_diversity": 0.5211864406779662,
-        "avg_response_length": 16.857142857142858,
-        "principled_features": {
-          "syntactic": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "semantic": [
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "behavioral": [
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.5,
-            1.0,
-            1.0,
-            0.0
-          ],
-          "architectural": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "feature_importance": [
-            [
-              "refusal_score",
-              0.9
-            ],
-            [
-              "consistency_mean",
-              0.9
-            ],
-            [
-              "vanishing_gradient",
-              0.9
-            ],
-            [
-              "exploding_gradient",
-              0.9
-            ],
-            [
-              "type_token_ratio",
-              0.8
-            ],
-            [
-              "avg_cosine_similarity",
-              0.8
-            ],
-            [
-              "avg_attention_entropy",
-              0.8
-            ],
-            [
-              "response_entropy",
-              0.8
-            ],
-            [
-              "mean_sparsity",
-              0.8
-            ],
-            [
-              "mean_grad_norm",
-              0.8
-            ]
-          ],
-          "learned_features": null
-        }
-      },
-      "model_family": "50f5173d932e8e61f858120bcb800b97af589f46",
-      "model_size": "unknown",
-      "architecture_version": "50f5173d932e8e61f858120bcb800b97af589f46",
-      "reference_model": "50f5173d932e8e61f858120bcb800b97af589f46",
-      "hypervectors_generated": 14,
-      "challenges_processed": 14,
-      "processing_time": 0.1651289463043213,
-      "validation_score": 1.0,
-      "source": "pipeline_generated",
-      "is_reference": true,
-      "timestamp": "2025-09-09T11:05:47.498046"
-    },
-    "gpt-neo-125m_reference": {
-      "behavioral_patterns": {
-        "hv_entropy": 13.190017797835363,
-        "hv_sparsity": 0.01,
-        "response_diversity": 0.18787878787878787,
-        "avg_response_length": 19.27007299270073,
-        "principled_features": {
-          "syntactic": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "semantic": [
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "behavioral": [
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.5,
-            1.0,
-            1.0,
-            0.0
-          ],
-          "architectural": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "feature_importance": [
-            [
-              "refusal_score",
-              0.9
-            ],
-            [
-              "consistency_mean",
-              0.9
-            ],
-            [
-              "vanishing_gradient",
-              0.9
-            ],
-            [
-              "exploding_gradient",
-              0.9
-            ],
-            [
-              "type_token_ratio",
-              0.8
-            ],
-            [
-              "avg_cosine_similarity",
-              0.8
-            ],
-            [
-              "avg_attention_entropy",
-              0.8
-            ],
-            [
-              "response_entropy",
-              0.8
-            ],
-            [
-              "mean_sparsity",
-              0.8
-            ],
-            [
-              "mean_grad_norm",
-              0.8
-            ]
-          ],
-          "learned_features": null
-        }
-      },
-      "model_family": "gpt-neo-125m",
-      "model_size": "unknown",
-      "architecture_version": "gpt-neo-125m",
-      "reference_model": "gpt-neo-125m",
-      "hypervectors_generated": 137,
-      "challenges_processed": 137,
-      "processing_time": 2.8820080757141113,
-      "validation_score": 1.0,
-      "source": "pipeline_generated",
-      "restriction_sites": [
-        {
-          "layer": 1,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 2,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 3,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 4,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 5,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 6,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 7,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        },
-        {
-          "layer": 8,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0458,
-          "after": 0.0458
-        }
-      ],
-      "stable_regions": [],
-      "behavioral_topology": {
-        "model": "gpt-neo-125m",
-        "timestamp": "2025-09-09T12:26:36.503047",
-        "total_layers": 12,
-        "restriction_sites": [
-          {
-            "layer": 1,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 2,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 3,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 4,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 5,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 6,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 7,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          },
-          {
-            "layer": 8,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0458,
-            "after": 0.0458
-          }
+      "strategy": {
+        "strategy": "targeted",
+        "reference_model": "gpt2",
+        "focus_layers": [
+          3,
+          6,
+          9
         ],
-        "stable_regions": [],
-        "phase_boundaries": [],
-        "behavioral_phases": [
-          {
-            "phase": "embedding",
-            "layers": [
-              0
-            ],
-            "avg_divergence": 0.0458,
-            "description": "Input embedding and tokenization"
-          },
-          {
-            "phase": "early_processing",
-            "layers": [
-              1,
-              2,
-              3,
-              4,
-              5
-            ],
-            "avg_divergence": 0.0458,
-            "description": "Rapid feature extraction and initial processing"
-          }
-        ],
-        "layer_profiles": {
-          "0": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "1": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "2": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "3": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "4": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "5": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "6": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "7": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          },
-          "8": {
-            "mean": 0.04583333333333334,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09583333333333334,
-            "samples": 8
-          }
-        },
-        "optimization_hints": {
-          "critical_layers": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
-          "parallel_safe_layers": [
-            9,
-            10,
-            11
-          ],
-          "memory_per_layer_gb": 0.5,
-          "parallel_speedup_potential": "4x",
-          "skip_stable_region": []
-        },
-        "precision_targeting": {
-          "large_model_strategy": "target_restriction_sites_only",
-          "expected_speedup": "15-20x",
-          "accuracy_retention": "95%+"
-        }
-      },
-      "optimization_hints": {
-        "critical_layers": [
+        "skip_layers": [
           0,
           1,
-          2,
-          3,
-          4
-        ],
-        "parallel_safe_layers": [
-          9,
-          10,
           11
         ],
-        "memory_per_layer_gb": 0.5,
-        "parallel_speedup_potential": "4x",
-        "skip_stable_region": []
+        "cassettes": [
+          "syntactic",
+          "semantic",
+          "arithmetic"
+        ],
+        "expected_patterns": {
+          "hv_entropy": 10.97816317157394,
+          "hv_sparsity": 0.01,
+          "response_diversity": 0.56353591160221,
+          "avg_response_length": 36.2
+        },
+        "challenges": 10,
+        "notes": "Using reference from gpt2"
       },
-      "enables_precision_targeting": true,
-      "deep_analysis_time_hours": 0.4167072339190377,
-      "is_reference": true,
-      "timestamp": "2025-09-09T12:26:40.127727"
-    },
-    "falcon-7b_reference": {
+      "stages": {
+        "initialization": {
+          "success": true,
+          "time": 0.001255035400390625,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenges": {
+          "count": 10,
+          "time": 0.0005390644073486328,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": true,
+          "hypervectors_generated": 10,
+          "responses_generated": 10,
+          "unified_fingerprints_generated": 0,
+          "time": 0.09120488166809082,
+          "sparsity": 0.01,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {
+            "avg_response_length": 39.7,
+            "unique_tokens": 122,
+            "response_diversity": 0.30730478589420657,
+            "hv_entropy": 14.217908680623879,
+            "hv_active_dims": 100,
+            "hv_sparsity": 0.01
+          },
+          "time": 0.00017499923706054688
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": true,
+              "count": 10
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 10
+            },
+            "behavioral_analysis": {
+              "validated": true,
+              "metrics_count": 6
+            }
+          },
+          "time": 3.814697265625e-06
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 0.09317779541015625
+  },
+  "fingerprints": {
+    "gpt2-medium_reference": {
       "behavioral_patterns": {
-        "hv_entropy": 13.241287909091945,
+        "hv_entropy": 13.10392804716512,
         "hv_sparsity": 0.01,
-        "response_diversity": 0.18900602409638553,
-        "avg_response_length": 19.386861313868614,
+        "response_diversity": 0.626984126984127,
+        "avg_response_length": 18.0,
         "principled_features": {
           "syntactic": [
             0.0,
@@ -616,315 +213,22 @@
           "learned_features": null
         }
       },
-      "model_family": "falcon-7b",
+      "model_family": "gpt2-medium",
       "model_size": "unknown",
-      "architecture_version": "falcon-7b",
-      "reference_model": "falcon-7b",
-      "hypervectors_generated": 137,
-      "challenges_processed": 137,
-      "processing_time": 177.83149790763855,
+      "architecture_version": "gpt2-medium",
+      "reference_model": "gpt2-medium",
+      "hypervectors_generated": 7,
+      "challenges_processed": 7,
+      "processing_time": 0.7285599708557129,
       "validation_score": 1.0,
       "source": "pipeline_generated",
-      "restriction_sites": [
-        {
-          "layer": 1,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 2,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 3,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 4,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 5,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 6,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 7,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        },
-        {
-          "layer": 8,
-          "divergence_delta": 0.0,
-          "percent_change": 0.0,
-          "before": 0.0484,
-          "after": 0.0484
-        }
-      ],
-      "stable_regions": [],
-      "behavioral_topology": {
-        "model": "falcon-7b",
-        "timestamp": "2025-09-09T13:45:44.438641",
-        "total_layers": 32,
-        "restriction_sites": [
-          {
-            "layer": 1,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 2,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 3,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 4,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 5,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 6,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 7,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          },
-          {
-            "layer": 8,
-            "divergence_delta": 0.0,
-            "percent_change": 0.0,
-            "before": 0.0484,
-            "after": 0.0484
-          }
-        ],
-        "stable_regions": [],
-        "phase_boundaries": [],
-        "behavioral_phases": [
-          {
-            "phase": "embedding",
-            "layers": [
-              0
-            ],
-            "avg_divergence": 0.0484,
-            "description": "Input embedding and tokenization"
-          },
-          {
-            "phase": "early_processing",
-            "layers": [
-              1,
-              2,
-              3,
-              4,
-              5
-            ],
-            "avg_divergence": 0.0484,
-            "description": "Rapid feature extraction and initial processing"
-          }
-        ],
-        "layer_profiles": {
-          "0": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "1": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "2": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "3": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "4": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "5": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "6": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "7": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          },
-          "8": {
-            "mean": 0.0484375,
-            "std": 0.012,
-            "min": 0.0,
-            "max": 0.09843750000000001,
-            "samples": 8
-          }
-        },
-        "optimization_hints": {
-          "critical_layers": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
-          "parallel_safe_layers": [
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            25,
-            26,
-            27,
-            28,
-            29,
-            30,
-            31
-          ],
-          "memory_per_layer_gb": 0.5,
-          "parallel_speedup_potential": "4x",
-          "skip_stable_region": []
-        },
-        "precision_targeting": {
-          "large_model_strategy": "target_restriction_sites_only",
-          "expected_speedup": "15-20x",
-          "accuracy_retention": "95%+"
-        }
-      },
-      "optimization_hints": {
-        "critical_layers": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "parallel_safe_layers": [
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16,
-          17,
-          18,
-          19,
-          20,
-          21,
-          22,
-          23,
-          24,
-          25,
-          26,
-          27,
-          28,
-          29,
-          30,
-          31
-        ],
-        "memory_per_layer_gb": 0.5,
-        "parallel_speedup_potential": "4x",
-        "skip_stable_region": []
-      },
-      "enables_precision_targeting": true,
-      "deep_analysis_time_hours": 1.7354878191815482,
       "is_reference": true,
-      "timestamp": "2025-09-09T13:48:42.941257"
+      "timestamp": "2025-09-10T23:36:27.398078"
     }
   },
   "metadata": {
     "version": "2.0",
-    "created": "2025-09-04T15:41:00.000000",
-    "last_updated": "2025-09-09T13:48:42.941266",
-    "notes": "Reference library contains ONLY the smallest model from each family for behavioral baseline. All other models should be in active_library.json"
+    "created": "2025-09-10T23:36:27.395907",
+    "last_updated": "2025-09-10T23:36:27.398081"
   }
 }
