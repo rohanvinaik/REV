@@ -601,8 +601,121 @@ class REVUnified:
         model_name = Path(model_path).name if Path(model_path).exists() else model_path
         
         # Use dual library system for intelligent testing
-        from src.fingerprint.dual_library_system import identify_and_strategize
+        from src.fingerprint.dual_library_system import identify_and_strategize, create_dual_library
         identification, strategy = identify_and_strategize(model_path)
+        
+        # NEW: Light probe phase for family identification (enables 15-20x speedup)
+        if identification.method == "needs_light_probe" and os.path.exists(model_path):
+            print(f"\n🔍 [LIGHT PROBE] Quick behavioral scan for reference matching...")
+            self.logger.info("[LIGHT-PROBE] Starting quick topology scan")
+            
+            try:
+                # Do a LIGHT probe (5 samples) to identify family
+                from src.models.true_segment_execution import LayerSegmentExecutor, SegmentExecutionConfig
+                
+                light_config = SegmentExecutionConfig(
+                    model_path=model_path,
+                    max_memory_gb=2.0,
+                    use_half_precision=True,
+                    extract_activations=True
+                )
+                
+                light_executor = LayerSegmentExecutor(light_config)
+                layer_count = light_executor.n_layers
+                
+                # LIGHT PROBE: Sample ALL layers (or every 2nd for large models)
+                # This builds a quick topological map for reference matching
+                if layer_count <= 12:
+                    # Small models: probe every layer
+                    sample_layers = list(range(layer_count))
+                elif layer_count <= 24:
+                    # Medium models: probe every 2nd layer
+                    sample_layers = list(range(0, layer_count, 2))
+                else:
+                    # Large models: probe every 3rd layer
+                    sample_layers = list(range(0, layer_count, 3))
+                
+                print(f"   Light probe: Testing {len(sample_layers)} layers across {layer_count} total layers")
+                print(f"   Layers to probe: {sample_layers}")
+                
+                # Quick behavioral probes - 1-2 prompts per layer
+                variance_profile = []
+                divergence_scores = []
+                
+                # Use 2 different prompts for better topology mapping
+                test_prompts = [
+                    "Complete this sentence: The weather today is",
+                    "The capital of France is"
+                ]
+                
+                print(f"   Executing behavioral probes...")
+                for i, layer_idx in enumerate(sample_layers):
+                    layer_variances = []
+                    
+                    # Test with both prompts at this layer
+                    for prompt in test_prompts:
+                        response = light_executor.execute_behavioral_probe(prompt, up_to_layer=layer_idx)
+                        
+                        if response and hasattr(response, 'hidden_states'):
+                            variance = response.hidden_states.var().item()
+                            layer_variances.append(variance)
+                    
+                    # Average variance for this layer
+                    if layer_variances:
+                        avg_variance = sum(layer_variances) / len(layer_variances)
+                        variance_profile.append(avg_variance)
+                        
+                        # Calculate divergence from previous layer
+                        if i > 0:
+                            divergence = abs(avg_variance - variance_profile[i-1]) / (variance_profile[i-1] + 1e-8)
+                            divergence_scores.append((layer_idx, divergence))
+                        
+                        print(f"   Layer {layer_idx:2d}: variance={avg_variance:.3f}")
+                    else:
+                        variance_profile.append(0.0)
+                
+                # Identify potential restriction sites from divergence scores
+                if divergence_scores:
+                    # Sort by divergence to find highest behavioral changes
+                    divergence_scores.sort(key=lambda x: x[1], reverse=True)
+                    # Top divergence points are likely restriction sites
+                    restriction_sites = [layer for layer, score in divergence_scores[:5] if score > 0.1]
+                    print(f"   Identified {len(restriction_sites)} potential restriction sites: {restriction_sites}")
+                else:
+                    restriction_sites = sample_layers[:5]
+                
+                print(f"   Variance profile collected: {variance_profile[:10]}..." if len(variance_profile) > 10 else f"   Variance profile: {variance_profile}")
+                
+                # Match against reference library
+                library = create_dual_library()
+                light_fingerprint = {
+                    'variance_profile': variance_profile,
+                    'restriction_sites': restriction_sites,
+                    'layer_count': layer_count,
+                    'layer_divergences': dict(divergence_scores) if divergence_scores else {}
+                }
+                
+                print(f"   Matching against reference library...")
+                
+                # Get identification from light probe
+                identification = library.identify_from_behavioral_analysis(light_fingerprint)
+                strategy = library.get_testing_strategy(identification)
+                
+                print(f"\n   ✅ Family identified: {identification.identified_family} ({identification.confidence:.0%} confidence)")
+                print(f"   Method: {identification.method}")
+                print(f"   Notes: {identification.notes}")
+                
+                if identification.confidence > 0.7 and identification.identified_family:
+                    print(f"   📚 Using reference: {identification.reference_model}")
+                    print(f"   🚀 Expected speedup: 15-20x")
+                else:
+                    print(f"   ⚠️ No strong match found, falling back to deep analysis")
+                
+            except Exception as e:
+                import traceback
+                self.logger.warning(f"[LIGHT-PROBE] Failed: {e}, falling back to deep analysis")
+                print(f"   ⚠️ Light probe failed: {e}")
+                print(f"   Traceback: {traceback.format_exc()}")
         
         # CRITICAL: Determine if deep behavioral analysis is needed
         # Deep analysis is THE STANDARD for reference library building
@@ -1530,17 +1643,25 @@ class REVUnified:
                         fingerprint_data["enables_precision_targeting"] = True
                         fingerprint_data["deep_analysis_time_hours"] = deep_analysis["time"] / 3600
                         
-                        library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
-                        sites_count = deep_analysis["restriction_sites_found"]
-                        print(f"📚 Added {model_name} as DEEP REFERENCE fingerprint")
-                        print(f"   🎯 {sites_count} restriction sites identified")
-                        print(f"   ⚡ Enables precision targeting for {identification.identified_family or 'new'} family")
-                        print(f"   🚀 Large models can now use this reference for 15-20x speedup")
+                        try:
+                            library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
+                            sites_count = deep_analysis["restriction_sites_found"]
+                            print(f"📚 Added {model_name} as DEEP REFERENCE fingerprint")
+                            print(f"   🎯 {sites_count} restriction sites identified")
+                            print(f"   ⚡ Enables precision targeting for {identification.identified_family or 'new'} family")
+                            print(f"   🚀 Large models can now use this reference for 15-20x speedup")
+                        except ValueError as ve:
+                            print(f"❌ VALIDATION FAILED: {ve}")
+                            print(f"   Reference not added. Rebuild with --enable-prompt-orchestration")
                     else:
                         # Warning: shallow reference only (should rarely happen now)
-                        library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
-                        print(f"📚 Added {model_name} as reference fingerprint (shallow)")
-                        print(f"   ⚠️ Consider re-running with deep analysis for optimal results")
+                        try:
+                            library.add_reference_fingerprint(model_name.lower(), fingerprint_data)
+                            print(f"📚 Added {model_name} as reference fingerprint (shallow)")
+                            print(f"   ⚠️ Consider re-running with deep analysis for optimal results")
+                        except ValueError as ve:
+                            print(f"❌ VALIDATION FAILED: {ve}")
+                            print(f"   Reference not added. Rebuild with --enable-prompt-orchestration")
                 else:
                     print(f"📚 Added {model_name} to active library")
                     
@@ -2285,7 +2406,13 @@ Examples:
     parser.add_argument(
         "--enable-prompt-orchestration",
         action="store_true",
-        help="Enable unified prompt orchestration using ALL generation systems"
+        default=True,  # CRITICAL: Default to True for proper pipeline operation
+        help="Enable unified prompt orchestration using ALL generation systems (REQUIRED for proper operation)"
+    )
+    parser.add_argument(
+        "--disable-orchestration",
+        action="store_true",
+        help="Disable prompt orchestration (FOR DEBUGGING ONLY - pipeline will be non-functional)"
     )
     parser.add_argument(
         "--enable-pot",
@@ -2504,6 +2631,13 @@ Examples:
         print(f"Device: {args.device}")
         print(f"Quantization: {args.quantize}")
         print(f"Memory Limit: {args.memory_limit}GB")
+    
+    # Handle orchestration disable flag
+    if args.disable_orchestration:
+        args.enable_prompt_orchestration = False
+        print("⚠️  WARNING: Orchestration DISABLED - Pipeline will be non-functional!")
+        print("⚠️  This should only be used for debugging purposes.")
+    
     # Determine number of challenges based on use case
     if args.challenges is None:
         if args.build_reference:

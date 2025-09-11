@@ -99,46 +99,39 @@ class DualLibrarySystem:
     
     def identify_model(self, model_path: str) -> ModelIdentification:
         """
-        Identify a model using the dual library system.
+        Identify a model through LIGHT behavioral analysis.
         
-        SECURITY: Name-based identification is DISABLED for security.
-        All models must undergo behavioral verification.
+        This does a QUICK probe (not deep analysis) to identify the model family
+        so we can use reference libraries for 15-20x speedup.
+        
+        Process:
+        1. Quick probe (1 prompt per layer sample)
+        2. Build light topological signature
+        3. Match against reference library
+        4. Return family identification for targeted testing
         """
         model_name = Path(model_path).name.lower()
         
-        # SECURITY FIX: Disable path-based identification
-        # Path names can be easily spoofed and provide no security guarantee.
-        # All models MUST undergo behavioral analysis for proper verification.
+        # SECURITY: We do behavioral verification, but LIGHTWEIGHT
+        # This is just for family identification, not full fingerprinting
+        logger.info(f"Starting LIGHT behavioral probe for {model_name}")
+        logger.info("Quick topology scan for reference matching...")
         
-        # Store potential family for reference, but DO NOT use for identification
-        potential_family = None
-        potential_pattern = None
-        for family, patterns in self.FAMILY_PATTERNS.items():
-            for pattern in patterns:
-                if pattern in model_name:
-                    potential_family = family
-                    potential_pattern = pattern
-                    break
-            if potential_family:
-                break
-        
-        # Always return unknown to force behavioral analysis
-        notes = "Behavioral analysis required for secure identification"
-        if potential_family:
-            notes += f" (path suggests {potential_family} family, but verification needed)"
-        
+        # For now, mark as requiring light probe
+        # The actual light probe will be done by the pipeline
+        # Then it will call identify_from_behavioral_analysis with the results
         return ModelIdentification(
-            identified_family=None,  # Never identify from path
-            confidence=0.0,  # Zero confidence without behavioral analysis
-            method="pending_behavioral_analysis",
+            identified_family=None,
+            confidence=0.0,
+            method="needs_light_probe",  # Signal for light analysis
             reference_model=None,
-            notes=notes
+            notes="Light behavioral probe needed for family identification"
         )
     
     def identify_from_behavioral_analysis(self, fingerprint_data: Dict) -> ModelIdentification:
         """
         Identify a model based on behavioral analysis results.
-        This should be called AFTER deep behavioral analysis completes.
+        This is the REAL identification based on variance profiles and topology.
         
         Args:
             fingerprint_data: The behavioral fingerprint data from analysis
@@ -146,15 +139,102 @@ class DualLibrarySystem:
         Returns:
             ModelIdentification with actual confidence based on behavior
         """
-        # TODO: Implement actual behavioral matching against reference library
-        # For now, return unknown to maintain security
+        # Extract behavioral topology from fingerprint
+        restriction_sites = fingerprint_data.get("restriction_sites", [])
+        variance_profile = fingerprint_data.get("variance_profile", [])
+        layer_divergences = fingerprint_data.get("layer_divergences", {})
+        
+        if not restriction_sites and not variance_profile:
+            return ModelIdentification(
+                identified_family=None,
+                confidence=0.0,
+                method="behavioral_incomplete",
+                reference_model=None,
+                notes="Insufficient behavioral data for identification"
+            )
+        
+        # Compare topology against reference library
+        best_match = None
+        best_similarity = 0.0
+        
+        for fp_id, ref_data in self.reference_library.get("fingerprints", {}).items():
+            ref_sites = ref_data.get("restriction_sites", [])
+            ref_profile = ref_data.get("variance_profile", [])
+            
+            # Compute topological similarity
+            similarity = self._compute_topology_similarity(
+                restriction_sites, ref_sites,
+                variance_profile, ref_profile
+            )
+            
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match = ref_data.get("model_family")
+        
+        # Determine confidence from similarity score
+        if best_similarity > 0.85:
+            confidence = best_similarity
+            method = "behavioral_match"
+            notes = f"Strong behavioral match (similarity: {best_similarity:.2%})"
+        elif best_similarity > 0.60:
+            confidence = best_similarity
+            method = "behavioral_partial"
+            notes = f"Partial behavioral match (similarity: {best_similarity:.2%})"
+        else:
+            confidence = 0.0
+            method = "behavioral_unknown"
+            notes = f"No behavioral match found (max similarity: {best_similarity:.2%})"
+            best_match = None
+        
+        reference_model = None
+        if best_match:
+            reference_model = self.REFERENCE_MODELS.get(best_match)
+        
         return ModelIdentification(
-            identified_family=None,
-            confidence=0.0,
-            method="behavioral_analysis_complete",
-            reference_model=None,
-            notes="Behavioral analysis complete - family identification pending implementation"
+            identified_family=best_match,
+            confidence=confidence,
+            method=method,
+            reference_model=reference_model,
+            notes=notes
         )
+    
+    def _compute_topology_similarity(self, sites1, sites2, profile1, profile2):
+        """Compute similarity between two behavioral topologies."""
+        if not sites1 or not sites2:
+            return 0.0
+        
+        # Compare restriction site patterns
+        site_similarity = 0.0
+        if sites1 and sites2:
+            # Normalize site positions to [0,1] for comparison
+            max1 = max([s.get("layer", s) if isinstance(s, dict) else s for s in sites1])
+            max2 = max([s.get("layer", s) if isinstance(s, dict) else s for s in sites2])
+            
+            norm1 = [(s.get("layer", s) if isinstance(s, dict) else s) / max1 for s in sites1]
+            norm2 = [(s.get("layer", s) if isinstance(s, dict) else s) / max2 for s in sites2]
+            
+            # Find closest matches
+            matches = 0
+            for n1 in norm1:
+                closest = min([abs(n1 - n2) for n2 in norm2])
+                if closest < 0.1:  # Within 10% is a match
+                    matches += 1
+            
+            site_similarity = matches / max(len(norm1), len(norm2))
+        
+        # Compare variance profiles if available
+        profile_similarity = 0.0
+        if profile1 and profile2:
+            # Simple correlation of variance patterns
+            min_len = min(len(profile1), len(profile2))
+            if min_len > 0:
+                corr = sum([p1 * p2 for p1, p2 in zip(profile1[:min_len], profile2[:min_len])])
+                norm = (sum([p**2 for p in profile1[:min_len]]) * sum([p**2 for p in profile2[:min_len]]))**0.5
+                if norm > 0:
+                    profile_similarity = corr / norm
+        
+        # Weight both factors
+        return 0.7 * site_similarity + 0.3 * profile_similarity
     
     def _has_reference_fingerprint(self, family: str) -> bool:
         """Check if we have a reference fingerprint for this family."""
@@ -191,16 +271,54 @@ class DualLibrarySystem:
         logger.info(f"Added fingerprint {fp_id} to active library")
     
     def add_reference_fingerprint(self, family: str, fingerprint_data: Dict):
-        """Add a reference fingerprint (should be rare - only for new families)."""
+        """
+        Add a reference fingerprint (should be rare - only for new families).
+        
+        VALIDATION: Ensures reference has adequate quality before adding.
+        """
+        # Check if reference already exists
         if self._has_reference_fingerprint(family):
             logger.warning(f"Reference fingerprint for {family} already exists")
             return
         
+        # VALIDATION: Ensure reference quality
+        MIN_CHALLENGES = 250  # Minimum required for a valid reference
+        challenges = fingerprint_data.get("challenges_processed", 0)
+        
+        if challenges < MIN_CHALLENGES:
+            logger.error(
+                f"REJECTED: Reference for {family} has only {challenges} challenges "
+                f"(minimum: {MIN_CHALLENGES}). Run with --enable-prompt-orchestration!"
+            )
+            raise ValueError(
+                f"Reference fingerprint rejected: insufficient challenges ({challenges} < {MIN_CHALLENGES}). "
+                f"Rebuild with: --build-reference --enable-prompt-orchestration"
+            )
+        
+        # Validate restriction sites exist
+        restriction_sites = fingerprint_data.get("restriction_sites", [])
+        if len(restriction_sites) < 3:
+            logger.warning(
+                f"Reference for {family} has only {len(restriction_sites)} restriction sites. "
+                f"Consider rebuilding with deeper analysis."
+            )
+        
+        # Validate behavioral metrics exist
+        if "behavioral_metrics" not in fingerprint_data:
+            logger.warning(f"Reference for {family} missing behavioral metrics")
+        
+        # Add reference with validation metadata
         fp_id = f"{family}_reference"
         self.reference_library["fingerprints"][fp_id] = {
             **fingerprint_data,
             "model_family": family,
             "is_reference": True,
+            "validation": {
+                "challenges": challenges,
+                "restriction_sites": len(restriction_sites),
+                "passed_validation": True,
+                "validation_timestamp": datetime.now().isoformat()
+            },
             "timestamp": datetime.now().isoformat()
         }
         
@@ -209,7 +327,10 @@ class DualLibrarySystem:
         
         # Save
         self._save_library(self.reference_library, self.reference_path)
-        logger.info(f"Added reference fingerprint for {family}")
+        logger.info(
+            f"✅ Added VALIDATED reference for {family}: "
+            f"{challenges} challenges, {len(restriction_sites)} restriction sites"
+        )
     
     def _save_library(self, library: Dict, path: Path):
         """Save library to disk."""
@@ -224,34 +345,48 @@ class DualLibrarySystem:
         Returns:
             Dict with testing configuration
         """
-        if identification.method == "name_match":
-            # We know the family - use targeted testing
+        # If we have a behavioral match with good confidence, use reference
+        if identification.method == "behavioral_match" and identification.confidence > 0.7:
+            # We have a family identification - check for reference
             reference_fp = self.get_reference_fingerprint(identification.identified_family)
             if reference_fp:
+                # Extract restriction sites from reference
+                restriction_sites = reference_fp.get("restriction_sites", [])
+                focus_layers = []
+                if restriction_sites:
+                    # Use restriction sites as focus layers
+                    for site in restriction_sites:
+                        if isinstance(site, dict) and "layer" in site:
+                            focus_layers.append(site["layer"])
+                        elif isinstance(site, int):
+                            focus_layers.append(site)
+                
                 return {
                     "strategy": "targeted",
                     "reference_model": identification.reference_model,
-                    "focus_layers": reference_fp.get("vulnerable_layers", []),
+                    "focus_layers": focus_layers[:10],  # Top 10 restriction sites
+                    "restriction_sites": restriction_sites,
                     "skip_layers": reference_fp.get("stable_layers", []),
                     "cassettes": reference_fp.get("recommended_cassettes", ["syntactic", "semantic"]),
                     "expected_patterns": reference_fp.get("behavioral_patterns", {}),
-                    "challenges": 10,  # Standard amount
-                    "notes": f"Using reference from {identification.reference_model}"
+                    "challenges": reference_fp.get("challenges_processed", 10),  # Use same as reference
+                    "notes": f"Using reference from {identification.reference_model} with {len(focus_layers)} restriction sites"
                 }
             else:
+                # Family identified but no reference available
                 return {
                     "strategy": "standard",
                     "challenges": 15,
-                    "notes": "Family identified but no reference available"
+                    "notes": f"Family {identification.identified_family} identified but no reference available"
                 }
         
-        elif identification.method == "pending_behavioral_analysis":
-            # SECURITY: Always require behavioral analysis for identification
+        elif identification.method == "needs_light_probe":
+            # Do LIGHT probe first (not deep analysis)
             return {
-                "strategy": "diagnostic",
-                "challenges": 5,  # Will be overridden by deep analysis
-                "sample_layers": list(range(0, 100, 10)),  # Sample every 10th layer
-                "notes": "Behavioral analysis required for secure identification"
+                "strategy": "light_probe",
+                "challenges": 5,  # Just 5 quick probes
+                "sample_layers": "adaptive",  # Sample based on layer count
+                "notes": "Light probe for family identification (enables 15-20x speedup)"
             }
         
         elif identification.method == "unknown":
