@@ -279,6 +279,15 @@ python run_rev.py /path/to/model --build-reference  # ❌ NO CHALLENGES!
 - Dual library system (Reference + Active)
 - Multi-stage orchestrated testing
 
+### Important: Reference Library Architecture Independence
+The reference library provides educated ASSUMPTIONS about behavioral boundaries (restriction sites), NOT exact architectural matches. The system:
+1. Uses smaller model's topology as an initial guess for where restriction sites might be
+2. Validates these predictions with light prompt injection
+3. Only performs comprehensive prompt orchestration where needed
+4. This allows testing models with different dimensions (e.g., DistilGPT2 768D guiding GPT2-medium 1024D)
+
+The reference is a smart optimization to avoid exhaustive layer testing, not a requirement for perfect dimensional alignment.
+
 ## 📂 PROJECT STRUCTURE
 
 ```
