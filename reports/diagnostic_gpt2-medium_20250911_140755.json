@@ -1,0 +1,37 @@
+{
+  "summary": {
+    "timestamp": "2025-09-11T14:07:55.396621",
+    "session_duration_minutes": 0.10871521666666667,
+    "total_executions": 0,
+    "successful_executions": 0,
+    "failed_executions": 0,
+    "success_rate": 0,
+    "fallback_count": 0,
+    "using_behavioral_probing": false
+  },
+  "performance": {
+    "average_execution_time_ms": 0,
+    "median_execution_time_ms": 0,
+    "max_execution_time_ms": 0,
+    "min_execution_time_ms": 0
+  },
+  "divergence_analysis": {
+    "total_scores": 0,
+    "mean_divergence": 0,
+    "std_divergence": 0,
+    "min_divergence": 0,
+    "max_divergence": 0,
+    "divergence_distribution": {
+      "low_count": 0,
+      "medium_count": 0,
+      "high_count": 0
+    }
+  },
+  "layer_statistics": {},
+  "device_statistics": {},
+  "probe_type_statistics": {},
+  "fallback_events": [],
+  "recommendations": [
+    "No probe executions recorded - check if probes are being generated"
+  ]
+}

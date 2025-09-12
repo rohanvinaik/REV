@@ -840,6 +840,14 @@ class REVUnified:
                             )
                             
                             # Configure for deep behavioral analysis
+                            # Validate model_path before passing to SegmentExecutionConfig
+                            if not model_path:
+                                raise ValueError(f"model_path cannot be None or empty for deep behavioral analysis")
+                            
+                            if not (os.path.exists(model_path) or os.path.isdir(model_path)):
+                                self.logger.warning(f"model_path does not exist: {model_path}")
+                                # Still proceed - the path might be valid but checking differently
+                            
                             deep_config = SegmentExecutionConfig(
                                 model_path=model_path,
                                 max_memory_gb=self.memory_limit_gb if hasattr(self, 'memory_limit_gb') else 8.0,

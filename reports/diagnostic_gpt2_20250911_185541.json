@@ -1,0 +1,138 @@
+{
+  "summary": {
+    "timestamp": "2025-09-11T18:55:41.767415",
+    "session_duration_minutes": 18.746203649999998,
+    "total_executions": 3036,
+    "successful_executions": 3036,
+    "failed_executions": 0,
+    "success_rate": 1.0,
+    "fallback_count": 0,
+    "using_behavioral_probing": true
+  },
+  "performance": {
+    "average_execution_time_ms": 21.951396255852096,
+    "median_execution_time_ms": 21.133937989361584,
+    "max_execution_time_ms": 162.46920789126307,
+    "min_execution_time_ms": 6.1289999866858125
+  },
+  "divergence_analysis": {
+    "total_scores": 3036,
+    "mean_divergence": 0.289304521525267,
+    "std_divergence": 0.02599472871375689,
+    "min_divergence": 0.16497099027337175,
+    "max_divergence": 0.35431202946869234,
+    "divergence_distribution": {
+      "low_count": 2220,
+      "medium_count": 816,
+      "high_count": 0
+    }
+  },
+  "layer_statistics": {
+    "0": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 15.893141802569682,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "1": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 14.003293158526978,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "2": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 16.824210273827106,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "3": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 17.57463721582379,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "4": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 19.21529332571571,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "5": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 20.385633239783935,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "6": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 21.956585141970027,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "7": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 23.540482993915,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "8": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 25.961509559730533,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "9": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 27.34638126787873,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "10": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 28.762345362855896,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    },
+    "11": {
+      "executions": 253,
+      "success_rate": 1.0,
+      "average_time_ms": 31.953241727627784,
+      "average_divergence": 0.289304521525267,
+      "divergence_variance": 0.0006757259209018167
+    }
+  },
+  "device_statistics": {
+    "mps": 3036
+  },
+  "probe_type_statistics": {
+    "mathematical": {
+      "count": 540,
+      "average_divergence": 0.2876293785430162,
+      "divergence_std": 0.02082936147169797
+    },
+    "general": {
+      "count": 1680,
+      "average_divergence": 0.2853269766530654,
+      "divergence_std": 0.029327865729526875
+    },
+    "reasoning": {
+      "count": 816,
+      "average_divergence": 0.2986021350004068,
+      "divergence_std": 0.01831025023254821
+    }
+  },
+  "fallback_events": [],
+  "recommendations": []
+}

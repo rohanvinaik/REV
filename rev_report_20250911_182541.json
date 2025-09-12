@@ -1,0 +1,272 @@
+{
+  "timestamp": "2025-09-11T18:25:41.564939",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "pythia-160m"
+  ],
+  "total_models": 1,
+  "results": {
+    "pythia-160m": {
+      "model": "/Users/rohanvinaik/LLM_models/pythia-160m",
+      "model_name": "pythia-160m",
+      "mode": "api",
+      "timestamp": "2025-09-11T18:25:32.236802",
+      "identification": {
+        "family": "gpt",
+        "confidence": 0.95,
+        "method": "config_match",
+        "reference_model": "gpt2"
+      },
+      "strategy": {
+        "strategy": "targeted",
+        "reference_model": "gpt2",
+        "focus_layers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "restriction_sites": [
+          {
+            "layer": 1,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.0417,
+            "after": 0.0417
+          },
+          {
+            "layer": 2,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.0417,
+            "after": 0.0417
+          },
+          {
+            "layer": 3,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.0417,
+            "after": 0.0417
+          },
+          {
+            "layer": 4,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.0417,
+            "after": 0.0417
+          },
+          {
+            "layer": 5,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.0417,
+            "after": 0.0417
+          }
+        ],
+        "skip_layers": [],
+        "cassettes": [
+          "syntactic",
+          "semantic"
+        ],
+        "expected_patterns": {
+          "hv_entropy": 12.385895523868887,
+          "hv_sparsity": 0.01,
+          "response_diversity": 0.12759943468604887,
+          "avg_response_length": 19.123552123552123,
+          "principled_features": {
+            "syntactic": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "semantic": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "behavioral": [
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.5,
+              1.0,
+              1.0,
+              0.0
+            ],
+            "architectural": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "feature_importance": [
+              [
+                "refusal_score",
+                0.9
+              ],
+              [
+                "consistency_mean",
+                0.9
+              ],
+              [
+                "vanishing_gradient",
+                0.9
+              ],
+              [
+                "exploding_gradient",
+                0.9
+              ],
+              [
+                "type_token_ratio",
+                0.8
+              ],
+              [
+                "avg_cosine_similarity",
+                0.8
+              ],
+              [
+                "avg_attention_entropy",
+                0.8
+              ],
+              [
+                "response_entropy",
+                0.8
+              ],
+              [
+                "mean_sparsity",
+                0.8
+              ],
+              [
+                "mean_grad_norm",
+                0.8
+              ]
+            ],
+            "learned_features": null
+          }
+        },
+        "challenges": 259,
+        "notes": "Using reference from gpt2 with 5 restriction sites"
+      },
+      "stages": {
+        "initialization": {
+          "success": true,
+          "time": 0.001600027084350586,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenge_generation": {
+          "orchestrated": true,
+          "prompt_types": [
+            "pot",
+            "dynamic",
+            "hierarchical",
+            "evolutionary",
+            "kdf_adversarial"
+          ],
+          "target_layers": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "challenges": {
+          "count": 167,
+          "time": 2.4111671447753906,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": true,
+          "hypervectors_generated": 167,
+          "responses_generated": 167,
+          "unified_fingerprints_generated": 0,
+          "time": 6.906240940093994,
+          "sparsity": 0.01,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {
+            "avg_response_length": 19.35928143712575,
+            "unique_tokens": 572,
+            "response_diversity": 0.1769254562326013,
+            "hv_entropy": 12.643598444311015,
+            "hv_active_dims": 100,
+            "hv_sparsity": 0.01
+          },
+          "time": 0.0007529258728027344
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": true,
+              "count": 167
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 167
+            },
+            "behavioral_analysis": {
+              "validated": true,
+              "metrics_count": 6
+            }
+          },
+          "time": 3.814697265625e-06
+        }
+      },
+      "diagnostics": {
+        "report_saved": "reports/diagnostic_pythia-160m_20250911_182541.json",
+        "summary": {
+          "timestamp": "2025-09-11T18:25:41.556592",
+          "session_duration_minutes": 0.15734841666666669,
+          "total_executions": 0,
+          "successful_executions": 0,
+          "failed_executions": 0,
+          "success_rate": 0,
+          "fallback_count": 0,
+          "using_behavioral_probing": false
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 9.319764852523804
+  }
+}

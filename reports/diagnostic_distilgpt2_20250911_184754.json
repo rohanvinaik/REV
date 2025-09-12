@@ -1,0 +1,101 @@
+{
+  "summary": {
+    "timestamp": "2025-09-11T18:47:54.467318",
+    "session_duration_minutes": 9.509439566666666,
+    "total_executions": 1524,
+    "successful_executions": 1524,
+    "failed_executions": 0,
+    "success_rate": 1.0,
+    "fallback_count": 0,
+    "using_behavioral_probing": true
+  },
+  "performance": {
+    "average_execution_time_ms": 13.176922720237917,
+    "median_execution_time_ms": 11.634083522949368,
+    "max_execution_time_ms": 218.40958402026445,
+    "min_execution_time_ms": 6.36870798189193
+  },
+  "divergence_analysis": {
+    "total_scores": 1524,
+    "mean_divergence": 0.2868116738825616,
+    "std_divergence": 0.024601159012349348,
+    "min_divergence": 0.16497099027337175,
+    "max_divergence": 0.35431202946869234,
+    "divergence_distribution": {
+      "low_count": 1134,
+      "medium_count": 390,
+      "high_count": 0
+    }
+  },
+  "layer_statistics": {
+    "0": {
+      "executions": 254,
+      "success_rate": 1.0,
+      "average_time_ms": 17.127529352236042,
+      "average_divergence": 0.2868116738825616,
+      "divergence_variance": 0.0006052170247508976
+    },
+    "1": {
+      "executions": 254,
+      "success_rate": 1.0,
+      "average_time_ms": 10.739297267804876,
+      "average_divergence": 0.2868116738825616,
+      "divergence_variance": 0.0006052170247508976
+    },
+    "2": {
+      "executions": 254,
+      "success_rate": 1.0,
+      "average_time_ms": 11.489359772852145,
+      "average_divergence": 0.2868116738825616,
+      "divergence_variance": 0.0006052170247508976
+    },
+    "3": {
+      "executions": 254,
+      "success_rate": 1.0,
+      "average_time_ms": 12.296542809454827,
+      "average_divergence": 0.2868116738825616,
+      "divergence_variance": 0.0006052170247508976
+    },
+    "4": {
+      "executions": 254,
+      "success_rate": 1.0,
+      "average_time_ms": 13.034648153798903,
+      "average_divergence": 0.2868116738825616,
+      "divergence_variance": 0.0006052170247508976
+    },
+    "5": {
+      "executions": 254,
+      "success_rate": 1.0,
+      "average_time_ms": 14.374158965280705,
+      "average_divergence": 0.2868116738825616,
+      "divergence_variance": 0.0006052170247508976
+    }
+  },
+  "device_statistics": {
+    "mps": 1524
+  },
+  "probe_type_statistics": {
+    "general": {
+      "count": 822,
+      "average_divergence": 0.28230453970758185,
+      "divergence_std": 0.029113349306818102
+    },
+    "reasoning": {
+      "count": 492,
+      "average_divergence": 0.29635980809730017,
+      "divergence_std": 0.01503526340710099
+    },
+    "mathematical": {
+      "count": 204,
+      "average_divergence": 0.2819638704816262,
+      "divergence_std": 0.015349504877103768
+    },
+    "memory": {
+      "count": 6,
+      "average_divergence": 0.28616736587804076,
+      "divergence_std": 0.0
+    }
+  },
+  "fallback_events": [],
+  "recommendations": []
+}

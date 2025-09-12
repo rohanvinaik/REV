@@ -1,0 +1,138 @@
+{
+  "summary": {
+    "timestamp": "2025-09-11T14:29:42.721139",
+    "session_duration_minutes": 18.50401056666667,
+    "total_executions": 3096,
+    "successful_executions": 3096,
+    "failed_executions": 0,
+    "success_rate": 1.0,
+    "fallback_count": 0,
+    "using_behavioral_probing": true
+  },
+  "performance": {
+    "average_execution_time_ms": 21.880553408896787,
+    "median_execution_time_ms": 21.37033303733915,
+    "max_execution_time_ms": 624.029416940175,
+    "min_execution_time_ms": 6.359791965223849
+  },
+  "divergence_analysis": {
+    "total_scores": 3096,
+    "mean_divergence": 0.286813626070789,
+    "std_divergence": 0.024624686075618164,
+    "min_divergence": 0.16497099027337175,
+    "max_divergence": 0.35431202946869234,
+    "divergence_distribution": {
+      "low_count": 2400,
+      "medium_count": 696,
+      "high_count": 0
+    }
+  },
+  "layer_statistics": {
+    "0": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 19.12026582899424,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "1": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 12.916712342606237,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "2": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 16.01705345859419,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "3": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 17.61813497201489,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "4": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 17.61983736741263,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "5": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 19.40688103042153,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "6": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 23.852645180390265,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "7": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 22.742597704803817,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "8": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 26.798963172689746,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "9": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 27.106331121230628,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "10": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 28.931729809575994,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    },
+    "11": {
+      "executions": 258,
+      "success_rate": 1.0,
+      "average_time_ms": 30.4354889180273,
+      "average_divergence": 0.28681362607078903,
+      "divergence_variance": 0.0006063751643227432
+    }
+  },
+  "device_statistics": {
+    "mps": 3096
+  },
+  "probe_type_statistics": {
+    "general": {
+      "count": 1692,
+      "average_divergence": 0.2837496636630905,
+      "divergence_std": 0.02885004030585227
+    },
+    "mathematical": {
+      "count": 492,
+      "average_divergence": 0.2813792022500195,
+      "divergence_std": 0.014853781127108973
+    },
+    "reasoning": {
+      "count": 912,
+      "average_divergence": 0.29542981128311846,
+      "divergence_std": 0.016961367438047006
+    }
+  },
+  "fallback_events": [],
+  "recommendations": []
+}
