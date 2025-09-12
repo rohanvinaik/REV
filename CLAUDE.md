@@ -843,6 +843,7 @@ The reference is a smart optimization to avoid exhaustive layer testing, not a r
 
 ## 📂 PROJECT STRUCTURE
 
+### Source Code Organization
 ```
 src/
 ├── core/           # SPRT statistical testing
@@ -854,6 +855,37 @@ src/
 ├── privacy/       # ZK proofs, homomorphic ops
 └── orchestration/ # Prompt orchestration
 ```
+
+### Data & Reports Organization (NEW)
+```
+database/           # Organized fingerprint database
+├── fingerprints/
+│   ├── reference/  # Reference library (smallest models)
+│   │   └── reference_library.json
+│   └── active/     # Active library (all runs)
+│       └── active_library.json
+└── behavioral_profiles/  # Detailed behavioral data
+
+reports/            # All pipeline outputs
+├── rev_reports/    # Main REV pipeline reports
+│   └── rev_report_YYYYMMDD_HHMMSS.json
+├── diagnostics/    # Diagnostic analysis reports
+│   └── diagnostic_model_YYYYMMDD_HHMMSS.{json,html}
+├── reference_builds/  # Reference build logs
+│   └── model_reference_build.log
+└── test_runs/      # Regular test run logs
+    └── model_test.log
+
+fingerprint_library/  # Symbolic links for backward compatibility
+├── reference_library.json -> ../database/fingerprints/reference/
+└── active_library.json -> ../database/fingerprints/active/
+```
+
+### Key Files
+- `run_rev.py` - Main pipeline entry point
+- `CLAUDE.md` - This comprehensive documentation
+- `README.md` - User-facing documentation
+- `Makefile` - Build and test automation
 
 ## 🔧 REFERENCE LIBRARY MANAGEMENT & TROUBLESHOOTING
 

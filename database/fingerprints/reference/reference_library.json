@@ -1,0 +1,607 @@
+{
+  "fingerprints": {
+    "a39f36b100fe8a5377810d56c3f4789b9c53ac42_reference": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.395135860720133,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.13156330493362395,
+        "avg_response_length": 19.337164750957854,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_size": "unknown",
+      "architecture_version": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "reference_model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "hypervectors_generated": 261,
+      "challenges_processed": 261,
+      "processing_time": 3.468864917755127,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "restriction_sites": [
+        {
+          "layer": 1,
+          "divergence_delta": -0.6333,
+          "percent_change": -76.0,
+          "before": 0.8333,
+          "after": 0.2
+        },
+        {
+          "layer": 2,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        },
+        {
+          "layer": 3,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        },
+        {
+          "layer": 4,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        },
+        {
+          "layer": 5,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        }
+      ],
+      "stable_regions": [],
+      "behavioral_topology": {
+        "model": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+        "timestamp": "2025-09-11T20:59:09.656087",
+        "total_layers": 6,
+        "restriction_sites": [
+          {
+            "layer": 1,
+            "divergence_delta": -0.6333,
+            "percent_change": -76.0,
+            "before": 0.8333,
+            "after": 0.2
+          },
+          {
+            "layer": 2,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          },
+          {
+            "layer": 3,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          },
+          {
+            "layer": 4,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          },
+          {
+            "layer": 5,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          }
+        ],
+        "stable_regions": [],
+        "phase_boundaries": [],
+        "behavioral_phases": [
+          {
+            "phase": "embedding",
+            "layers": [
+              0
+            ],
+            "avg_divergence": 0.8333,
+            "description": "Input embedding and tokenization"
+          },
+          {
+            "phase": "early_processing",
+            "layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "avg_divergence": 0.2,
+            "description": "Rapid feature extraction and initial processing"
+          }
+        ],
+        "layer_profiles": {
+          "0": {
+            "mean": 0.8333333333333334,
+            "std": 0.012,
+            "min": 0.7833333333333333,
+            "max": 0.8833333333333334,
+            "samples": 8
+          },
+          "1": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "2": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "3": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "4": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "5": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          }
+        },
+        "optimization_hints": {
+          "critical_layers": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "parallel_safe_layers": [],
+          "memory_per_layer_gb": 0.5,
+          "parallel_speedup_potential": "4x",
+          "skip_stable_region": []
+        },
+        "precision_targeting": {
+          "large_model_strategy": "target_restriction_sites_only",
+          "expected_speedup": "15-20x",
+          "accuracy_retention": "95%+"
+        }
+      },
+      "optimization_hints": {
+        "critical_layers": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parallel_safe_layers": [],
+        "memory_per_layer_gb": 0.5,
+        "parallel_speedup_potential": "4x",
+        "skip_stable_region": []
+      },
+      "enables_precision_targeting": true,
+      "deep_analysis_time_hours": 0.35939466502931383,
+      "is_reference": true,
+      "validation": {
+        "challenges": 261,
+        "restriction_sites": 5,
+        "passed_validation": true,
+        "validation_timestamp": "2025-09-11T20:59:14.194065"
+      },
+      "timestamp": "2025-09-11T20:59:14.194067"
+    },
+    "distilgpt2_reference": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.808640422314767,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.12804878048780488,
+        "avg_response_length": 19.330798479087452,
+        "principled_features": {
+          "syntactic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "semantic": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "behavioral": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "architectural": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "feature_importance": [
+            [
+              "refusal_score",
+              0.9
+            ],
+            [
+              "consistency_mean",
+              0.9
+            ],
+            [
+              "vanishing_gradient",
+              0.9
+            ],
+            [
+              "exploding_gradient",
+              0.9
+            ],
+            [
+              "type_token_ratio",
+              0.8
+            ],
+            [
+              "avg_cosine_similarity",
+              0.8
+            ],
+            [
+              "avg_attention_entropy",
+              0.8
+            ],
+            [
+              "response_entropy",
+              0.8
+            ],
+            [
+              "mean_sparsity",
+              0.8
+            ],
+            [
+              "mean_grad_norm",
+              0.8
+            ]
+          ],
+          "learned_features": null
+        }
+      },
+      "model_family": "distilgpt2",
+      "model_size": "unknown",
+      "architecture_version": "distilgpt2",
+      "reference_model": "distilgpt2",
+      "hypervectors_generated": 263,
+      "challenges_processed": 263,
+      "processing_time": 4.604022026062012,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "restriction_sites": [
+        {
+          "layer": 1,
+          "divergence_delta": -0.6333,
+          "percent_change": -76.0,
+          "before": 0.8333,
+          "after": 0.2
+        },
+        {
+          "layer": 2,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        },
+        {
+          "layer": 3,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        },
+        {
+          "layer": 4,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        },
+        {
+          "layer": 5,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.2,
+          "after": 0.2
+        }
+      ],
+      "stable_regions": [],
+      "behavioral_topology": {
+        "model": "distilgpt2",
+        "timestamp": "2025-09-11T21:38:19.610406",
+        "total_layers": 6,
+        "restriction_sites": [
+          {
+            "layer": 1,
+            "divergence_delta": -0.6333,
+            "percent_change": -76.0,
+            "before": 0.8333,
+            "after": 0.2
+          },
+          {
+            "layer": 2,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          },
+          {
+            "layer": 3,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          },
+          {
+            "layer": 4,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          },
+          {
+            "layer": 5,
+            "divergence_delta": 0.0,
+            "percent_change": 0.0,
+            "before": 0.2,
+            "after": 0.2
+          }
+        ],
+        "stable_regions": [],
+        "phase_boundaries": [],
+        "behavioral_phases": [
+          {
+            "phase": "embedding",
+            "layers": [
+              0
+            ],
+            "avg_divergence": 0.8333,
+            "description": "Input embedding and tokenization"
+          },
+          {
+            "phase": "early_processing",
+            "layers": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "avg_divergence": 0.2,
+            "description": "Rapid feature extraction and initial processing"
+          }
+        ],
+        "layer_profiles": {
+          "0": {
+            "mean": 0.8333333333333334,
+            "std": 0.012,
+            "min": 0.7833333333333333,
+            "max": 0.8833333333333334,
+            "samples": 8
+          },
+          "1": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "2": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "3": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "4": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          },
+          "5": {
+            "mean": 0.20000000000000004,
+            "std": 0.012,
+            "min": 0.15000000000000002,
+            "max": 0.25000000000000006,
+            "samples": 8
+          }
+        },
+        "optimization_hints": {
+          "critical_layers": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "parallel_safe_layers": [],
+          "memory_per_layer_gb": 0.5,
+          "parallel_speedup_potential": "4x",
+          "skip_stable_region": []
+        },
+        "precision_targeting": {
+          "large_model_strategy": "target_restriction_sites_only",
+          "expected_speedup": "15-20x",
+          "accuracy_retention": "95%+"
+        }
+      },
+      "optimization_hints": {
+        "critical_layers": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "parallel_safe_layers": [],
+        "memory_per_layer_gb": 0.5,
+        "parallel_speedup_potential": "4x",
+        "skip_stable_region": []
+      },
+      "enables_precision_targeting": true,
+      "deep_analysis_time_hours": 0.4350281980302599,
+      "is_reference": true,
+      "validation": {
+        "challenges": 263,
+        "restriction_sites": 5,
+        "passed_validation": true,
+        "validation_timestamp": "2025-09-11T21:38:25.231308"
+      },
+      "timestamp": "2025-09-11T21:38:25.231310"
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "created": "2025-09-11T20:59:14.190731",
+    "last_updated": "2025-09-11T21:38:25.231312"
+  }
+}

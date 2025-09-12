@@ -3074,8 +3074,15 @@ Examples:
                 logger.error(traceback.format_exc())
                 print(f"\n❌ Failed to process {model_path}: {e}")
     
-    # Generate report
-    output_file = args.output or f"rev_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    # Generate report with organized directory structure
+    if args.output:
+        output_file = args.output
+    else:
+        # Save to organized reports directory
+        reports_dir = Path("reports/rev_reports")
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = str(reports_dir / f"rev_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    
     report = rev.generate_report(output_file)
     
     # Print summary
