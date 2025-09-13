@@ -699,6 +699,62 @@ class REVUnified:
                 
                 # Get identification from light probe
                 identification = library.identify_from_behavioral_analysis(light_fingerprint)
+                
+                # ADAPTIVE: If confidence is low, probe more layers for better identification
+                if identification.confidence < 0.8 and len(sample_layers) < layer_count:
+                    print(f"\n   ⚠️ Low confidence ({identification.confidence:.0%}), running adaptive probe...")
+                    
+                    # Expand probe to ALL layers (or more layers)
+                    if layer_count <= 24:
+                        # Small/medium models: probe ALL layers now
+                        additional_layers = [l for l in range(layer_count) if l not in sample_layers]
+                    else:
+                        # Large models: probe every other layer
+                        additional_layers = [l for l in range(0, layer_count, 2) if l not in sample_layers]
+                    
+                    if additional_layers:
+                        print(f"   Additional layers to probe: {additional_layers[:10]}..." if len(additional_layers) > 10 else f"   Additional layers: {additional_layers}")
+                        
+                        # Run additional probes
+                        for layer_idx in additional_layers:
+                            layer_variances = []
+                            for prompt in test_prompts:
+                                response = light_executor.execute_behavioral_probe(prompt, up_to_layer=layer_idx)
+                                if response and hasattr(response, 'hidden_states'):
+                                    variance = response.hidden_states.var().item()
+                                    layer_variances.append(variance)
+                            
+                            if layer_variances:
+                                avg_variance = sum(layer_variances) / len(layer_variances)
+                                # Insert at correct position to maintain order
+                                insert_idx = next((i for i, v in enumerate(sample_layers) if v > layer_idx), len(sample_layers))
+                                sample_layers.insert(insert_idx, layer_idx)
+                                variance_profile.insert(insert_idx, avg_variance)
+                                print(f"   Layer {layer_idx:2d}: variance={avg_variance:.3f}")
+                        
+                        # Recalculate divergence scores with more data
+                        divergence_scores = []
+                        for i in range(1, len(variance_profile)):
+                            divergence = abs(variance_profile[i] - variance_profile[i-1]) / (variance_profile[i-1] + 1e-8)
+                            divergence_scores.append((sample_layers[i], divergence))
+                        
+                        if divergence_scores:
+                            divergence_scores.sort(key=lambda x: x[1], reverse=True)
+                            restriction_sites = [layer for layer, score in divergence_scores[:7] if score > 0.1]
+                            print(f"   Updated restriction sites: {restriction_sites}")
+                        
+                        # Re-identify with more complete profile
+                        light_fingerprint = {
+                            'variance_profile': variance_profile,
+                            'restriction_sites': restriction_sites,
+                            'layer_count': layer_count,
+                            'layer_divergences': dict(divergence_scores) if divergence_scores else {}
+                        }
+                        
+                        print(f"   Re-matching with enhanced profile...")
+                        identification = library.identify_from_behavioral_analysis(light_fingerprint)
+                        print(f"   Updated confidence: {identification.confidence:.0%}")
+                
                 strategy = library.get_testing_strategy(identification)
                 
                 print(f"\n   ✅ Family identified: {identification.identified_family} ({identification.confidence:.0%} confidence)")

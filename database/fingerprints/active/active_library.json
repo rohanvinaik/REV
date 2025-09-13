@@ -2635,12 +2635,56 @@
       "model_path": "/Users/rohanvinaik/LLM_models/distilgpt2",
       "run_type": "reference_baseline",
       "timestamp": "2025-09-11T21:38:25.229216"
+    },
+    "llama-2-7b-hf_20250913_152847": {
+      "behavioral_patterns": {
+        "hv_entropy": 12.480919472020814,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.18497757847533633,
+        "avg_response_length": 19.532846715328468,
+        "principled_features": {}
+      },
+      "model_family": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_size": "unknown",
+      "architecture_version": "llama-2-7b-hf",
+      "reference_model": "llama-2-7b-hf",
+      "hypervectors_generated": 137,
+      "challenges_processed": 137,
+      "processing_time": 750.6166043281555,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "llama-2-7b-hf",
+      "model_path": "/Users/rohanvinaik/LLM_models/llama-2-7b-hf",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-13T15:28:47.015186"
+    },
+    "llama-2-7b-chat-hf_20250913_184219": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.568800405314514,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.5321888412017167,
+        "avg_response_length": 16.642857142857142,
+        "principled_features": {}
+      },
+      "model_family": "a39f36b100fe8a5377810d56c3f4789b9c53ac42",
+      "model_size": "unknown",
+      "architecture_version": "llama-2-7b-chat-hf",
+      "reference_model": "llama-2-7b-chat-hf",
+      "hypervectors_generated": 14,
+      "challenges_processed": 14,
+      "processing_time": 80.19622683525085,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "llama-2-7b-chat-hf",
+      "model_path": "/Users/rohanvinaik/LLM_models/llama-2-7b-chat-hf",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-13T18:42:19.326300"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-03T19:15:46.608513",
-    "last_updated": "2025-09-11T21:38:25.229222",
-    "num_fingerprints": 32
+    "last_updated": "2025-09-13T18:42:19.326302",
+    "num_fingerprints": 34
   }
 }

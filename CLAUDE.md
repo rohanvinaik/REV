@@ -261,6 +261,35 @@ python run_rev.py /Users/.../pythia-70m/snapshots/xxx --enable-prompt-orchestrat
 - Cross-architecture: References work across different model sizes in same architecture
 - Cross-dimension: Even works when models have different dimensions (768D → 1024D)
 
+### 🎯 Enhanced Model Identification (v3.1)
+
+**Pattern-Based Matching**: The system now focuses on behavioral variance patterns rather than layer counts for improved accuracy.
+
+**Key Improvements**:
+1. **Variance Delta Patterns (60% weight)**: Focuses on magnitude and direction of behavioral changes
+2. **Relative Positions (25% weight)**: Normalizes layer positions relative to model depth
+3. **Adaptive Probing**: Automatically probes more layers when confidence < 80%
+4. **Behavioral Matching**: Compares patterns of change, not absolute architecture
+
+**How It Works**:
+```python
+# Old approach (problematic):
+# - Weighted layer count heavily
+# - Misidentified llama-32-layers as pythia-32-layers
+
+# New approach (improved):
+# - Extracts variance delta patterns (e.g., -48% at layer 5)
+# - Normalizes positions (layer 5/32 = 15.6% depth)
+# - Matches behavioral signatures independent of size
+# - Correctly identifies llama models based on unique variance patterns
+```
+
+**Adaptive Light Probe**:
+- Initial probe: Samples every 3rd layer for large models
+- If confidence < 80%: Expands to all layers automatically
+- Re-identifies with enhanced profile for better accuracy
+- Ensures correct family identification before using references
+
 ## 📚 KEY WORKFLOWS
 
 ### Building Reference Library (One-Time Setup per Architecture)

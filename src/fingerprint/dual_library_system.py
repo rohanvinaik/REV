@@ -199,30 +199,100 @@ class DualLibrarySystem:
         )
     
     def _compute_topology_similarity(self, sites1, sites2, profile1, profile2):
-        """Compute similarity between two behavioral topologies."""
+        """Compute similarity between two behavioral topologies.
+        
+        Enhanced to focus on variance delta patterns rather than layer counts.
+        """
         if not sites1 or not sites2:
             return 0.0
         
-        # Compare restriction site patterns
-        site_similarity = 0.0
+        # Extract variance delta patterns (the actual behavioral changes)
+        def extract_delta_pattern(sites):
+            """Extract pattern of variance changes."""
+            pattern = []
+            for site in sites:
+                if isinstance(site, dict):
+                    # Get the delta magnitude and direction
+                    delta = site.get("divergence_delta", 0.0)
+                    percent = site.get("percent_change", 0.0)
+                    pattern.append({
+                        "delta": abs(delta),  # Magnitude
+                        "direction": 1 if delta > 0 else -1 if delta < 0 else 0,
+                        "percent": abs(percent),
+                        "relative_pos": site.get("layer", 0)  # Will normalize later
+                    })
+            return pattern
+        
+        pattern1 = extract_delta_pattern(sites1)
+        pattern2 = extract_delta_pattern(sites2)
+        
+        # Normalize positions relative to model depth (don't care about absolute layer count)
+        if pattern1 and pattern2:
+            max_pos1 = max([p["relative_pos"] for p in pattern1], default=1)
+            max_pos2 = max([p["relative_pos"] for p in pattern2], default=1)
+            
+            for p in pattern1:
+                p["relative_pos"] = p["relative_pos"] / max_pos1 if max_pos1 > 0 else 0
+            for p in pattern2:
+                p["relative_pos"] = p["relative_pos"] / max_pos2 if max_pos2 > 0 else 0
+        
+        # Compare delta patterns (behavior) - PRIMARY FACTOR
+        delta_similarity = 0.0
+        if pattern1 and pattern2:
+            # Match patterns based on similar deltas and directions
+            matched = 0
+            total_comparisons = 0
+            
+            for p1 in pattern1:
+                # Skip near-zero changes (noise)
+                if p1["delta"] < 0.05:
+                    continue
+                    
+                best_match = 0.0
+                for p2 in pattern2:
+                    if p2["delta"] < 0.05:
+                        continue
+                    
+                    # Compare delta magnitudes (normalized)
+                    delta_sim = 1.0 - min(abs(p1["delta"] - p2["delta"]) / max(p1["delta"], p2["delta"], 0.01), 1.0)
+                    
+                    # Compare directions (1.0 if same, 0.0 if opposite)
+                    dir_sim = 1.0 if p1["direction"] == p2["direction"] else 0.0
+                    
+                    # Compare relative positions (less important)
+                    pos_sim = 1.0 - abs(p1["relative_pos"] - p2["relative_pos"])
+                    
+                    # Weighted combination: behavior matters more than position
+                    match_score = 0.5 * delta_sim + 0.3 * dir_sim + 0.2 * pos_sim
+                    best_match = max(best_match, match_score)
+                
+                matched += best_match
+                total_comparisons += 1
+            
+            if total_comparisons > 0:
+                delta_similarity = matched / total_comparisons
+        
+        # Compare site positions (SECONDARY FACTOR - much less weight)
+        position_similarity = 0.0
         if sites1 and sites2:
-            # Normalize site positions to [0,1] for comparison
-            max1 = max([s.get("layer", s) if isinstance(s, dict) else s for s in sites1])
-            max2 = max([s.get("layer", s) if isinstance(s, dict) else s for s in sites2])
+            # Just check if restriction sites occur at similar relative positions
+            max1 = max([s.get("layer", s) if isinstance(s, dict) else s for s in sites1], default=1)
+            max2 = max([s.get("layer", s) if isinstance(s, dict) else s for s in sites2], default=1)
             
-            norm1 = [(s.get("layer", s) if isinstance(s, dict) else s) / max1 for s in sites1]
-            norm2 = [(s.get("layer", s) if isinstance(s, dict) else s) / max2 for s in sites2]
+            norm1 = set([(s.get("layer", s) if isinstance(s, dict) else s) / max1 for s in sites1])
+            norm2 = set([(s.get("layer", s) if isinstance(s, dict) else s) / max2 for s in sites2])
             
-            # Find closest matches
+            # Count positions that are close
             matches = 0
             for n1 in norm1:
-                closest = min([abs(n1 - n2) for n2 in norm2])
-                if closest < 0.1:  # Within 10% is a match
-                    matches += 1
+                for n2 in norm2:
+                    if abs(n1 - n2) < 0.15:  # Within 15% relative position
+                        matches += 1
+                        break
             
-            site_similarity = matches / max(len(norm1), len(norm2))
+            position_similarity = matches / max(len(norm1), len(norm2)) if max(len(norm1), len(norm2)) > 0 else 0
         
-        # Compare variance profiles if available
+        # Compare variance profiles if available (TERTIARY FACTOR)
         profile_similarity = 0.0
         if profile1 and profile2:
             # Simple correlation of variance patterns
@@ -233,8 +303,9 @@ class DualLibrarySystem:
                 if norm > 0:
                     profile_similarity = corr / norm
         
-        # Weight both factors
-        return 0.7 * site_similarity + 0.3 * profile_similarity
+        # NEW WEIGHTS: Variance patterns matter most, positions matter least
+        # 60% delta patterns, 25% relative positions, 15% profiles
+        return 0.6 * delta_similarity + 0.25 * position_similarity + 0.15 * profile_similarity
     
     def _has_reference_fingerprint(self, family: str) -> bool:
         """Check if we have a reference fingerprint for this family."""
