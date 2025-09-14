@@ -240,20 +240,39 @@ class UnifiedPromptOrchestrator:
                 layer_count - 2, layer_count - 1  # Output layers
             ]
             prompts_per_site = 55
-        else:
-            # Very large models - strategic sampling
+        elif layer_count <= 40:
+            # Large models (25-40 layers) - sparse strategic sampling
             restriction_sites = [
-                0, 1, 2,  # Early layers
-                layer_count // 8,  # 12.5%
-                layer_count // 4,  # 25%
-                3 * layer_count // 8,  # 37.5%
-                layer_count // 2,  # 50%
-                5 * layer_count // 8,  # 62.5%
-                3 * layer_count // 4,  # 75%
-                7 * layer_count // 8,  # 87.5%
-                layer_count - 3, layer_count - 2, layer_count - 1  # Final layers
+                0, 1,  # Input layers
+                layer_count // 4,  # 25% mark
+                layer_count // 2,  # 50% mark
+                3 * layer_count // 4,  # 75% mark
+                layer_count - 2, layer_count - 1  # Output layers
             ]
-            prompts_per_site = 45
+            prompts_per_site = 50
+        elif layer_count <= 80:
+            # Very large models (41-80 layers) - ultra-sparse sampling
+            # For 80-layer model: [0, 1, 16, 40, 64, 79] = 5 sites vs 27 sites every 3rd layer
+            restriction_sites = [
+                0, 1,  # Input layers
+                layer_count // 5,  # 20% mark
+                layer_count // 2,  # 50% mark
+                4 * layer_count // 5,  # 80% mark
+                layer_count - 1  # Final layer
+            ]
+            prompts_per_site = 40
+        else:
+            # Massive models (>80 layers) - minimal strategic sampling
+            restriction_sites = [
+                0,  # Input layer
+                layer_count // 6,  # ~17% mark
+                layer_count // 3,  # ~33% mark
+                layer_count // 2,  # 50% mark
+                2 * layer_count // 3,  # ~67% mark
+                5 * layer_count // 6,  # ~83% mark
+                layer_count - 1  # Final layer
+            ]
+            prompts_per_site = 35
         
         # Remove duplicates and sort
         restriction_sites = sorted(list(set(restriction_sites)))
