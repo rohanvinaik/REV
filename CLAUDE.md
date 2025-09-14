@@ -666,7 +666,7 @@ python run_rev.py model1/ model2/ \
 
 ### Seven Specialized Systems
 
-1. **PoT** - Behavioral probes for restriction sites (30%)
+1. **PoT (Proof-of-Training)** - Cryptographically pre-committed behavioral probes for restriction sites and model identity verification (30%)
 2. **KDF** - Security/adversarial testing (20%) 
 3. **Evolutionary** - Genetic optimization (20%)
 4. **Dynamic** - Template-based synthesis (20%)
@@ -822,7 +822,7 @@ When running `--build-reference`, the system:
 1. **Automatically generates 400+ behavioral probes** (NOT manually selected)
 2. **Profiles ALL layers** comprehensively (6 for pythia-70m, 12 for GPT-2, etc.)
 3. **Takes appropriate time** (18 min for pythia-70m, 41 min for GPT-2)
-4. **Uses cryptographic challenge generation** via PoTChallengeGenerator
+4. **Uses cryptographic challenge generation** via PoTChallengeGenerator (Proof-of-Training framework)
 
 #### CRITICAL: Reference Library Building Commands
 

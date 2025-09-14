@@ -46,7 +46,7 @@ REV extracts **10,000-dimensional behavioral fingerprints** from model responses
 
 Our unified orchestration system coordinates multiple specialized generators:
 
-- **PoT (Proof-of-Thought)**: Based on cutting-edge research, generates prompts that reveal deep architectural patterns and behavioral boundaries
+- **PoT (Proof-of-Training)**: Generates cryptographically pre-committed challenges that reveal deep architectural patterns and behavioral boundaries for model identity verification
 - **KDF Adversarial**: Tests security boundaries with jailbreak attempts, alignment probes, and vulnerability detection
 - **Evolutionary**: Uses genetic algorithms to evolve prompts that maximize discrimination between models
 - **Dynamic Synthesis**: Combines templates in real-time to create novel, context-aware prompts
