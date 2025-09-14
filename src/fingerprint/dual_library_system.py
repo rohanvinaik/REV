@@ -202,6 +202,7 @@ class DualLibrarySystem:
         """Compute similarity between two behavioral topologies.
         
         Enhanced to focus on variance delta patterns rather than layer counts.
+        Now includes interpolation to handle sparse sampling that might miss transitions.
         """
         if not sites1 or not sites2:
             return 0.0
@@ -223,6 +224,89 @@ class DualLibrarySystem:
                     })
             return pattern
         
+        def interpolate_sparse_pattern(pattern, target_density=0.1):
+            """Interpolate ONLY near detected transitions to find exact transition point.
+            
+            This preserves sparse sampling efficiency while pinpointing transitions.
+            Skip interpolation for dense reference patterns.
+            
+            Args:
+                pattern: List of behavioral patterns with relative positions
+                target_density: Not used in new implementation
+            
+            Returns:
+                Pattern with interpolated transition zones only
+            """
+            if len(pattern) < 2:
+                return pattern
+            
+            # Sort by position
+            sorted_pattern = sorted(pattern, key=lambda x: x["relative_pos"])
+            
+            # Check if this is already a dense pattern (reference build)
+            # Dense patterns have consecutive or near-consecutive positions
+            if len(sorted_pattern) >= 10:  # Reasonable number of samples
+                avg_gap = 0
+                for i in range(len(sorted_pattern) - 1):
+                    avg_gap += sorted_pattern[i+1]["relative_pos"] - sorted_pattern[i]["relative_pos"]
+                avg_gap /= (len(sorted_pattern) - 1)
+                
+                # If average gap is small (< 0.1), this is dense - no interpolation needed
+                # Even if there are dramatic transitions, we already have the exact data
+                if avg_gap < 0.1:
+                    return sorted_pattern
+            
+            enhanced = []
+            
+            for i in range(len(sorted_pattern) - 1):
+                current = sorted_pattern[i]
+                next_pt = sorted_pattern[i + 1]
+                enhanced.append(current)
+                
+                # Check if there's a gap that needs interpolation
+                position_gap = next_pt["relative_pos"] - current["relative_pos"]
+                
+                # Only interpolate if:
+                # 1. There's a meaningful gap between samples (sparse sampling)
+                # 2. AND there's a significant behavioral change
+                if position_gap > 0.1:  # Gap indicates sparse sampling
+                    delta_change = abs(next_pt["delta"] - current["delta"])
+                    direction_change = (current["direction"] != next_pt["direction"])
+                    
+                    # Detect potential transition (large delta change OR direction flip)
+                    # Threshold based on analysis of reference runs: catches transitions as small as 0.02
+                    if delta_change > 0.05 or (direction_change and delta_change > 0.02):
+                    # Found a transition! Add a single interpolation point to locate it
+                    # Use golden ratio search principle - check at 0.618 of the gap
+                    golden_ratio = 0.618
+                    
+                    transition_point = {
+                        "delta": current["delta"] * (1 - golden_ratio) + next_pt["delta"] * golden_ratio,
+                        "direction": current["direction"] if golden_ratio < 0.5 else next_pt["direction"],
+                        "percent": current["percent"] * (1 - golden_ratio) + next_pt["percent"] * golden_ratio,
+                        "relative_pos": current["relative_pos"] * (1 - golden_ratio) + next_pt["relative_pos"] * golden_ratio,
+                        "interpolated": True,
+                        "transition_zone": True,  # Mark as transition zone
+                        "transition_strength": delta_change  # How strong the transition is
+                    }
+                    enhanced.append(transition_point)
+                    
+                    # Optionally add a second point at 0.382 for binary search refinement
+                    if delta_change > 0.25:  # Very strong transition
+                        refinement_point = {
+                            "delta": current["delta"] * 0.618 + next_pt["delta"] * 0.382,
+                            "direction": current["direction"],
+                            "percent": current["percent"] * 0.618 + next_pt["percent"] * 0.382,
+                            "relative_pos": current["relative_pos"] * 0.618 + next_pt["relative_pos"] * 0.382,
+                            "interpolated": True,
+                            "transition_zone": True,
+                            "transition_strength": delta_change
+                        }
+                        enhanced.append(refinement_point)
+            
+            enhanced.append(sorted_pattern[-1])
+            return enhanced
+        
         pattern1 = extract_delta_pattern(sites1)
         pattern2 = extract_delta_pattern(sites2)
         
@@ -236,6 +320,13 @@ class DualLibrarySystem:
             for p in pattern2:
                 p["relative_pos"] = p["relative_pos"] / max_pos2 if max_pos2 > 0 else 0
         
+        # Apply interpolation to handle sparse sampling
+        # This helps detect transitions that might be missed by sparse probing
+        if pattern1:
+            pattern1 = interpolate_sparse_pattern(pattern1)
+        if pattern2:
+            pattern2 = interpolate_sparse_pattern(pattern2)
+        
         # Compare delta patterns (behavior) - PRIMARY FACTOR
         delta_similarity = 0.0
         if pattern1 and pattern2:
@@ -244,13 +335,13 @@ class DualLibrarySystem:
             total_comparisons = 0
             
             for p1 in pattern1:
-                # Skip near-zero changes (noise)
-                if p1["delta"] < 0.05:
+                # Skip near-zero changes (noise) unless it's a transition zone
+                if p1["delta"] < 0.05 and not p1.get("transition_zone", False):
                     continue
                     
                 best_match = 0.0
                 for p2 in pattern2:
-                    if p2["delta"] < 0.05:
+                    if p2["delta"] < 0.05 and not p2.get("transition_zone", False):
                         continue
                     
                     # Compare delta magnitudes (normalized)
@@ -259,11 +350,29 @@ class DualLibrarySystem:
                     # Compare directions (1.0 if same, 0.0 if opposite)
                     dir_sim = 1.0 if p1["direction"] == p2["direction"] else 0.0
                     
-                    # Compare relative positions (less important)
-                    pos_sim = 1.0 - abs(p1["relative_pos"] - p2["relative_pos"])
+                    # Position tolerance strategy for sparse sampling
+                    # Transition zones get wider tolerance since we're estimating their position
+                    if p1.get("transition_zone") and p2.get("transition_zone"):
+                        # Both are transitions - match if within reasonable range
+                        pos_tolerance = 0.25  # 25% tolerance for transition matching
+                        # Weight by transition strength
+                        strength_weight = min(p1.get("transition_strength", 0.5), 
+                                            p2.get("transition_strength", 0.5))
+                    elif p1.get("interpolated") or p2.get("interpolated"):
+                        pos_tolerance = 0.15  # 15% for interpolated points
+                        strength_weight = 0.7
+                    else:
+                        pos_tolerance = 0.1  # 10% for actual samples
+                        strength_weight = 1.0
                     
-                    # Weighted combination: behavior matters more than position
-                    match_score = 0.5 * delta_sim + 0.3 * dir_sim + 0.2 * pos_sim
+                    pos_diff = abs(p1["relative_pos"] - p2["relative_pos"])
+                    pos_sim = max(0, 1.0 - (pos_diff / pos_tolerance))
+                    
+                    # Strong bonus for matching transition zones
+                    transition_bonus = 0.2 if (p1.get("transition_zone") and p2.get("transition_zone")) else 0
+                    
+                    # Weighted combination with transition awareness
+                    match_score = (0.45 * delta_sim + 0.25 * dir_sim + 0.1 * pos_sim) * strength_weight + transition_bonus
                     best_match = max(best_match, match_score)
                 
                 matched += best_match

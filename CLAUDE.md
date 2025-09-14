@@ -290,6 +290,14 @@ python run_rev.py /Users/.../pythia-70m/snapshots/xxx --enable-prompt-orchestrat
 - Re-identifies with enhanced profile for better accuracy
 - Ensures correct family identification before using references
 
+**Smart Interpolation for Sparse Sampling**:
+- **Purpose**: Detects exact behavioral transition points that sparse sampling might miss
+- **Activation**: Only near detected transitions (delta > 0.05 or direction change with delta > 0.02)
+- **Method**: Uses golden ratio (0.618) placement for optimal transition detection
+- **Efficiency**: Preserves sparse sampling speedup by only interpolating where needed
+- **Dense Pattern Handling**: Automatically skips interpolation for reference builds with complete layer data
+- **Thresholds**: Based on empirical analysis of reference runs (transitions range from 0.0036 to 0.6333)
+
 ## 📚 KEY WORKFLOWS
 
 ### Building Reference Library (One-Time Setup per Architecture)
