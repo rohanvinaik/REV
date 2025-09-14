@@ -623,17 +623,26 @@ class REVUnified:
                 light_executor = LayerSegmentExecutor(light_config)
                 layer_count = light_executor.n_layers
                 
-                # LIGHT PROBE: Sample ALL layers (or every 2nd for large models)
+                # LIGHT PROBE: Sample layers at fixed percentage (10-20%)
                 # This builds a quick topological map for reference matching
                 if layer_count <= 12:
                     # Small models: probe every layer
                     sample_layers = list(range(layer_count))
                 elif layer_count <= 24:
-                    # Medium models: probe every 2nd layer
+                    # Medium models: probe every 2nd layer  
                     sample_layers = list(range(0, layer_count, 2))
                 else:
-                    # Large models: probe every 3rd layer
-                    sample_layers = list(range(0, layer_count, 3))
+                    # Large models: sample 15% of layers at fixed pace
+                    # For 80-layer model: 12 layers instead of 27 layers
+                    target_samples = max(8, int(layer_count * 0.15))  # 15% with minimum of 8
+                    step_size = max(1, layer_count // target_samples)
+                    sample_layers = list(range(0, layer_count, step_size))
+                    # Ensure we don't exceed target and always include first/last
+                    if len(sample_layers) > target_samples:
+                        # Keep first, last, and evenly spaced middle layers
+                        indices = [0] + [int(i * (layer_count - 1) / (target_samples - 1)) 
+                                       for i in range(1, target_samples - 1)] + [layer_count - 1]
+                        sample_layers = sorted(list(set(indices)))
                 
                 print(f"   Light probe: Testing {len(sample_layers)} layers across {layer_count} total layers")
                 print(f"   Layers to probe: {sample_layers}")
