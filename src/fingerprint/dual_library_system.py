@@ -225,86 +225,125 @@ class DualLibrarySystem:
             return pattern
         
         def interpolate_sparse_pattern(pattern, target_density=0.1):
-            """Interpolate ONLY near detected transitions to find exact transition point.
-            
-            This preserves sparse sampling efficiency while pinpointing transitions.
-            Skip interpolation for dense reference patterns.
-            
+            """Efficiently find exact transition points using binary search approach.
+
+            Uses sorting and binary search to identify REV sites (restriction sites)
+            where behavioral variance changes dramatically.
+
             Args:
                 pattern: List of behavioral patterns with relative positions
                 target_density: Not used in new implementation
-            
+
             Returns:
-                Pattern with interpolated transition zones only
+                Pattern with efficiently identified transition zones
             """
             if len(pattern) < 2:
                 return pattern
-            
-            # Sort by position
+
+            # Sort by position first
             sorted_pattern = sorted(pattern, key=lambda x: x["relative_pos"])
-            
+
             # Check if this is already a dense pattern (reference build)
-            # Dense patterns have consecutive or near-consecutive positions
-            if len(sorted_pattern) >= 10:  # Reasonable number of samples
-                avg_gap = 0
-                for i in range(len(sorted_pattern) - 1):
-                    avg_gap += sorted_pattern[i+1]["relative_pos"] - sorted_pattern[i]["relative_pos"]
-                avg_gap /= (len(sorted_pattern) - 1)
-                
-                # If average gap is small (< 0.1), this is dense - no interpolation needed
-                # Even if there are dramatic transitions, we already have the exact data
+            if len(sorted_pattern) >= 10:
+                avg_gap = sum(sorted_pattern[i+1]["relative_pos"] - sorted_pattern[i]["relative_pos"]
+                             for i in range(len(sorted_pattern) - 1)) / (len(sorted_pattern) - 1)
+
+                # Dense pattern - no interpolation needed
                 if avg_gap < 0.1:
                     return sorted_pattern
-            
-            enhanced = []
-            
-            for i in range(len(sorted_pattern) - 1):
-                current = sorted_pattern[i]
-                next_pt = sorted_pattern[i + 1]
-                enhanced.append(current)
-                
-                # Check if there's a gap that needs interpolation
+
+            # Build a transition detection structure
+            # Sort by delta magnitude to find significant changes efficiently
+            delta_sorted = sorted(enumerate(sorted_pattern[:-1]),
+                                key=lambda x: abs(x[1]["delta"] - sorted_pattern[x[0] + 1]["delta"]),
+                                reverse=True)
+
+            # Identify top transition candidates
+            transition_candidates = []
+            for idx, _ in delta_sorted[:5]:  # Check top 5 transitions
+                current = sorted_pattern[idx]
+                next_pt = sorted_pattern[idx + 1]
+
                 position_gap = next_pt["relative_pos"] - current["relative_pos"]
-                
-                # Only interpolate if:
-                # 1. There's a meaningful gap between samples (sparse sampling)
-                # 2. AND there's a significant behavioral change
-                if position_gap > 0.1:  # Gap indicates sparse sampling
+                if position_gap > 0.1:  # Sparse sampling gap
                     delta_change = abs(next_pt["delta"] - current["delta"])
                     direction_change = (current["direction"] != next_pt["direction"])
-                    
-                    # Detect potential transition (large delta change OR direction flip)
-                    # Threshold based on analysis of reference runs: catches transitions as small as 0.02
-                    if delta_change > 0.05 or (direction_change and delta_change > 0.02):
-                    # Found a transition! Add a single interpolation point to locate it
-                    # Use golden ratio search principle - check at 0.618 of the gap
-                    golden_ratio = 0.618
-                    
+
+                    # Calculate transition score
+                    score = delta_change
+                    if direction_change:
+                        score *= 1.5  # Boost score for direction changes
+
+                    if score > 0.02:  # Significant transition
+                        transition_candidates.append({
+                            "start_idx": idx,
+                            "score": score,
+                            "gap": position_gap,
+                            "current": current,
+                            "next": next_pt
+                        })
+
+            # Sort candidates by position for sequential processing
+            transition_candidates.sort(key=lambda x: x["start_idx"])
+
+            # Binary search refinement for exact transition points
+            enhanced = []
+            last_idx = 0
+
+            for candidate in transition_candidates:
+                # Add all points before this transition
+                for i in range(last_idx, candidate["start_idx"] + 1):
+                    enhanced.append(sorted_pattern[i])
+
+                # Binary search for exact transition point
+                left_bound = candidate["current"]["relative_pos"]
+                right_bound = candidate["next"]["relative_pos"]
+
+                # Determine number of search points based on transition strength
+                if candidate["score"] > 0.25:
+                    # Very strong transition - use 3-point binary search
+                    search_points = [0.25, 0.5, 0.75]
+                elif candidate["score"] > 0.1:
+                    # Moderate transition - use 2-point search
+                    search_points = [0.382, 0.618]  # Golden ratio points
+                else:
+                    # Weak transition - single point
+                    search_points = [0.5]
+
+                for ratio in search_points:
+                    # Interpolate values at search point
+                    pos = left_bound + (right_bound - left_bound) * ratio
+
+                    # Linear interpolation of delta
+                    delta = candidate["current"]["delta"] + \
+                           (candidate["next"]["delta"] - candidate["current"]["delta"]) * ratio
+
+                    # Direction switches at midpoint
+                    direction = candidate["current"]["direction"] if ratio < 0.5 else candidate["next"]["direction"]
+
+                    # Create interpolated point
                     transition_point = {
-                        "delta": current["delta"] * (1 - golden_ratio) + next_pt["delta"] * golden_ratio,
-                        "direction": current["direction"] if golden_ratio < 0.5 else next_pt["direction"],
-                        "percent": current["percent"] * (1 - golden_ratio) + next_pt["percent"] * golden_ratio,
-                        "relative_pos": current["relative_pos"] * (1 - golden_ratio) + next_pt["relative_pos"] * golden_ratio,
+                        "delta": delta,
+                        "direction": direction,
+                        "percent": candidate["current"]["percent"] + \
+                                 (candidate["next"]["percent"] - candidate["current"]["percent"]) * ratio,
+                        "relative_pos": pos,
                         "interpolated": True,
-                        "transition_zone": True,  # Mark as transition zone
-                        "transition_strength": delta_change  # How strong the transition is
+                        "transition_zone": True,
+                        "transition_strength": candidate["score"],
+                        "search_ratio": ratio  # Track search point for debugging
                     }
                     enhanced.append(transition_point)
-                    
-                    # Optionally add a second point at 0.382 for binary search refinement
-                    if delta_change > 0.25:  # Very strong transition
-                        refinement_point = {
-                            "delta": current["delta"] * 0.618 + next_pt["delta"] * 0.382,
-                            "direction": current["direction"],
-                            "percent": current["percent"] * 0.618 + next_pt["percent"] * 0.382,
-                            "relative_pos": current["relative_pos"] * 0.618 + next_pt["relative_pos"] * 0.382,
-                            "interpolated": True,
-                            "transition_zone": True,
-                            "transition_strength": delta_change
-                        }
-                        enhanced.append(refinement_point)
-            
-            enhanced.append(sorted_pattern[-1])
+
+                last_idx = candidate["start_idx"] + 1
+
+            # Add remaining points
+            for i in range(last_idx, len(sorted_pattern)):
+                enhanced.append(sorted_pattern[i])
+
+            # Final sort by position to ensure order
+            enhanced.sort(key=lambda x: x["relative_pos"])
+
             return enhanced
         
         pattern1 = extract_delta_pattern(sites1)

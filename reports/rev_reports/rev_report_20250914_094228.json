@@ -1,0 +1,105 @@
+{
+  "timestamp": "2025-09-14T09:42:28.577849",
+  "framework": "REV Unified Pipeline v3.0",
+  "models_processed": [
+    "gpt2"
+  ],
+  "total_models": 1,
+  "results": {
+    "gpt2": {
+      "model": "/Users/rohanvinaik/LLM_models/gpt2",
+      "model_name": "gpt2",
+      "mode": "api",
+      "timestamp": "2025-09-14T09:42:28.566779",
+      "identification": {
+        "family": null,
+        "confidence": 0.0,
+        "method": "needs_light_probe",
+        "reference_model": null
+      },
+      "strategy": {
+        "strategy": "light_probe",
+        "challenges": 5,
+        "sample_layers": "adaptive",
+        "notes": "Light probe for family identification (enables 15-20x speedup)"
+      },
+      "stages": {
+        "initialization": {
+          "success": true,
+          "time": 0.007570981979370117,
+          "mode": "api",
+          "provider": "local"
+        },
+        "challenge_generation": {
+          "orchestrated": true,
+          "prompt_types": [],
+          "target_layers": null
+        },
+        "challenges": {
+          "count": 0,
+          "time": 0.0008492469787597656,
+          "pot_enabled": true,
+          "adversarial_enabled": false,
+          "adversarial_ratio": 0
+        },
+        "processing": {
+          "success": false,
+          "hypervectors_generated": 0,
+          "responses_generated": 0,
+          "unified_fingerprints_generated": 0,
+          "time": 7.152557373046875e-07,
+          "sparsity": null,
+          "avg_divergence": null,
+          "avg_fingerprint_quality": null,
+          "avg_binding_strength": null
+        },
+        "behavioral_analysis": {
+          "metrics": {},
+          "time": 0.0
+        },
+        "paper_validation": {
+          "claims_validated": {
+            "api_only_default": {
+              "validated": true,
+              "mode": "api"
+            },
+            "hypervector_generation": {
+              "validated": false,
+              "count": 0
+            },
+            "pot_challenges": {
+              "validated": true,
+              "count": 0
+            },
+            "behavioral_analysis": {
+              "validated": false,
+              "metrics_count": 0
+            }
+          },
+          "time": 3.0994415283203125e-06
+        }
+      },
+      "diagnostics": {
+        "report_saved": "reports/diagnostic_gpt2_20250914_094228.json",
+        "summary": {
+          "timestamp": "2025-09-14T09:42:28.575219",
+          "session_duration_minutes": 0.0033825166666666667,
+          "total_executions": 0,
+          "successful_executions": 0,
+          "failed_executions": 0,
+          "success_rate": 0,
+          "fallback_count": 0,
+          "using_behavioral_probing": false
+        }
+      }
+    }
+  },
+  "comparisons": {},
+  "summary": {
+    "models_processed": 1,
+    "api_models": 1,
+    "local_models": 0,
+    "behavioral_sites_discovered": 0,
+    "total_processing_time": 0.008424043655395508
+  }
+}

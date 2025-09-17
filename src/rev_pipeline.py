@@ -1295,7 +1295,57 @@ class REVPipeline:
         
         # Analyze layer behaviors
         layer_signatures = {}
-        sample_layers = list(range(0, num_layers, max(1, num_layers // 20)))  # Sample ~20 layers
+        # Improved adaptive sampling: 10-20% of layers for unknown models
+        # Always include first, last, and strategic middle layers
+        if num_layers <= 10:
+            # Small models: sample all layers
+            sample_layers = list(range(num_layers))
+        elif num_layers <= 30:
+            # Medium models: ~20% sampling (6 layers for 30-layer model)
+            sampling_rate = max(1, num_layers // 5)
+            sample_layers = list(range(0, num_layers, sampling_rate))
+        else:
+            # Large models: 10-15% sampling with strategic placement
+            # Calculate optimal sampling percentage based on model size
+            if num_layers <= 50:
+                target_percentage = 0.15  # 15% for 30-50 layer models
+            elif num_layers <= 100:
+                target_percentage = 0.12  # 12% for 50-100 layer models
+            else:
+                target_percentage = 0.10  # 10% for very large models
+
+            target_samples = max(10, int(num_layers * target_percentage))
+
+            # Strategic layer selection for efficient REV site detection
+            sample_layers = []
+
+            # Always include boundary layers
+            sample_layers.extend([0, 1, num_layers - 2, num_layers - 1])
+
+            # Add strategic middle points (quarters, thirds)
+            strategic_points = [
+                num_layers // 4,      # 25%
+                num_layers // 2,      # 50%
+                3 * num_layers // 4,  # 75%
+                num_layers // 3,      # 33%
+                2 * num_layers // 3   # 67%
+            ]
+
+            for point in strategic_points:
+                if point not in sample_layers and 0 < point < num_layers:
+                    sample_layers.append(point)
+
+            # Fill remaining samples evenly
+            remaining_samples = target_samples - len(sample_layers)
+            if remaining_samples > 0:
+                # Calculate stride for even distribution
+                stride = max(2, (num_layers - 4) // remaining_samples)
+                for layer in range(2, num_layers - 2, stride):
+                    if layer not in sample_layers and len(sample_layers) < target_samples:
+                        sample_layers.append(layer)
+
+            # Sort for sequential processing
+            sample_layers = sorted(set(sample_layers))
         
         logger.info(f"Analyzing {len(sample_layers)} layers with {sum(len(p) for p in probes.values())} probes")
         

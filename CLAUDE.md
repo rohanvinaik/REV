@@ -44,13 +44,20 @@ This is fundamentally different from traditional inference where entire models a
 - **Only behavior reveals truth** - Topological patterns under prompt injection
 
 **How Model Identification Works:**
-1. Initial probe injects test prompts at various layers
+1. Light behavioral probe samples 10-20% of layers (adaptive by model size)
 2. Measures variance profile and divergence patterns
-3. Identifies restriction sites (behavioral boundaries)
-4. Matches topology against reference library
+3. Binary search interpolation finds exact restriction sites (behavioral boundaries)
+4. Matches topology against reference library using sorting algorithms
 5. Confidence = topological similarity (0-100%)
 
-**Orchestration is now DEFAULT** - Automatically generates 250-400+ challenges
+**Smart Sampling Strategy:**
+- Small models (≤10 layers): 100% coverage
+- Medium models (11-30 layers): ~20% sampling
+- Large models (31-100 layers): 12-15% sampling
+- Very large models (>100 layers): 10% sampling with strategic points
+- Always includes boundaries (first/last) and key percentiles (25%, 50%, 75%)
+
+**Orchestration is DEFAULT** - Automatically generates 250-400+ challenges
 
 ## 🔬 HOW FINGERPRINTING ACTUALLY WORKS
 
@@ -284,17 +291,20 @@ python run_rev.py /Users/.../pythia-70m/snapshots/xxx --enable-prompt-orchestrat
 # - Correctly identifies llama models based on unique variance patterns
 ```
 
-**Adaptive Light Probe**:
-- Initial probe: Samples every 3rd layer for large models
-- If confidence < 80%: Expands to all layers automatically
-- Re-identifies with enhanced profile for better accuracy
-- Ensures correct family identification before using references
+**Adaptive Light Probe** (Improved November 2024):
+- **Sampling Strategy**: 10-20% of layers based on model size (not fixed "every 3rd")
+- **Strategic Points**: Always includes boundaries (0, 1, n-2, n-1) and key percentiles
+- **If confidence < 80%**: Expands sampling adaptively
+- **Ensures correct family identification** before using references
 
-**Smart Interpolation for Sparse Sampling**:
-- **Purpose**: Detects exact behavioral transition points that sparse sampling might miss
-- **Activation**: Only near detected transitions (delta > 0.05 or direction change with delta > 0.02)
-- **Method**: Uses golden ratio (0.618) placement for optimal transition detection
-- **Efficiency**: Preserves sparse sampling speedup by only interpolating where needed
+**Efficient Binary Search Interpolation**:
+- **Purpose**: Precisely locates behavioral transitions (REV sites)
+- **Method**: Sorting-based transition detection + binary search refinement
+- **Activation Thresholds**:
+  - Very strong transitions (>0.25): 3-point binary search
+  - Moderate transitions (>0.1): 2-point golden ratio search
+  - Weak transitions (>0.02): Single midpoint
+- **Efficiency**: Only interpolates at detected transitions, not uniformly
 - **Dense Pattern Handling**: Automatically skips interpolation for reference builds with complete layer data
 - **Thresholds**: Based on empirical analysis of reference runs (transitions range from 0.0036 to 0.6333)
 
@@ -798,6 +808,30 @@ python run_rev.py /path/to/model --challenges 10 --debug
 python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 30
 # Generates 250+ challenges regardless of --challenges value
 ```
+
+## 🎯 LIGHT BEHAVIORAL SAMPLING (November 2024 Improvements)
+
+**Efficient Layer Sampling for Unknown Models**:
+When encountering a new/unknown model, REV uses intelligent adaptive sampling:
+
+| Model Size | Layers | Sampling Strategy | Coverage |
+|------------|--------|------------------|----------|
+| Small | ≤10 | All layers | 100% |
+| Medium | 11-30 | Every 5th layer | ~20% |
+| Large | 31-50 | Strategic + even distribution | 15% |
+| Very Large | 51-100 | Strategic + sparse | 12% |
+| Massive | >100 | Boundaries + key percentiles | 10% |
+
+**Strategic Layer Selection**:
+- **Always included**: First 2 layers, last 2 layers
+- **Key percentiles**: 25%, 33%, 50%, 67%, 75% of depth
+- **Even distribution**: Fill remaining budget evenly
+
+**Binary Search for REV Sites**:
+1. Sort layer transitions by variance delta magnitude
+2. Identify top 5 transition candidates
+3. Apply binary search refinement based on transition strength
+4. Precisely locate behavioral boundaries without exhaustive testing
 
 ## 🔬 DEEP BEHAVIORAL ANALYSIS
 
