@@ -793,11 +793,14 @@ class REVUnified:
                             'divergence_delta': delta
                         })
 
+                # Ensure divergence_dict is defined
+                divergence_dict = dict(divergence_scores) if divergence_scores else {}
+
                 light_fingerprint = {
                     'variance_profile': behavioral_profile,  # Use behavioral scores like reference
                     'restriction_sites': restriction_sites,
                     'layer_count': layer_count,
-                    'layer_divergences': divergence_dict if divergence_scores else {},
+                    'layer_divergences': divergence_dict,
                     'restriction_site_data': restriction_site_data,
                     'behavioral_scores': behavioral_dict
                 }
