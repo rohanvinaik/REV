@@ -132,10 +132,10 @@ class DualLibrarySystem:
         """
         Identify a model based on behavioral analysis results.
         This is the REAL identification based on variance profiles and topology.
-        
+
         Args:
             fingerprint_data: The behavioral fingerprint data from analysis
-            
+
         Returns:
             ModelIdentification with actual confidence based on behavior
         """
@@ -143,6 +143,12 @@ class DualLibrarySystem:
         restriction_sites = fingerprint_data.get("restriction_sites", [])
         variance_profile = fingerprint_data.get("variance_profile", [])
         layer_divergences = fingerprint_data.get("layer_divergences", {})
+
+        # Debug output
+        print(f"[DEBUG-IDENTIFY] Fingerprint data:")
+        print(f"  - Restriction sites: {restriction_sites[:5] if restriction_sites else 'None'}")
+        print(f"  - Variance profile length: {len(variance_profile) if variance_profile else 0}")
+        print(f"  - Layer divergences: {len(layer_divergences) if layer_divergences else 0} entries")
         
         if not restriction_sites and not variance_profile:
             return ModelIdentification(
@@ -156,17 +162,45 @@ class DualLibrarySystem:
         # Compare topology against reference library
         best_match = None
         best_similarity = 0.0
-        
+
+        print(f"[DEBUG-IDENTIFY] Checking {len(self.reference_library.get('fingerprints', {}))} references")
+
         for fp_id, ref_data in self.reference_library.get("fingerprints", {}).items():
             ref_sites = ref_data.get("restriction_sites", [])
             ref_profile = ref_data.get("variance_profile", [])
-            
+
+            # Try to extract variance from behavioral patterns if no variance_profile
+            if not ref_profile and "behavioral_patterns" in ref_data:
+                bp = ref_data["behavioral_patterns"]
+                # Check for various possible variance data locations
+                if isinstance(bp, dict):
+                    if "variance" in bp and isinstance(bp["variance"], list):
+                        ref_profile = bp["variance"]
+                    elif "variance_profile" in bp and isinstance(bp["variance_profile"], list):
+                        ref_profile = bp["variance_profile"]
+
+            # Build synthetic variance profile from restriction sites if needed
+            if not ref_profile and ref_sites:
+                # Extract variance from restriction sites (the 'before' values represent variance)
+                ref_profile = []
+                for site in ref_sites:
+                    if isinstance(site, dict) and "before" in site:
+                        ref_profile.append(site["before"])
+                print(f"    Built synthetic profile from sites: {len(ref_profile)} values")
+
             # Compute topological similarity
+            layer_count1 = fingerprint_data.get("layer_count", 80)
+            layer_count2 = ref_data.get("layer_count", 32)
             similarity = self._compute_topology_similarity(
                 restriction_sites, ref_sites,
-                variance_profile, ref_profile
+                variance_profile, ref_profile,
+                layer_count1, layer_count2
             )
-            
+
+            print(f"[DEBUG-IDENTIFY] {fp_id[:30]}: similarity={similarity:.3f}, family={ref_data.get('model_family')}")
+            print(f"    ref_sites={ref_sites[:3] if ref_sites else 'None'}...")
+            print(f"    ref_profile={len(ref_profile) if ref_profile else 0} points")
+
             if similarity > best_similarity:
                 best_similarity = similarity
                 best_match = ref_data.get("model_family")
@@ -198,29 +232,52 @@ class DualLibrarySystem:
             notes=notes
         )
     
-    def _compute_topology_similarity(self, sites1, sites2, profile1, profile2):
+    def _compute_topology_similarity(self, sites1, sites2, profile1, profile2, layer_count1=None, layer_count2=None):
         """Compute similarity between two behavioral topologies.
-        
+
         Enhanced to focus on variance delta patterns rather than layer counts.
         Now includes interpolation to handle sparse sampling that might miss transitions.
         """
         if not sites1 or not sites2:
             return 0.0
-        
+
         # Extract variance delta patterns (the actual behavioral changes)
-        def extract_delta_pattern(sites):
-            """Extract pattern of variance changes."""
+        def extract_delta_pattern(sites, total_layers=None):
+            """Extract pattern of variance changes with normalized positions."""
             pattern = []
+            # Find max layer for normalization if not provided
+            if not total_layers:
+                max_layer = 1
+                for site in sites:
+                    if isinstance(site, dict):
+                        layer = site.get("layer", 0)
+                    else:
+                        layer = site
+                    max_layer = max(max_layer, layer)
+                total_layers = max_layer
+
             for site in sites:
                 if isinstance(site, dict):
                     # Get the delta magnitude and direction
                     delta = site.get("divergence_delta", 0.0)
                     percent = site.get("percent_change", 0.0)
+                    layer = site.get("layer", 0)
+                    # Normalize layer position to [0, 1] range
+                    relative_pos = layer / total_layers if total_layers > 0 else 0
                     pattern.append({
                         "delta": abs(delta),  # Magnitude
                         "direction": 1 if delta > 0 else -1 if delta < 0 else 0,
                         "percent": abs(percent),
-                        "relative_pos": site.get("layer", 0)  # Will normalize later
+                        "relative_pos": relative_pos
+                    })
+                else:
+                    # Simple layer number - no delta info available
+                    relative_pos = site / total_layers if total_layers > 0 else 0
+                    pattern.append({
+                        "delta": 0.1,  # Default small delta
+                        "direction": 0,
+                        "percent": 10.0,
+                        "relative_pos": relative_pos
                     })
             return pattern
         
@@ -346,8 +403,9 @@ class DualLibrarySystem:
 
             return enhanced
         
-        pattern1 = extract_delta_pattern(sites1)
-        pattern2 = extract_delta_pattern(sites2)
+        # Use provided layer counts or try to infer from sites
+        pattern1 = extract_delta_pattern(sites1, layer_count1)
+        pattern2 = extract_delta_pattern(sites2, layer_count2)
         
         # Normalize positions relative to model depth (don't care about absolute layer count)
         if pattern1 and pattern2:
@@ -441,15 +499,43 @@ class DualLibrarySystem:
             position_similarity = matches / max(len(norm1), len(norm2)) if max(len(norm1), len(norm2)) > 0 else 0
         
         # Compare variance profiles if available (TERTIARY FACTOR)
+        # CRITICAL: Normalize for different model sizes using interpolation
         profile_similarity = 0.0
         if profile1 and profile2:
-            # Simple correlation of variance patterns
-            min_len = min(len(profile1), len(profile2))
-            if min_len > 0:
-                corr = sum([p1 * p2 for p1, p2 in zip(profile1[:min_len], profile2[:min_len])])
-                norm = (sum([p**2 for p in profile1[:min_len]]) * sum([p**2 for p in profile2[:min_len]]))**0.5
-                if norm > 0:
-                    profile_similarity = corr / norm
+            # Normalize both profiles to same scale (0-1 positions)
+            # This allows comparing 32-layer model to 80-layer model
+
+            # Interpolate to common resolution for comparison
+            target_points = 20  # Compare at 20 normalized positions
+
+            def interpolate_profile(profile, n_points=20):
+                """Interpolate profile to n_points for size-invariant comparison."""
+                if len(profile) < 2:
+                    return profile
+
+                import numpy as np
+                # Create normalized positions for original profile
+                orig_positions = np.linspace(0, 1, len(profile))
+                # Target positions for interpolation
+                target_positions = np.linspace(0, 1, n_points)
+                # Interpolate values
+                interpolated = np.interp(target_positions, orig_positions, profile)
+                return interpolated.tolist()
+
+            # Interpolate both profiles to same resolution
+            norm_profile1 = interpolate_profile(profile1, target_points)
+            norm_profile2 = interpolate_profile(profile2, target_points)
+
+            # Compute cosine similarity on normalized profiles
+            if norm_profile1 and norm_profile2:
+                dot_product = sum(p1 * p2 for p1, p2 in zip(norm_profile1, norm_profile2))
+                norm1 = sum(p**2 for p in norm_profile1)**0.5
+                norm2 = sum(p**2 for p in norm_profile2)**0.5
+
+                if norm1 > 0 and norm2 > 0:
+                    profile_similarity = dot_product / (norm1 * norm2)
+                    # Ensure similarity is in [0, 1] range
+                    profile_similarity = max(0, min(1, profile_similarity))
         
         # NEW WEIGHTS: Variance patterns matter most, positions matter least
         # 60% delta patterns, 25% relative positions, 15% profiles
