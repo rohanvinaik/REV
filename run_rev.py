@@ -623,39 +623,72 @@ class REVUnified:
                 light_executor = LayerSegmentExecutor(light_config)
                 layer_count = light_executor.n_layers
                 
-                # LIGHT PROBE: Sample layers at fixed percentage (10-20%)
+                # LIGHT PROBE: Strategic sampling based on model size (CLAUDE.md guidance)
                 # This builds a quick topological map for reference matching
-                if layer_count <= 12:
-                    # Small models: probe every layer
+                if layer_count <= 10:
+                    # Small models: 100% coverage
                     sample_layers = list(range(layer_count))
-                elif layer_count <= 24:
-                    # Medium models: probe every 2nd layer  
-                    sample_layers = list(range(0, layer_count, 2))
+                elif layer_count <= 30:
+                    # Medium models: ~20% sampling
+                    target_samples = max(6, int(layer_count * 0.20))
+                    sample_layers = list(range(0, layer_count, max(1, layer_count // target_samples)))
+                elif layer_count <= 100:
+                    # Large models: 12-15% sampling with strategic points
+                    target_samples = max(8, int(layer_count * 0.12))
+                    # Always include boundaries (first 2, last 2) and key percentiles
+                    strategic_layers = set([0, 1, layer_count-2, layer_count-1])
+                    # Add key percentiles: 25%, 33%, 50%, 67%, 75%
+                    percentiles = [0.25, 0.33, 0.50, 0.67, 0.75]
+                    for p in percentiles:
+                        strategic_layers.add(int(layer_count * p))
+
+                    # Fill remaining budget with even distribution
+                    remaining_budget = target_samples - len(strategic_layers)
+                    if remaining_budget > 0:
+                        step_size = max(1, layer_count // remaining_budget)
+                        for i in range(step_size, layer_count, step_size):
+                            if len(strategic_layers) < target_samples:
+                                strategic_layers.add(i)
+
+                    sample_layers = sorted(list(strategic_layers))[:target_samples]
                 else:
-                    # Large models: sample 15% of layers at fixed pace
-                    # For 80-layer model: 12 layers instead of 27 layers
-                    target_samples = max(8, int(layer_count * 0.15))  # 15% with minimum of 8
-                    step_size = max(1, layer_count // target_samples)
-                    sample_layers = list(range(0, layer_count, step_size))
-                    # Ensure we don't exceed target and always include first/last
-                    if len(sample_layers) > target_samples:
-                        # Keep first, last, and evenly spaced middle layers
-                        indices = [0] + [int(i * (layer_count - 1) / (target_samples - 1)) 
-                                       for i in range(1, target_samples - 1)] + [layer_count - 1]
-                        sample_layers = sorted(list(set(indices)))
+                    # Very large models (>100 layers): 10% sampling, boundaries + key percentiles only
+                    target_samples = max(8, int(layer_count * 0.10))
+                    strategic_layers = set([0, 1, layer_count-2, layer_count-1])
+                    # Key percentiles for massive models
+                    percentiles = [0.25, 0.50, 0.75]
+                    for p in percentiles:
+                        strategic_layers.add(int(layer_count * p))
+
+                    # Add a few evenly spaced points if budget allows
+                    remaining_budget = target_samples - len(strategic_layers)
+                    if remaining_budget > 0:
+                        step_size = layer_count // (remaining_budget + 1)
+                        for i in range(step_size, layer_count, step_size):
+                            if len(strategic_layers) < target_samples:
+                                strategic_layers.add(i)
+
+                    sample_layers = sorted(list(strategic_layers))[:target_samples]
                 
                 print(f"   Light probe: Testing {len(sample_layers)} layers across {layer_count} total layers")
                 print(f"   Layers to probe: {sample_layers}")
                 
-                # Quick behavioral probes - 1-2 prompts per layer
+                # Quick behavioral probes - optimize for model size
                 variance_profile = []
                 divergence_scores = []
-                
-                # Use 2 different prompts for better topology mapping
-                test_prompts = [
-                    "Complete this sentence: The weather today is",
-                    "The capital of France is"
-                ]
+
+                # Adjust number of prompts based on model size to optimize performance
+                if layer_count <= 30:
+                    # Small/medium models: use 2 prompts for better accuracy
+                    test_prompts = [
+                        "Complete this sentence: The weather today is",
+                        "The capital of France is"
+                    ]
+                else:
+                    # Large models (>30 layers): use single prompt for speed
+                    test_prompts = [
+                        "Complete this sentence: The weather today is"
+                    ]
 
                 # Track behavioral scores like reference library
                 behavioral_scores = []
@@ -665,31 +698,48 @@ class REVUnified:
                     layer_variances = []
                     
                     # Test with both prompts at this layer
+                    layer_divergences = []
                     for prompt in test_prompts:
                         response = light_executor.execute_behavioral_probe(prompt, up_to_layer=layer_idx)
-                        
-                        if response and hasattr(response, 'hidden_states'):
-                            variance = response.hidden_states.var().item()
-                            layer_variances.append(variance)
-                    
-                    # Average variance for this layer
-                    if layer_variances:
-                        avg_variance = sum(layer_variances) / len(layer_variances)
+
+                        if response:
+                            # Get the actual divergence score from the response's statistical signature
+                            if hasattr(response, 'statistical_signature') and response.statistical_signature:
+                                actual_divergence = response.statistical_signature.get('overall_divergence', 0.29)
+                                layer_divergences.append(actual_divergence)
+
+                            # Also collect variance for backward compatibility
+                            if hasattr(response, 'hidden_states'):
+                                variance = response.hidden_states.var().item()
+                                layer_variances.append(variance)
+
+                    # Average variance and divergence for this layer
+                    if layer_divergences:
+                        # Use actual divergence scores from the executor (0.28-0.36 range)
+                        avg_divergence = sum(layer_divergences) / len(layer_divergences)
+
+                        # Also track variance for profile
+                        if layer_variances:
+                            avg_variance = sum(layer_variances) / len(layer_variances)
+                        else:
+                            avg_variance = 0.001
                         variance_profile.append(avg_variance)
 
-                        # Convert to behavioral score like reference library (0.2-0.97 range)
-                        # Reference values: 0.9688, 0.5, 0.8333, 0.2
-                        # Normalize variance to behavioral score
-                        # Higher variance = more behavioral divergence
-                        behavioral_score = min(0.97, max(0.2, avg_variance * 2.0 + 0.2))
+                        # Convert divergence to behavioral score (0.2-0.97 range like reference)
+                        # The reference library has values like: 0.9688, 0.5, 0.8333, 0.2
+                        # Map divergence scores (0.28-0.36) to behavioral scores (0.2-0.97)
+                        # Linear mapping: 0.28 -> 0.2, 0.32 -> 0.5, 0.36 -> 0.97
+                        behavioral_score = min(0.97, max(0.2,
+                            0.2 + (avg_divergence - 0.28) * ((0.97 - 0.2) / (0.36 - 0.28))
+                        ))
                         behavioral_scores.append((layer_idx, behavioral_score))
 
-                        # Calculate divergence from previous layer
+                        # Calculate relative divergence from previous layer
                         if i > 0:
                             divergence = abs(avg_variance - variance_profile[i-1]) / (variance_profile[i-1] + 1e-8)
                             divergence_scores.append((layer_idx, divergence))
 
-                        print(f"   Layer {layer_idx:2d}: variance={avg_variance:.3f}, behavioral_score={behavioral_score:.3f}")
+                        print(f"   Layer {layer_idx:2d}: variance={avg_variance:.3f}, divergence={avg_divergence:.3f}, behavioral_score={behavioral_score:.3f}")
                     else:
                         variance_profile.append(0.0)
                         behavioral_scores.append((layer_idx, 0.2))  # Default minimum score
@@ -716,8 +766,16 @@ class REVUnified:
                         delta = abs(variance_profile[i] - variance_profile[i-1])
                         relative_change = delta / (variance_profile[i-1] + 1e-8)
 
-                        # Only probe at significant transitions (>5% change)
-                        if relative_change > 0.05 and i < len(sample_layers) - 1:
+                        # Adjust threshold for significant transitions based on model size
+                        # Larger models need higher thresholds to avoid excessive interpolation
+                        if layer_count <= 30:
+                            transition_threshold = 0.05  # 5% for small/medium models
+                        elif layer_count <= 80:
+                            transition_threshold = 0.08  # 8% for large models
+                        else:
+                            transition_threshold = 0.12  # 12% for very large models
+
+                        if relative_change > transition_threshold and i < len(sample_layers) - 1:
                             # Add interpolation point between these layers
                             layer_before = sample_layers[i-1]
                             layer_after = sample_layers[i]
@@ -729,8 +787,19 @@ class REVUnified:
                                     transitions.append((mid_layer, relative_change))
 
                 # Sort by transition strength and probe top transitions only
+                # Limit interpolation based on model size to optimize performance
                 transitions.sort(key=lambda x: x[1], reverse=True)
-                additional_layers = [layer for layer, _ in transitions[:3]]  # Max 3 additional probes
+                if layer_count <= 30:
+                    # Small/medium models: allow up to 3 additional probes
+                    max_interpolation = 3
+                elif layer_count <= 80:
+                    # Large models: limit to 2 additional probes
+                    max_interpolation = 2
+                else:
+                    # Very large models (>80 layers): minimal interpolation (1 probe)
+                    max_interpolation = 1
+
+                additional_layers = [layer for layer, _ in transitions[:max_interpolation]]
 
                 # Perform interpolation at detected transitions
                 if additional_layers:
@@ -740,16 +809,29 @@ class REVUnified:
                     # Run additional probes
                     for layer_idx in additional_layers:
                         layer_variances = []
+                        layer_divergences = []
                         for prompt in test_prompts:
                             response = light_executor.execute_behavioral_probe(prompt, up_to_layer=layer_idx)
-                            if response and hasattr(response, 'hidden_states'):
-                                variance = response.hidden_states.var().item()
-                                layer_variances.append(variance)
+                            if response:
+                                # Get actual divergence score from response
+                                if hasattr(response, 'statistical_signature') and response.statistical_signature:
+                                    actual_divergence = response.statistical_signature.get('overall_divergence', 0.29)
+                                    layer_divergences.append(actual_divergence)
+                                # Also get variance
+                                if hasattr(response, 'hidden_states'):
+                                    variance = response.hidden_states.var().item()
+                                    layer_variances.append(variance)
 
-                        if layer_variances:
-                            avg_variance = sum(layer_variances) / len(layer_variances)
-                            # Convert to behavioral score
-                            behavioral_score = min(0.97, max(0.2, avg_variance * 2.0 + 0.2))
+                        if layer_divergences:
+                            avg_divergence = sum(layer_divergences) / len(layer_divergences)
+                            if layer_variances:
+                                avg_variance = sum(layer_variances) / len(layer_variances)
+                            else:
+                                avg_variance = 0.001
+                            # Convert divergence to behavioral score using same mapping
+                            behavioral_score = min(0.97, max(0.2,
+                                0.2 + (avg_divergence - 0.28) * ((0.97 - 0.2) / (0.36 - 0.28))
+                            ))
                             # Insert at correct position to maintain order
                             insert_idx = next((i for i, v in enumerate(sample_layers) if v > layer_idx), len(sample_layers))
                             sample_layers.insert(insert_idx, layer_idx)
@@ -798,7 +880,7 @@ class REVUnified:
 
                 light_fingerprint = {
                     'variance_profile': behavioral_profile,  # Use behavioral scores like reference
-                    'restriction_sites': restriction_sites,
+                    'restriction_sites': restriction_site_data,  # Use full dictionary format like reference
                     'layer_count': layer_count,
                     'layer_divergences': divergence_dict,
                     'restriction_site_data': restriction_site_data,

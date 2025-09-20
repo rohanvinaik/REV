@@ -238,7 +238,15 @@ class DualLibrarySystem:
         Enhanced to focus on variance delta patterns rather than layer counts.
         Now includes interpolation to handle sparse sampling that might miss transitions.
         """
+        # Debug output to understand why matching returns 0%
+        print(f"[DEBUG-SIMILARITY] Computing topology similarity:")
+        print(f"  sites1: {len(sites1) if sites1 else 0} sites - {sites1[:2] if sites1 else 'None'}")
+        print(f"  sites2: {len(sites2) if sites2 else 0} sites - {sites2[:2] if sites2 else 'None'}")
+        print(f"  profile1: {len(profile1) if profile1 else 0} points")
+        print(f"  profile2: {len(profile2) if profile2 else 0} points")
+
         if not sites1 or not sites2:
+            print(f"[DEBUG-SIMILARITY] Returning 0.0 - empty sites")
             return 0.0
 
         # Extract variance delta patterns (the actual behavioral changes)
@@ -721,12 +729,19 @@ def create_dual_library() -> DualLibrarySystem:
 def identify_and_strategize(model_path: str) -> Tuple[ModelIdentification, Dict]:
     """
     Identify a model and get its testing strategy.
-    
+
     Returns:
         (identification, strategy)
     """
     library = create_dual_library()
     identification = library.identify_model(model_path)
     strategy = library.get_testing_strategy(identification)
-    
+
+    # Debug output
+    print(f"[DEBUG-IDENTIFY-AND-STRATEGIZE] Initial identification:")
+    print(f"  Family: {identification.identified_family}")
+    print(f"  Confidence: {identification.confidence}")
+    print(f"  Method: {identification.method}")
+    print(f"  Notes: {identification.notes}")
+
     return identification, strategy
