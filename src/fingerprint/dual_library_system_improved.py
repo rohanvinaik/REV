@@ -26,28 +26,10 @@ class ModelIdentification:
     notes: str = ""
 
 
-class DualLibrarySystem:
+class DualLibrarySystemImproved:
     """
     Improved matching algorithm that handles cross-size model comparison.
-    Dual Library System for REV with enhanced cross-size matching.
-    - Reference Library: Base fingerprints from smallest models of each family
-    - Active Library: Continuously updated with new runs
     """
-
-    # Known model family patterns
-    FAMILY_PATTERNS = {
-        "gpt": ["gpt", "gpt2", "gpt-neo", "gpt-j", "distilgpt"],
-        "llama": ["llama", "alpaca", "vicuna", "guanaco"],
-        "mistral": ["mistral", "mixtral"],
-        "qwen": ["qwen", "qwen2"],
-        "yi": ["yi-"],
-        "falcon": ["falcon"],
-        "bloom": ["bloom", "bloomz"],
-        "opt": ["opt-"],
-        "pythia": ["pythia"],
-        "dolly": ["dolly"],
-        "stablelm": ["stablelm", "stable-lm"],
-    }
 
     # Reference models (smallest of each family)
     REFERENCE_MODELS = {
@@ -295,84 +277,15 @@ class DualLibrarySystem:
                     pattern_similarity = overlap_count / max(len(test_high_regions), len(ref_high_regions))
                     print(f"  Pattern similarity: {pattern_similarity:.3f}")
 
-            # === METHOD 4: Syntactic Feature Matching ===
-            syntactic_similarity = 0.0
-
-            # Extract response-based features if available
-            test_responses = fingerprint_dict.get('response_text', '')
-            ref_responses = ref_model.get('response_text', '')
-
-            if test_responses and ref_responses:
-                # Token diversity comparison (simplified)
-                test_tokens = set(test_responses.lower().split())
-                ref_tokens = set(ref_responses.lower().split())
-                if test_tokens and ref_tokens:
-                    token_overlap = len(test_tokens & ref_tokens) / max(len(test_tokens), len(ref_tokens))
-                    syntactic_similarity = token_overlap
-                    print(f"  Syntactic similarity: {syntactic_similarity:.3f}")
-
-            # === METHOD 5: Semantic Feature Matching ===
-            semantic_similarity = 0.0
-
-            # Compare embedding statistics if available
-            test_embeddings = fingerprint_dict.get('embedding_stats', {})
-            ref_embeddings = ref_model.get('embedding_stats', {})
-
-            if test_embeddings and ref_embeddings:
-                # Compare mean and std of embeddings
-                test_mean = test_embeddings.get('mean', 0)
-                ref_mean = ref_embeddings.get('mean', 0)
-                if test_mean and ref_mean:
-                    semantic_similarity = 1.0 - abs(test_mean - ref_mean) / max(abs(test_mean), abs(ref_mean))
-                    print(f"  Semantic similarity: {semantic_similarity:.3f}")
-
-            # === METHOD 6: Behavioral Feature Matching ===
-            behavioral_similarity = 0.0
-
-            # Compare response consistency and patterns
-            test_consistency = fingerprint_dict.get('response_consistency', 0)
-            ref_consistency = ref_model.get('response_consistency', 0)
-
-            if test_consistency and ref_consistency:
-                behavioral_similarity = 1.0 - abs(test_consistency - ref_consistency)
-                print(f"  Behavioral consistency match: {behavioral_similarity:.3f}")
-
-            # === METHOD 7: Architectural Feature Matching ===
-            architectural_similarity = 0.0
-
-            # Compare layer count and model dimensions
-            test_dims = fingerprint_dict.get('hidden_size', 0)
-            ref_dims = ref_model.get('hidden_size', 0)
-
-            # Layer count similarity (already have this)
-            layer_ratio = min(test_layers, ref_layers) / max(test_layers, ref_layers) if test_layers > 0 else 0
-
-            # Dimension similarity if available
-            dim_ratio = 1.0
-            if test_dims and ref_dims:
-                dim_ratio = min(test_dims, ref_dims) / max(test_dims, ref_dims)
-
-            architectural_similarity = (layer_ratio + dim_ratio) / 2
-            print(f"  Architectural similarity: {architectural_similarity:.3f}")
-
-            # === COMBINE SCORES WITH ENHANCED WEIGHTS ===
-            # Weight different components based on reliability and discriminative power
+            # === COMBINE SCORES WITH WEIGHTS ===
+            # Weight different components based on reliability
             scores = {
-                # Core variance-based methods (50% total weight)
-                'pearson': (pearson_corr, 0.15),           # Linear correlation
-                'spearman': (spearman_corr, 0.10),         # Rank correlation
-                'mae': (mae_similarity, 0.15),             # Absolute difference
-                'shape': (shape_correlation, 0.10),        # Shape similarity
-
-                # Structural methods (25% total weight)
-                'sites': (site_similarity, 0.15),          # Restriction sites
-                'pattern': (pattern_similarity, 0.10),     # High/low patterns
-
-                # Principled features (25% total weight)
-                'syntactic': (syntactic_similarity, 0.05),    # Token patterns
-                'semantic': (semantic_similarity, 0.05),      # Embedding similarity
-                'behavioral': (behavioral_similarity, 0.05),  # Response consistency
-                'architectural': (architectural_similarity, 0.10)  # Model structure
+                'pearson': (pearson_corr, 0.20),      # Linear correlation
+                'spearman': (spearman_corr, 0.15),    # Rank correlation
+                'mae': (mae_similarity, 0.25),        # Absolute difference
+                'shape': (shape_correlation, 0.15),   # Shape similarity
+                'sites': (site_similarity, 0.15),     # Restriction sites
+                'pattern': (pattern_similarity, 0.10) # High/low patterns
             }
 
             # Calculate weighted average
@@ -422,58 +335,24 @@ class DualLibrarySystem:
             print(f"\n[MATCHING] Size ratio: {size_ratio:.2f}, Adjusted threshold: {adjusted_threshold:.3f}")
 
             if best_score >= adjusted_threshold:
-                # Enhanced confidence calculation with better boosting
+                # Boost confidence for same-family matches with known patterns
                 confidence_boost = 1.0
                 ref_family = best_match.get('model_family', best_match.get('family', ''))
 
-                # Progressive boost based on base confidence level
-                if best_score < 0.5:
-                    base_boost = 1.4  # Stronger boost for lower scores that pass threshold
-                elif best_score < 0.7:
-                    base_boost = 1.2
-                else:
-                    base_boost = 1.1
+                # Special boost for known patterns
+                if 'llama' in ref_family.lower() and test_layers == 80:
+                    confidence_boost = 1.3  # Known Llama-70B pattern
+                elif 'llama' in ref_family.lower() and test_layers > 32:
+                    confidence_boost = 1.2  # Large Llama model
 
-                confidence_boost *= base_boost
-
-                # Special boost for known architecture patterns
-                if 'llama' in ref_family.lower():
-                    if test_layers == 80:  # Exact match for Llama-70B
-                        confidence_boost *= 1.2
-                    elif test_layers > 32:  # Other large Llama models
-                        confidence_boost *= 1.15
-
-                # Common size transition pairs get additional boost
-                common_transitions = [
-                    (32, 80),   # 7B -> 70B
-                    (32, 40),   # 7B -> 13B
-                    (6, 12),    # DistilGPT -> GPT2
-                    (32, 64),   # Small -> Medium
-                ]
-
-                size_pair = (ref_layers, test_layers)
-                if size_pair in common_transitions or (test_layers, ref_layers) in common_transitions:
-                    confidence_boost *= 1.1
-
-                # Calculate final confidence
                 final_confidence = min(0.95, best_score * confidence_boost)
-
-                # Determine confidence label
-                if final_confidence > 0.85:
-                    confidence_label = "high_confidence"
-                elif final_confidence > 0.65:
-                    confidence_label = "moderate_confidence"
-                elif final_confidence > 0.45:
-                    confidence_label = "low_confidence"
-                else:
-                    confidence_label = "uncertain"
 
                 return ModelIdentification(
                     identified_family=ref_family,
                     confidence=final_confidence,
                     method="cross_size_behavioral_matching",
                     reference_model=best_match.get('reference_model', 'unknown'),
-                    notes=f"Matched across size difference ({ref_layers} vs {test_layers} layers) - {confidence_label}"
+                    notes=f"Matched across size difference ({ref_layers} vs {test_layers} layers)"
                 )
 
         # Return actual score even if below threshold (for debugging)
@@ -494,154 +373,6 @@ class DualLibrarySystem:
         )
 
 
-    def identify_model(self, model_path: str) -> ModelIdentification:
-        """
-        Identify a model through LIGHT behavioral analysis.
-
-        This does a QUICK probe (not deep analysis) to identify the model family
-        so we can use reference libraries for 15-20x speedup.
-        """
-        model_name = Path(model_path).name.lower()
-
-        # SECURITY: We do behavioral verification, but LIGHTWEIGHT
-        logger.info(f"Starting LIGHT behavioral probe for {model_name}")
-        logger.info("Quick topology scan for reference matching...")
-
-        # For now, mark as requiring light probe
-        # The actual light probe will be done by the pipeline
-        return ModelIdentification(
-            identified_family=None,
-            confidence=0.0,
-            method="needs_light_probe",
-            reference_model=None,
-            notes="Light behavioral probe needed for family identification"
-        )
-
-    def get_reference_fingerprint(self, family: str) -> Optional[Dict]:
-        """Get the reference fingerprint for a model family."""
-        for fp_id, fp_data in self.reference_library.get("fingerprints", {}).items():
-            if fp_data.get("model_family") == family:
-                return fp_data
-        return None
-
-    def get_testing_strategy(self, identification: ModelIdentification) -> Dict:
-        """
-        Get testing strategy based on identification.
-
-        Returns:
-            Dict with testing configuration
-        """
-        # If we have a behavioral match with good confidence, use reference
-        if identification.method == "cross_size_behavioral_matching" and identification.confidence > 0.3:
-            # We have a family identification - check for reference
-            reference_fp = self.get_reference_fingerprint(identification.identified_family)
-            if reference_fp:
-                # Extract restriction sites from reference
-                restriction_sites = reference_fp.get("restriction_sites", [])
-                focus_layers = []
-                if restriction_sites:
-                    # Use restriction sites as focus layers
-                    for site in restriction_sites:
-                        if isinstance(site, dict) and "layer" in site:
-                            focus_layers.append(site["layer"])
-                        elif isinstance(site, int):
-                            focus_layers.append(site)
-
-                return {
-                    "strategy": "targeted",
-                    "reference_model": identification.reference_model,
-                    "focus_layers": focus_layers[:10],  # Top 10 restriction sites
-                    "restriction_sites": restriction_sites,
-                    "skip_layers": reference_fp.get("stable_layers", []),
-                    "cassettes": reference_fp.get("recommended_cassettes", ["syntactic", "semantic"]),
-                    "expected_patterns": reference_fp.get("behavioral_patterns", {}),
-                    "challenges": reference_fp.get("challenges_processed", 10),
-                    "notes": f"Using reference from {identification.reference_model} with {len(focus_layers)} restriction sites"
-                }
-            else:
-                # Family identified but no reference available
-                return {
-                    "strategy": "standard",
-                    "challenges": 15,
-                    "notes": f"Family {identification.identified_family} identified but no reference available"
-                }
-
-        elif identification.method == "needs_light_probe":
-            # Do LIGHT probe first (not deep analysis)
-            return {
-                "strategy": "light_probe",
-                "challenges": 5,  # Just 5 quick probes
-                "sample_layers": "adaptive",  # Sample based on layer count
-                "notes": "Light probe for family identification (enables 15-20x speedup)"
-            }
-
-        elif identification.method == "below_threshold":
-            # Low confidence, need more probing
-            return {
-                "strategy": "exploratory",
-                "challenges": 20,
-                "notes": f"Low confidence match ({identification.confidence:.1%}), exploratory analysis needed"
-            }
-
-        else:
-            # Default fallback
-            return {
-                "strategy": "exploratory",
-                "challenges": 20,
-                "notes": "Full exploratory analysis"
-            }
-
-    def add_to_active_library(self, fingerprint_data: Dict, model_info: Dict):
-        """Add a new fingerprint to the active library."""
-        from datetime import datetime
-
-        # Generate ID
-        fp_id = f"{model_info['model_name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        # Add to active library
-        if "fingerprints" not in self.active_library:
-            self.active_library["fingerprints"] = {}
-
-        self.active_library["fingerprints"][fp_id] = {
-            **fingerprint_data,
-            **model_info,
-            "timestamp": datetime.now().isoformat()
-        }
-
-        # Update metadata
-        if "metadata" not in self.active_library:
-            self.active_library["metadata"] = {}
-        self.active_library["metadata"]["last_updated"] = datetime.now().isoformat()
-        self.active_library["metadata"]["num_fingerprints"] = len(self.active_library["fingerprints"])
-
-        # Save
-        self._save_library(self.active_library, self.active_path)
-        logger.info(f"Added fingerprint {fp_id} to active library")
-
-    def _save_library(self, library: Dict, path: Path):
-        """Save a library to disk."""
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, 'w') as f:
-                json.dump(library, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save library to {path}: {e}")
-
-
-def create_dual_library():
-    """Create a dual library system instance with improved cross-size matching."""
-    return DualLibrarySystem()
-
-
-def identify_and_strategize(model_path: str) -> Tuple[ModelIdentification, Dict]:
-    """
-    Identify a model and get its testing strategy.
-
-    Returns:
-        (identification, strategy)
-    """
-    library = create_dual_library()
-    identification = library.identify_model(model_path)
-    strategy = library.get_testing_strategy(identification)
-
-    return identification, strategy
+def create_dual_library_improved():
+    """Create an improved dual library system instance."""
+    return DualLibrarySystemImproved()

@@ -710,38 +710,59 @@
       "restriction_sites": [
         {
           "layer": 5,
-          "divergence_delta": 0.015,
-          "percent_change": 5.0,
-          "before": 0.3,
-          "after": 0.315
+          "divergence_delta": -0.4688,
+          "percent_change": -48.39,
+          "before": 0.9688,
+          "after": 0.5
+        },
+        {
+          "layer": 5,
+          "divergence_delta": 0.4688,
+          "percent_change": 93.75,
+          "before": 0.5,
+          "after": 0.9688
+        },
+        {
+          "layer": 6,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.9688,
+          "after": 0.9688
+        },
+        {
+          "layer": 7,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.9688,
+          "after": 0.9688
+        },
+        {
+          "layer": 8,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.9688,
+          "after": 0.9688
+        },
+        {
+          "layer": 9,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.9688,
+          "after": 0.9688
         },
         {
           "layer": 10,
-          "divergence_delta": 0.02,
-          "percent_change": 6.5,
-          "before": 0.31,
-          "after": 0.33
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.9688,
+          "after": 0.9688
         },
         {
-          "layer": 15,
-          "divergence_delta": -0.018,
-          "percent_change": -5.5,
-          "before": 0.325,
-          "after": 0.307
-        },
-        {
-          "layer": 20,
-          "divergence_delta": 0.025,
-          "percent_change": 8.0,
-          "before": 0.312,
-          "after": 0.337
-        },
-        {
-          "layer": 25,
-          "divergence_delta": 0.022,
-          "percent_change": 21.0,
-          "before": 0.32,
-          "after": 0.342
+          "layer": 11,
+          "divergence_delta": 0.0,
+          "percent_change": 0.0,
+          "before": 0.9688,
+          "after": 0.9688
         }
       ],
       "stable_regions": [],
@@ -980,76 +1001,7 @@
         "passed_validation": true,
         "validation_timestamp": "2025-09-13T18:12:08.237894"
       },
-      "timestamp": "2025-09-13T18:12:08.237902",
-      "behavioral_profile": [
-        0.305,
-        0.31,
-        0.308,
-        0.312,
-        0.315,
-        0.315,
-        0.318,
-        0.32,
-        0.322,
-        0.325,
-        0.33,
-        0.328,
-        0.325,
-        0.322,
-        0.32,
-        0.307,
-        0.31,
-        0.315,
-        0.318,
-        0.322,
-        0.337,
-        0.335,
-        0.332,
-        0.33,
-        0.328,
-        0.342,
-        0.34,
-        0.338,
-        0.335,
-        0.333,
-        0.33,
-        0.328
-      ],
-      "variance_profile": [
-        0.305,
-        0.31,
-        0.308,
-        0.312,
-        0.315,
-        0.315,
-        0.318,
-        0.32,
-        0.322,
-        0.325,
-        0.33,
-        0.328,
-        0.325,
-        0.322,
-        0.32,
-        0.307,
-        0.31,
-        0.315,
-        0.318,
-        0.322,
-        0.337,
-        0.335,
-        0.332,
-        0.33,
-        0.328,
-        0.342,
-        0.34,
-        0.338,
-        0.335,
-        0.333,
-        0.33,
-        0.328
-      ],
-      "layer_count": 32
+      "timestamp": "2025-09-13T18:12:08.237902"
     }
   },
   "metadata": {

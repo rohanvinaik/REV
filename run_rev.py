@@ -610,8 +610,11 @@ class REVUnified:
             self.logger.info("[LIGHT-PROBE] Starting quick topology scan")
             
             try:
+                print(f"🔬 LIGHT PROBE: Entered try block, model_path={model_path}")
+                print(f"🔬 LIGHT PROBE: About to import LayerSegmentExecutor...")
                 # Do a LIGHT probe (5 samples) to identify family
                 from src.models.true_segment_execution import LayerSegmentExecutor, SegmentExecutionConfig
+                print(f"🔬 LIGHT PROBE: Successfully imported! About to create SegmentExecutionConfig...")
                 
                 light_config = SegmentExecutionConfig(
                     model_path=model_path,
@@ -648,9 +651,10 @@ class REVUnified:
                 print(f"   Layers to probe: {sample_layers}")
                 
                 # Quick behavioral probes - 1-2 prompts per layer
-                variance_profile = []
+                variance_by_layer = {}  # Dictionary to maintain layer->variance mapping
+                variance_profile = []  # Will be rebuilt as ordered list
                 divergence_scores = []
-                
+
                 # Use 2 different prompts for better topology mapping
                 test_prompts = [
                     "Complete this sentence: The weather today is",
@@ -675,6 +679,7 @@ class REVUnified:
                     # Average variance for this layer
                     if layer_variances:
                         avg_variance = sum(layer_variances) / len(layer_variances)
+                        variance_by_layer[layer_idx] = avg_variance  # Store in dictionary
                         variance_profile.append(avg_variance)
 
                         # Convert to behavioral score like reference library (0.2-0.97 range)
@@ -691,6 +696,7 @@ class REVUnified:
 
                         print(f"   Layer {layer_idx:2d}: variance={avg_variance:.3f}, behavioral_score={behavioral_score:.3f}")
                     else:
+                        variance_by_layer[layer_idx] = 0.0  # Store default in dictionary
                         variance_profile.append(0.0)
                         behavioral_scores.append((layer_idx, 0.2))  # Default minimum score
                 
@@ -710,35 +716,114 @@ class REVUnified:
                 print(f"   Detecting behavioral transitions for interpolation...")
 
                 # Find significant transitions in variance profile
-                transitions = []
+                transition_regions = []
                 if len(variance_profile) > 1:
                     for i in range(1, len(variance_profile)):
                         delta = abs(variance_profile[i] - variance_profile[i-1])
                         relative_change = delta / (variance_profile[i-1] + 1e-8)
 
-                        # Only probe at significant transitions (>5% change)
-                        if relative_change > 0.05 and i < len(sample_layers) - 1:
-                            # Add interpolation point between these layers
+                        # Only probe at SIGNIFICANT transitions (>20% change, based on reference library patterns)
+                        # Reference library shows real transitions at 48-76% change, we use 20% to be conservative
+                        if relative_change > 0.20 and i < len(sample_layers) - 1:
+                            # Mark region for binary search
                             layer_before = sample_layers[i-1]
                             layer_after = sample_layers[i]
-
-                            # Use binary search principle - probe at midpoint
                             if layer_after - layer_before > 1:
-                                mid_layer = (layer_before + layer_after) // 2
-                                if mid_layer not in sample_layers:
-                                    transitions.append((mid_layer, relative_change))
+                                transition_regions.append((layer_before, layer_after, relative_change))
 
-                # Sort by transition strength and probe top transitions only
-                transitions.sort(key=lambda x: x[1], reverse=True)
-                additional_layers = [layer for layer, _ in transitions[:3]]  # Max 3 additional probes
+                # Sort by transition strength
+                transition_regions.sort(key=lambda x: x[2], reverse=True)
 
-                # Perform interpolation at detected transitions
-                if additional_layers:
-                    print(f"   Found {len(transitions)} behavioral transitions")
-                    print(f"   Probing {len(additional_layers)} strongest transition points: {additional_layers}")
+                # Binary search to find EXACT transition layers
+                exact_transition_layers = []
 
-                    # Run additional probes
-                    for layer_idx in additional_layers:
+                def probe_layer(layer_idx):
+                    """Helper to probe a single layer and return its variance"""
+                    layer_variances = []
+                    for prompt in test_prompts[:2]:  # Use first 2 prompts for speed
+                        response = light_executor.execute_behavioral_probe(prompt, up_to_layer=layer_idx)
+                        if response and hasattr(response, 'hidden_states'):
+                            variance = response.hidden_states.var().item()
+                            layer_variances.append(variance)
+                    return sum(layer_variances) / len(layer_variances) if layer_variances else None
+
+                print(f"   Found {len(transition_regions)} transition regions to search")
+
+                # Process ALL transition regions, not just first 5
+                for region_idx, (start_layer, end_layer, strength) in enumerate(transition_regions):
+                    # Skip weak transitions (but this threshold should be data-driven)
+                    if strength < 0.01:  # Only skip truly negligible transitions
+                        continue
+
+                    print(f"\n   Binary search for exact transition between layers {start_layer}-{end_layer} (strength={strength:.3f})")
+
+                    # Get variance at boundaries if not already probed
+                    if start_layer not in sample_layers:
+                        start_variance = probe_layer(start_layer)
+                    else:
+                        idx = sample_layers.index(start_layer)
+                        start_variance = variance_profile[idx]
+
+                    if end_layer not in sample_layers:
+                        end_variance = probe_layer(end_layer)
+                    else:
+                        idx = sample_layers.index(end_layer)
+                        end_variance = variance_profile[idx]
+
+                    # Binary search to find exact transition point
+                    left, right = start_layer, end_layer
+                    max_change = 0
+                    transition_layer = None
+
+                    while right - left > 1:
+                        mid = (left + right) // 2
+
+                        # Probe the midpoint
+                        mid_variance = probe_layer(mid)
+                        if mid_variance is None:
+                            break
+
+                        # Store in our dictionary
+                        variance_by_layer[mid] = mid_variance
+
+                        print(f"     Probing layer {mid}: variance={mid_variance:.4f}")
+
+                        # Calculate changes on both sides
+                        left_change = abs(mid_variance - start_variance) / (start_variance + 1e-8)
+                        right_change = abs(end_variance - mid_variance) / (mid_variance + 1e-8)
+
+                        # The transition is where the change is greatest
+                        if left_change > right_change:
+                            # Transition is in left half
+                            right = mid
+                            end_variance = mid_variance
+                            if left_change > max_change:
+                                max_change = left_change
+                                transition_layer = mid
+                        else:
+                            # Transition is in right half
+                            left = mid
+                            start_variance = mid_variance
+                            if right_change > max_change:
+                                max_change = right_change
+                                transition_layer = mid
+
+                        # If we've narrowed to adjacent layers, we found the exact transition
+                        if right - left == 1:
+                            # Only add if this is a significant transition
+                            if max_change > 0.05:  # 5% change threshold for significance
+                                print(f"     EXACT transition found at layer {transition_layer} (change={max_change:.3f})")
+                                exact_transition_layers.append(transition_layer)
+                            else:
+                                print(f"     Weak transition at layer {transition_layer} (change={max_change:.3f}) - skipping")
+                            break
+
+                print(f"\n   Found {len(exact_transition_layers)} exact transition layers: {exact_transition_layers}")
+
+                # Add the exact transition layers to our profile
+                for layer_idx in exact_transition_layers:
+                    if layer_idx not in sample_layers and layer_idx not in variance_by_layer:
+                        # Probe with all test prompts for accurate profile
                         layer_variances = []
                         for prompt in test_prompts:
                             response = light_executor.execute_behavioral_probe(prompt, up_to_layer=layer_idx)
@@ -748,25 +833,37 @@ class REVUnified:
 
                         if layer_variances:
                             avg_variance = sum(layer_variances) / len(layer_variances)
+                            variance_by_layer[layer_idx] = avg_variance  # Store in dictionary
                             # Convert to behavioral score
                             behavioral_score = min(0.97, max(0.2, avg_variance * 2.0 + 0.2))
-                            # Insert at correct position to maintain order
-                            insert_idx = next((i for i, v in enumerate(sample_layers) if v > layer_idx), len(sample_layers))
-                            sample_layers.insert(insert_idx, layer_idx)
-                            variance_profile.insert(insert_idx, avg_variance)
-                            behavioral_scores.insert(insert_idx, (layer_idx, behavioral_score))
-                            print(f"   Layer {layer_idx:2d}: variance={avg_variance:.3f}, behavioral_score={behavioral_score:.3f}")
+                            # Don't insert yet - we'll rebuild ordered structures later
+                            behavioral_scores.append((layer_idx, behavioral_score))
+                            print(f"   Added exact transition layer {layer_idx:2d}: variance={avg_variance:.3f}, behavioral_score={behavioral_score:.3f}")
 
-                    # Recalculate divergence scores with interpolated data
-                    divergence_scores = []
-                    for i in range(1, len(variance_profile)):
-                        divergence = abs(variance_profile[i] - variance_profile[i-1]) / (variance_profile[i-1] + 1e-8)
-                        divergence_scores.append((sample_layers[i], divergence))
+                # After interpolation, rebuild ordered structures from our dictionary
+                print(f"\n   Rebuilding ordered data structures after interpolation...")
 
-                    if divergence_scores:
-                        divergence_scores.sort(key=lambda x: x[1], reverse=True)
-                        restriction_sites = [layer for layer, score in divergence_scores[:7] if score > 0.1]
-                        print(f"   Updated restriction sites after interpolation: {restriction_sites}")
+                # Get all probed layers and sort them
+                all_probed_layers = sorted(variance_by_layer.keys())
+                print(f"   Total layers probed: {len(all_probed_layers)}")
+
+                # Rebuild variance_profile as ordered list
+                variance_profile = [variance_by_layer[layer] for layer in all_probed_layers]
+                sample_layers = all_probed_layers  # Update sample_layers to include interpolated ones
+
+                # Sort behavioral scores by layer
+                behavioral_scores.sort(key=lambda x: x[0])
+
+                # Recalculate divergence scores with complete data
+                divergence_scores = []
+                for i in range(1, len(all_probed_layers)):
+                    divergence = abs(variance_profile[i] - variance_profile[i-1]) / (variance_profile[i-1] + 1e-8)
+                    divergence_scores.append((all_probed_layers[i], divergence))
+
+                if divergence_scores:
+                    divergence_scores.sort(key=lambda x: x[1], reverse=True)
+                    restriction_sites = [layer for layer, score in divergence_scores[:7] if score > 0.1]
+                    print(f"   Updated restriction sites after interpolation: {restriction_sites}")
 
                 # NOW calculate confidence with complete profile (after interpolation if any)
                 # Use behavioral scores that match reference library format (0.2-0.97 range)
@@ -781,53 +878,114 @@ class REVUnified:
                         # Use default behavioral score
                         behavioral_profile.append(0.5)  # Middle range default
 
-                # Also build restriction site data with "before" values like reference
+                # Build restriction site data with proper format like reference library
+                # Reference expects: {'layer': X, 'divergence_delta': Y, 'percent_change': Z, 'before': A, 'after': B}
                 restriction_site_data = []
-                for i in range(1, len(behavioral_profile)):
-                    delta = behavioral_profile[i] - behavioral_profile[i-1]
-                    if abs(delta) > 0.1:  # Significant change
+                layer_divergences = {}  # Dictionary for layer -> divergence mapping
+
+                # Use the variance profile (actual variance values) for restriction site calculation
+                divergence_threshold = 0.05  # 5% threshold for significant changes
+
+                for i in range(1, len(variance_profile)):
+                    # Calculate delta and percent change
+                    prev_variance = variance_profile[i-1]
+                    curr_variance = variance_profile[i]
+                    delta = curr_variance - prev_variance
+                    relative_change = abs(delta) / (prev_variance + 1e-8)
+                    percent_change = (delta / prev_variance * 100) if prev_variance != 0 else 0
+
+                    # Store divergence for this layer
+                    layer_divergences[str(sample_layers[i])] = abs(delta)
+
+                    # Check if this is a significant transition (>5% relative change in variance)
+                    if relative_change > divergence_threshold:
                         restriction_site_data.append({
                             'layer': sample_layers[i],
-                            'before': behavioral_profile[i-1],
-                            'after': behavioral_profile[i],
-                            'divergence_delta': delta
+                            'divergence_delta': round(delta, 6),
+                            'percent_change': round(percent_change, 2),
+                            'before': round(prev_variance, 6),
+                            'after': round(curr_variance, 6)
                         })
+                        print(f"   DEBUG: Added restriction site at layer {sample_layers[i]}: delta={delta:.6f}, percent_change={percent_change:.1f}%")
 
-                # Ensure divergence_dict is defined
-                divergence_dict = dict(divergence_scores) if divergence_scores else {}
+                # If no sites found with variance, try using behavioral scores with lower threshold
+                if not restriction_site_data:
+                    print(f"   DEBUG: No restriction sites from variance, trying behavioral scores...")
+                    for i in range(1, len(behavioral_profile)):
+                        delta = behavioral_profile[i] - behavioral_profile[i-1]
+                        if abs(delta) > 0.01:  # Much lower threshold for behavioral scores
+                            percent_change = (delta / behavioral_profile[i-1]) * 100 if behavioral_profile[i-1] != 0 else 0
+                            restriction_site_data.append({
+                                'layer': sample_layers[i],
+                                'divergence_delta': delta,
+                                'percent_change': percent_change,
+                                'before': behavioral_profile[i-1],
+                                'after': behavioral_profile[i]
+                            })
 
+                print(f"   DEBUG: Total restriction sites found: {len(restriction_site_data)}")
+
+                # Use layer_divergences we just calculated
+                divergence_dict = layer_divergences  # This has proper format
+
+                # Use restriction_site_data as the main restriction_sites for matching
+                # This has the proper format the reference library expects
                 light_fingerprint = {
                     'variance_profile': behavioral_profile,  # Use behavioral scores like reference
-                    'restriction_sites': restriction_sites,
+                    'restriction_sites': restriction_site_data,  # Use properly formatted data
                     'layer_count': layer_count,
                     'layer_divergences': divergence_dict,
                     'restriction_site_data': restriction_site_data,
-                    'behavioral_scores': behavioral_dict
+                    'behavioral_scores': behavioral_dict,
+                    'simple_sites': restriction_sites  # Keep simple list for backward compat
                 }
 
                 print(f"\n   Matching against reference library...")
+                print(f"   DEBUG: Creating fingerprint with {len(restriction_site_data)} sites")
+                print(f"   DEBUG: Variance profile has {len(variance_profile)} points")
+
+                # Convert to dictionary format expected by identify_from_behavioral_analysis
+                # CRITICAL FIX: Use variance_profile (actual variance values) not behavioral_profile (normalized scores)
+                # The reference library contains actual variance values in the "before"/"after" fields,
+                # not normalized behavioral scores. This was causing 0% confidence matching.
+                fingerprint_dict = {
+                    "restriction_sites": restriction_site_data,
+                    "variance_profile": variance_profile,  # FIXED: Use actual variance values
+                    "layer_divergences": light_fingerprint['layer_divergences'],
+                    "layer_count": light_fingerprint['layer_count'],
+                    "layers_sampled": sample_layers,
+                    "model_family": "unknown",
+                    "model_name": model_path
+                }
+
                 # Create library AFTER all probing is done
                 library = create_dual_library()
-                identification = library.identify_from_behavioral_analysis(light_fingerprint)
-                print(f"   Confidence: {identification.confidence:.0%}")
-                
+                print(f"   DEBUG: Library created, calling identify_from_behavioral_analysis")
+                print(f"   DEBUG: Passing dictionary with keys: {list(fingerprint_dict.keys())}")
+                new_identification = library.identify_from_behavioral_analysis(fingerprint_dict)
+                print(f"   DEBUG: Got identification result: family={new_identification.identified_family}, confidence={new_identification.confidence:.0%}")
+                print(f"   Confidence: {new_identification.confidence:.0%}")
+
+                # Update outer identification with the result from matching
+                identification = new_identification
                 strategy = library.get_testing_strategy(identification)
-                
+
                 print(f"\n   ✅ Family identified: {identification.identified_family} ({identification.confidence:.0%} confidence)")
                 print(f"   Method: {identification.method}")
                 print(f"   Notes: {identification.notes}")
-                
+
                 if identification.confidence > 0.7 and identification.identified_family:
                     print(f"   📚 Using reference: {identification.reference_model}")
                     print(f"   🚀 Expected speedup: 15-20x")
                 else:
                     print(f"   ⚠️ No strong match found, falling back to deep analysis")
-                
+
             except Exception as e:
                 import traceback
                 self.logger.warning(f"[LIGHT-PROBE] Failed: {e}, falling back to deep analysis")
                 print(f"   ⚠️ Light probe failed: {e}")
                 print(f"   Traceback: {traceback.format_exc()}")
+                # Keep the original identification if matching fails
         
         # CRITICAL: Determine if deep behavioral analysis is needed
         # Deep analysis is THE STANDARD for reference library building
