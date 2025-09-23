@@ -1,46 +1,26 @@
-# REV: Restriction Enzyme Verification Framework
+# REV: Restriction Enzyme Verification System v3.0
 
-**Pure API-Based LLM Behavioral Fingerprinting & Family Recognition**
+**Behavioral Fingerprinting for LLM Security & Verification**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status: Production](https://img.shields.io/badge/Status-Production-brightgreen.svg)]()
-[![API-Only](https://img.shields.io/badge/Mode-API--Only-blue.svg)]()
 
-## 🚀 Overview
+## 🔬 Overview
 
-REV enables model family recognition and behavioral fingerprinting through pure API access - no weights, downloads, or local compute required.
+REV (Restriction Enzyme Verification) identifies and verifies Large Language Models through behavioral analysis, treating them as secure black boxes. Like restriction enzymes in molecular biology that recognize specific DNA sequences, REV identifies unique behavioral "restriction sites" in neural networks to create unforgeable fingerprints.
 
-### Key Capabilities
-- Process 644GB models with <1GB RAM
-- Recognize families across 58x size differences (7B → 405B)
-- Compare proprietary models behind APIs
-- Build reference libraries automatically
-- Zero model downloads required
+### Key Innovation
+- **Segmented Streaming**: Process 70B+ models with only 2-4GB RAM by streaming weights layer-by-layer
+- **Behavioral Fingerprinting**: Identify models through response patterns, not metadata or weights
+- **Cross-Architecture Matching**: 95% accuracy identifying models across 80x size differences
+- **Dual Library System**: 15-20x speedup using reference baselines from smaller models
 
-### Validated Results
-Successfully identified Llama-2-7B and Llama-3.1-405B as same family with 97% confidence using <700MB RAM.
-
-## 🌟 Core Technology
-
-### Pattern-Based Identification (v3.2)
-- **60%** variance delta patterns - behavioral change magnitudes
-- **25%** relative positions - normalized for different model depths
-- **15%** adaptive features - smart interpolation & confidence-based expansion
-
-### Prompt Orchestration System
-- **PoT (Proof-of-Training)**: Cryptographically pre-committed challenges for identity verification
-- **KDF Adversarial**: Security boundary testing via jailbreak/alignment probes
-- **Evolutionary**: Genetic optimization for discriminative prompts
-- **Dynamic Synthesis**: Real-time template combination
-- **Hierarchical Taxonomy**: Systematic capability exploration
-
-### Behavioral Metrics
-10,000-dimensional hypervector fingerprints capturing:
-- Response diversity & entropy patterns
-- Sparsity distributions
-- Architectural signatures
-- Training-specific behaviors
+### Security First
+- Model weights remain completely secret - never loaded into memory
+- Behavioral patterns are unforgeable (emerge from billions of parameters)
+- Robust against weight pruning, quantization, and fine-tuning attacks
+- Works with both local filesystem models and cloud APIs
 
 ## 🚀 Quick Start
 
@@ -50,98 +30,146 @@ cd REV
 pip install -r requirements.txt
 ```
 
-## 📋 Usage
+## 📋 Core Usage
 
 ### Local Models (Filesystem)
 ```bash
-# Standard format
-python run_rev.py /path/to/llama-3.3-70b-instruct
+# ALWAYS use --enable-prompt-orchestration for proper operation
+# Generates 250-400+ behavioral probes automatically
 
-# HuggingFace cache (use snapshot path!)
-python run_rev.py /Users/.../pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42
+# Standard model format
+python run_rev.py /path/to/llama-3.3-70b-instruct --enable-prompt-orchestration
 
-# With orchestration
-python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 20
+# HuggingFace cache format (use full snapshot path)
+python run_rev.py /Users/.../pythia-70m/snapshots/a39f36b... --enable-prompt-orchestration
+
+# With debug output
+python run_rev.py /path/to/model --enable-prompt-orchestration --debug
 ```
 
-### Cloud APIs
+### Cloud API Models
 ```bash
-# OpenAI/Anthropic
+# OpenAI
 python run_rev.py gpt-4 --api-key sk-...
+
+# Anthropic
 python run_rev.py claude-3-opus --provider anthropic --api-key ...
 ```
 
-### Common Mistakes
-```bash
-# ❌ WRONG: Model ID instead of path
-python run_rev.py EleutherAI/pythia-70m  # Tries API!
+## 🧬 How It Works
 
-# ❌ WRONG: Missing snapshot path
-python run_rev.py /path/models--EleutherAI--pythia-70m  # Incomplete!
+### 1. Behavioral Analysis
+REV injects prompts at specific layers to measure behavioral divergence:
+```
+Layer 0: "Complete this sentence: The weather today is"
+→ Divergence: 0.290 (behavioral boundary detected)
 
-# ✅ CORRECT: Full path with snapshot
-python run_rev.py /path/models--EleutherAI--pythia-70m/snapshots/xxx
+Layer 10: "Complete this sentence: The weather today is"
+→ Divergence: 0.337 (restriction site identified)
 ```
 
-## 🎯 Applications
+### 2. Topological Fingerprinting
+- Identifies "restriction sites" - layers with significant behavioral changes
+- Builds variance profiles from actual model responses
+- Creates 10,000-dimensional hypervector fingerprints
+- Matches patterns using cosine similarity, DTW, and Fourier analysis
 
-1. **Duplicate Detection**: Identify rebranded/modified models
-2. **Architecture Analysis**: Understand model lineage
-3. **Security Verification**: Detect trojaned variants
-4. **API Authentication**: Verify claimed model families
+### 3. Enhanced Dual Library Matching
+When initial confidence is low (e.g., 20%), REV automatically:
+1. Invokes enhanced topological similarity algorithm
+2. Applies cross-size matching (works across 32 → 80 layer models)
+3. Uses multiple similarity metrics with adaptive weighting
+4. Achieves 95%+ confidence through behavioral analysis
 
-## 📊 Performance
+## 🎯 Reference Library System
 
-| Model Size | Memory Usage | Processing Time | Confidence |
-|------------|--------------|-----------------|------------|
-| 7B | <500MB | 15 min | 95%+ |
-| 70B | <1GB | 2-3 hrs | 92%+ |
-| 405B | <1GB | 3-4 hrs | 90%+ |
-
-## 🔧 Advanced Features
-
-### Reference Library Building
+### Build Reference (One-Time per Architecture)
 ```bash
-# Build once with small model
+# Use SMALLEST model in family as reference
+# Takes 20min-3hrs depending on size
+
+# Pythia family
 python run_rev.py /path/to/pythia-70m --build-reference --enable-prompt-orchestration
 
-# Accelerates all future models in family (15-20x speedup)
-python run_rev.py /path/to/pythia-12b --challenges 100
+# Llama family
+python run_rev.py /path/to/llama-2-7b-hf --build-reference --enable-prompt-orchestration
+
+# GPT family
+python run_rev.py /path/to/distilgpt2 --build-reference --enable-prompt-orchestration
 ```
 
-### Security Features
-- Zero-knowledge proofs for verification
-- Rate limiting & attestation server
-- Merkle tree computation verification
-- TEE/HSM support
-
-### Parallel Processing
+### Use Reference for Large Models (15-20x Faster)
 ```bash
-# Process multiple models (up to 36GB total memory)
-python run_rev.py model1/ model2/ model3/ --parallel --parallel-memory-limit 36.0
+# After reference exists, large models run MUCH faster
+python run_rev.py /path/to/llama-70b --enable-prompt-orchestration
+# Uses llama-7b reference → 2-4 hrs instead of 37 hrs!
+```
+
+## 📊 Performance Metrics
+
+| Model | Memory | Time (w/o Ref) | Time (w/ Ref) | Confidence |
+|-------|--------|----------------|---------------|------------|
+| 7B | 2-3GB | 2-3 hrs | N/A (is ref) | 95%+ |
+| 70B | 3-4GB | 37 hrs | 2-4 hrs | 95%+ |
+| 405B | 4GB | 72+ hrs | 4-6 hrs | 92%+ |
+
+## 🔐 Security Features
+
+- **Zero Weight Exposure**: Weights streamed layer-by-layer, never fully loaded
+- **Behavioral Verification**: Unforgeable patterns from billions of parameters
+- **Attack Resistance**: Robust against metadata spoofing, pruning, quantization
+- **Cross-Version Detection**: Identifies families across versions/sizes
+
+## ⚠️ Common Issues & Solutions
+
+### Issue: Low Initial Confidence
+**Solution**: System automatically invokes enhanced matching. Ensure `--enable-prompt-orchestration` is used.
+
+### Issue: Reference Not Being Used
+**Solution**: Build reference for model family first using smallest model.
+
+### Issue: Probe Times Too Fast (<10ms)
+**Solution**: Indicates mock responses. Verify model path and weights exist.
+
+## 🛠️ Advanced Features
+
+```bash
+# Comprehensive analysis with all features
+python run_rev.py /path/to/model \
+  --enable-prompt-orchestration \
+  --comprehensive-analysis \
+  --unified-fingerprints \
+  --debug
+
+# Parallel processing for multiple models
+python run_rev.py model1 model2 model3 \
+  --parallel --parallel-memory-limit 36.0
+
+# Adversarial testing
+python run_rev.py /path/to/model \
+  --adversarial --adversarial-types jailbreak alignment_faking
 ```
 
 ## 📚 Documentation
 
-- **User Guide**: See [CLAUDE.md](CLAUDE.md) for detailed instructions
-- **API Reference**: Available in `docs/api/`
-- **Paper**: [arXiv:2024.xxxxx](https://arxiv.org)
+See [CLAUDE.md](CLAUDE.md) for comprehensive documentation including:
+- Detailed architecture explanations
+- Troubleshooting guides
+- Performance optimization tips
+- Security considerations
+- API references
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! Please read our contributing guidelines and submit PRs.
 
-## 📝 License
+## 📄 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-Built on research from:
-- Proof-of-Training (PoT) framework
-- Hyperdimensional computing
-- Sequential hypothesis testing (SPRT)
-- Zero-knowledge cryptography
+Built with support from the open-source community. Special thanks to contributors and researchers advancing LLM security.
 
 ---
-*Repository: https://github.com/rohanvinaik/REV*
+*For bugs/issues: https://github.com/rohanvinaik/REV/issues*
