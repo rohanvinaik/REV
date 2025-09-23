@@ -59,6 +59,23 @@ This is fundamentally different from traditional inference where entire models a
 
 **Orchestration is DEFAULT** - Automatically generates 250-400+ challenges
 
+## 🔬 VARIANCE-BASED REV SITE SELECTION (December 2024 Update)
+
+### Current Implementation
+
+The system now intelligently selects high-variance layers for deep behavioral fingerprinting:
+
+1. **Light Probe Phase**: Samples 10-20% of layers to build variance profile
+2. **Reference Matching**: Identifies model family and retrieves baseline measurements
+3. **Variance-Based Selection**:
+   - Identifies layers with highest variance from light probe
+   - Gets reference-predicted positions (scaled proportionally)
+   - Combines both sets, prioritizing layers appearing in both
+   - Selects top 15 layers sorted by actual variance
+4. **Deep Fingerprinting**: Orchestrates 250-400+ prompts at selected high-variance sites
+
+**Key Fix (Sept 2024)**: System now uses actual variance measurements rather than just proportional scaling. Reference data is treated as "baseline measurements" for comparison, not final restriction sites.
+
 ## 🔬 HOW FINGERPRINTING ACTUALLY WORKS
 
 ### From Behavioral Analysis to Fingerprint

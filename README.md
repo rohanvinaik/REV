@@ -13,6 +13,7 @@ REV (Restriction Enzyme Verification) identifies and verifies Large Language Mod
 ### Key Innovations
 - **Segmented Streaming**: Process 70B+ models with only 2-4GB RAM by streaming weights layer-by-layer
 - **Dual Library System**: Reference library (deep topology) + Active library (runtime fingerprints)
+- **Variance-Based Site Selection**: Identifies high-variance layers for optimal behavioral fingerprinting
 - **Prompt Orchestration**: 7 specialized systems generate 250-400+ targeted behavioral probes
 - **Enhanced Matching**: 95% accuracy across 80x size differences using topological similarity
 
@@ -45,6 +46,7 @@ Layer 79: Divergence: 0.350  ← Output layer characteristics
 
 ### Phase 2: Enhanced Dual Library Matching
 When initial confidence is low (e.g., 20%), automatically invokes:
+- **Variance-Based Selection**: Identifies actual high-variance layers from light probe
 - **Cosine Similarity** (20%): Shape matching of variance profiles
 - **DTW Matching** (10%): Dynamic time warping for pattern alignment
 - **Topology Signatures** (10%): Structural feature comparison
