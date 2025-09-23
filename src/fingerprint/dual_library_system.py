@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from scipy import interpolate
 from scipy.stats import pearsonr, spearmanr
+from numpy.linalg import norm
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,23 @@ class DualLibrarySystem:
     def __init__(self,
                  reference_path: str = "fingerprint_library/reference_library.json",
                  active_path: str = "fingerprint_library/active_library.json"):
-        """Initialize dual library system."""
+        """Initialize dual library system with caching."""
         self.reference_path = Path(reference_path)
         self.active_path = Path(active_path)
+        self.interpolation_cache = {}  # Cache for expensive interpolation calculations
 
         # Load libraries
         self.reference_library = self._load_library(self.reference_path)
         self.active_library = self._load_library(self.active_path)
+
+    def load_library(self, library_type: str) -> Dict:
+        """Load library by type (for compatibility)."""
+        if library_type == "reference":
+            return self._load_library(self.reference_path)
+        elif library_type == "active":
+            return self._load_library(self.active_path)
+        else:
+            return {}
 
     def _load_library(self, path: Path) -> Dict:
         """Load a library from disk."""
@@ -83,7 +94,7 @@ class DualLibrarySystem:
                 logger.warning(f"Failed to load library {path}: {e}")
         return {}
 
-    def identify_from_behavioral_analysis(self, fingerprint_dict: Dict) -> ModelIdentification:
+    def identify_from_behavioral_analysis(self, fingerprint_dict: Dict, verbose: bool = False) -> ModelIdentification:
         """
         Match behavioral fingerprint using relative layer positions and improved similarity metrics.
         Handles models of different sizes within the same family.
@@ -134,6 +145,11 @@ class DualLibrarySystem:
             ref_layers = ref_model.get('layer_count', ref_model.get('total_layers', 32))
             ref_family = ref_model.get('model_family', ref_model.get('family', 'unknown'))
 
+            if verbose:
+                print(f"  Testing against reference: {ref_family} ({ref_layers} layers)")
+                print(f"    Reference variance profile length: {len(ref_variance)}")
+                print(f"    Reference restriction sites: {len(ref_sites)}")
+
             # Try to determine sampled layers for reference
             ref_sampled = ref_model.get('layers_sampled', [])
             if not ref_sampled and ref_variance:
@@ -175,69 +191,226 @@ class DualLibrarySystem:
                     print(f"  Not enough data points for interpolation")
                     continue
 
-                # Interpolate test variance profile
-                test_interp = interpolate.interp1d(
-                    test_relative_positions[:len(test_variance)],
-                    test_variance[:len(test_relative_positions)],
-                    kind='linear',
-                    fill_value='extrapolate',
-                    bounds_error=False
-                )
-                test_interpolated = test_interp(common_positions)
+                # Normalize variances to account for different model scales
+                test_variance_normalized = self._normalize_variance_profile(test_variance)
+                ref_variance_normalized = self._normalize_variance_profile(ref_variance)
 
-                # Interpolate reference variance profile
-                ref_interp = interpolate.interp1d(
-                    ref_relative_positions[:len(ref_variance)],
-                    ref_variance[:len(ref_relative_positions)],
-                    kind='linear',
-                    fill_value='extrapolate',
-                    bounds_error=False
-                )
-                ref_interpolated = ref_interp(common_positions)
+                if verbose:
+                    print(f"    Original test variance range: {min(test_variance):.3f} - {max(test_variance):.3f}")
+                    print(f"    Normalized test variance range: {min(test_variance_normalized):.3f} - {max(test_variance_normalized):.3f}")
+                    print(f"    Original ref variance range: {min(ref_variance):.3f} - {max(ref_variance):.3f}")
+                    print(f"    Normalized ref variance range: {min(ref_variance_normalized):.3f} - {max(ref_variance_normalized):.3f}")
 
-                # Calculate multiple similarity metrics
+                # Check interpolation cache
+                test_cache_key = f"test_{hash(tuple(test_variance_normalized))}"
+                ref_cache_key = f"ref_{hash(tuple(ref_variance_normalized))}"
 
-                # 1. Pearson correlation (linear relationship)
+                if test_cache_key in self.interpolation_cache:
+                    test_interpolated = self.interpolation_cache[test_cache_key]
+                    if verbose:
+                        print(f"    Using cached test interpolation")
+                else:
+                    # Interpolate test variance profile
+                    test_interp = interpolate.interp1d(
+                        test_relative_positions[:len(test_variance_normalized)],
+                        test_variance_normalized[:len(test_relative_positions)],
+                        kind='linear',
+                        fill_value='extrapolate',
+                        bounds_error=False
+                    )
+                    test_interpolated = test_interp(common_positions)
+                    self.interpolation_cache[test_cache_key] = test_interpolated
+                    if verbose:
+                        print(f"    Computed and cached test interpolation")
+
+                if ref_cache_key in self.interpolation_cache:
+                    ref_interpolated = self.interpolation_cache[ref_cache_key]
+                    if verbose:
+                        print(f"    Using cached reference interpolation")
+                else:
+                    # Interpolate reference variance profile
+                    ref_interp = interpolate.interp1d(
+                        ref_relative_positions[:len(ref_variance_normalized)],
+                        ref_variance_normalized[:len(ref_relative_positions)],
+                        kind='linear',
+                        fill_value='extrapolate',
+                        bounds_error=False
+                    )
+                    ref_interpolated = ref_interp(common_positions)
+                    self.interpolation_cache[ref_cache_key] = ref_interpolated
+                    if verbose:
+                        print(f"    Computed and cached reference interpolation")
+
+                # === NEW: TOPOLOGICAL SIMILARITY METRICS ===
+
+                # 1. Cosine Similarity (captures shape regardless of magnitude)
+
+                # Center the profiles (remove mean to focus on shape)
+                test_centered = test_interpolated - np.mean(test_interpolated)
+                ref_centered = ref_interpolated - np.mean(ref_interpolated)
+
+                # Calculate cosine similarity
+                cosine_sim = np.dot(test_centered, ref_centered) / (norm(test_centered) * norm(ref_centered) + 1e-8)
+                cosine_sim = max(0, cosine_sim)  # Ensure non-negative
+
+                print(f"  Cosine similarity (shape): {cosine_sim:.3f}")
+
+                # 2. Normalized Profile Correlation
+                # Normalize both profiles to [0, 1] range to compare patterns
+                test_min, test_max = test_interpolated.min(), test_interpolated.max()
+                ref_min, ref_max = ref_interpolated.min(), ref_interpolated.max()
+
+                if test_max - test_min > 1e-6 and ref_max - ref_min > 1e-6:
+                    test_normalized = (test_interpolated - test_min) / (test_max - test_min)
+                    ref_normalized = (ref_interpolated - ref_min) / (ref_max - ref_min)
+
+                    # Pearson correlation on normalized profiles
+                    normalized_corr, _ = pearsonr(test_normalized, ref_normalized)
+                    if np.isnan(normalized_corr):
+                        normalized_corr = 0.0
+                else:
+                    normalized_corr = 0.0
+
+                print(f"  Normalized correlation: {normalized_corr:.3f}")
+
+                # 3. Dynamic Time Warping Distance (captures similar patterns even if shifted)
+                # Simple DTW implementation for behavioral patterns
+                def simple_dtw_distance(x, y, window=10):
+                    """Calculate DTW distance between two sequences."""
+                    n, m = len(x), len(y)
+
+                    # Create cost matrix with window constraint
+                    dtw_matrix = np.full((n + 1, m + 1), np.inf)
+                    dtw_matrix[0, 0] = 0
+
+                    for i in range(1, n + 1):
+                        for j in range(max(1, i - window), min(m + 1, i + window)):
+                            cost = abs(x[i-1] - y[j-1])
+                            dtw_matrix[i, j] = cost + min(
+                                dtw_matrix[i-1, j],    # insertion
+                                dtw_matrix[i, j-1],    # deletion
+                                dtw_matrix[i-1, j-1]   # match
+                            )
+
+                    # Normalize by path length
+                    dtw_distance = dtw_matrix[n, m] / (n + m)
+                    return dtw_distance
+
+                # Calculate DTW distance and convert to similarity
+                dtw_distance = simple_dtw_distance(test_normalized if 'test_normalized' in locals() else test_interpolated,
+                                                   ref_normalized if 'ref_normalized' in locals() else ref_interpolated)
+
+                # Convert distance to similarity (lower distance = higher similarity)
+                dtw_similarity = max(0, 1.0 - dtw_distance / 0.5)  # Normalize assuming max meaningful distance is 0.5
+
+                print(f"  DTW similarity (pattern): {dtw_similarity:.3f}")
+
+                # 4. Topology Signature Matching
+                # Extract key topological features
+                def extract_topology_signature(profile):
+                    """Extract topological features from variance profile."""
+                    # Find peaks and valleys
+                    peaks = []
+                    valleys = []
+
+                    for i in range(1, len(profile) - 1):
+                        if profile[i] > profile[i-1] and profile[i] > profile[i+1]:
+                            peaks.append(i / len(profile))  # Relative position
+                        elif profile[i] < profile[i-1] and profile[i] < profile[i+1]:
+                            valleys.append(i / len(profile))
+
+                    # Calculate gradient statistics
+                    gradients = np.diff(profile)
+
+                    return {
+                        'num_peaks': len(peaks),
+                        'num_valleys': len(valleys),
+                        'peak_positions': peaks[:5],  # First 5 peaks
+                        'valley_positions': valleys[:5],  # First 5 valleys
+                        'mean_gradient': np.mean(np.abs(gradients)),
+                        'gradient_variance': np.var(gradients),
+                        'smoothness': np.mean(np.abs(np.diff(gradients)))  # Second derivative
+                    }
+
+                test_topology = extract_topology_signature(test_interpolated)
+                ref_topology = extract_topology_signature(ref_interpolated)
+
+                # Compare topological features
+                topology_score = 0.0
+                weights = {
+                    'num_peaks': 0.15,
+                    'num_valleys': 0.15,
+                    'peak_positions': 0.25,
+                    'valley_positions': 0.25,
+                    'mean_gradient': 0.1,
+                    'smoothness': 0.1
+                }
+
+                # Compare number of peaks/valleys (similar complexity)
+                if ref_topology['num_peaks'] > 0:
+                    peak_similarity = min(test_topology['num_peaks'], ref_topology['num_peaks']) / max(test_topology['num_peaks'], ref_topology['num_peaks'], 1)
+                    topology_score += weights['num_peaks'] * peak_similarity
+
+                if ref_topology['num_valleys'] > 0:
+                    valley_similarity = min(test_topology['num_valleys'], ref_topology['num_valleys']) / max(test_topology['num_valleys'], ref_topology['num_valleys'], 1)
+                    topology_score += weights['num_valleys'] * valley_similarity
+
+                # Compare peak/valley positions (similar pattern structure)
+                if test_topology['peak_positions'] and ref_topology['peak_positions']:
+                    position_distances = []
+                    for test_peak in test_topology['peak_positions']:
+                        if ref_topology['peak_positions']:
+                            min_dist = min(abs(test_peak - ref_peak) for ref_peak in ref_topology['peak_positions'])
+                            position_distances.append(min_dist)
+                    if position_distances:
+                        peak_position_similarity = max(0, 1.0 - np.mean(position_distances))
+                        topology_score += weights['peak_positions'] * peak_position_similarity
+
+                # Compare gradient characteristics (similar rate of change)
+                if ref_topology['mean_gradient'] > 0:
+                    gradient_ratio = min(test_topology['mean_gradient'], ref_topology['mean_gradient']) / max(test_topology['mean_gradient'], ref_topology['mean_gradient'])
+                    topology_score += weights['mean_gradient'] * gradient_ratio
+
+                if ref_topology['smoothness'] > 0:
+                    smoothness_ratio = min(test_topology['smoothness'], ref_topology['smoothness']) / max(test_topology['smoothness'], ref_topology['smoothness'], 1e-8)
+                    topology_score += weights['smoothness'] * smoothness_ratio
+
+                print(f"  Topology signature match: {topology_score:.3f}")
+
+                # 5. Fourier Transform Similarity (frequency domain comparison)
+                # This captures periodic patterns in the behavioral profile
+                test_fft = np.abs(np.fft.fft(test_centered))[:50]  # First 50 frequency components
+                ref_fft = np.abs(np.fft.fft(ref_centered))[:50]
+
+                # Normalize FFT magnitudes
+                test_fft = test_fft / (np.sum(test_fft) + 1e-8)
+                ref_fft = ref_fft / (np.sum(ref_fft) + 1e-8)
+
+                # Compare frequency distributions
+                fft_similarity = 1.0 - np.sum(np.abs(test_fft - ref_fft)) / 2.0  # Convert L1 distance to similarity
+
+                print(f"  Fourier similarity (periodicity): {fft_similarity:.3f}")
+
+                # Original metrics (kept but with lower weight)
                 pearson_corr, _ = pearsonr(test_interpolated, ref_interpolated)
                 if np.isnan(pearson_corr):
                     pearson_corr = 0.0
 
-                # 2. Spearman correlation (monotonic relationship)
                 spearman_corr, _ = spearmanr(test_interpolated, ref_interpolated)
                 if np.isnan(spearman_corr):
                     spearman_corr = 0.0
 
-                # 3. Mean absolute error (normalized)
                 mae = np.mean(np.abs(test_interpolated - ref_interpolated))
-                # Normalize MAE to similarity score (lower error = higher similarity)
-                # Typical variance ranges from 0.2 to 0.4, so max expected MAE ~0.2
                 mae_similarity = max(0, 1.0 - (mae / 0.2))
-
-                # 4. Shape similarity using derivatives
-                test_diff = np.diff(test_interpolated)
-                ref_diff = np.diff(ref_interpolated)
-
-                # Normalize derivatives
-                test_diff_std = np.std(test_diff)
-                ref_diff_std = np.std(ref_diff)
-
-                if test_diff_std > 0 and ref_diff_std > 0:
-                    test_diff_norm = test_diff / test_diff_std
-                    ref_diff_norm = ref_diff / ref_diff_std
-                    shape_correlation, _ = pearsonr(test_diff_norm, ref_diff_norm)
-                    if np.isnan(shape_correlation):
-                        shape_correlation = 0.0
-                else:
-                    shape_correlation = 0.0
 
                 print(f"  Pearson correlation: {pearson_corr:.3f}")
                 print(f"  Spearman correlation: {spearman_corr:.3f}")
                 print(f"  MAE similarity: {mae_similarity:.3f}")
-                print(f"  Shape correlation: {shape_correlation:.3f}")
 
             except Exception as e:
-                print(f"  Interpolation failed: {e}")
-                pearson_corr = spearman_corr = mae_similarity = shape_correlation = 0.0
+                print(f"  Interpolation/calculation failed: {e}")
+                cosine_sim = normalized_corr = dtw_similarity = topology_score = fft_similarity = 0.0
+                pearson_corr = spearman_corr = mae_similarity = 0.0
 
             # === METHOD 2: Restriction Site Pattern Matching ===
             site_similarity = 0.0
@@ -355,24 +528,24 @@ class DualLibrarySystem:
             architectural_similarity = (layer_ratio + dim_ratio) / 2
             print(f"  Architectural similarity: {architectural_similarity:.3f}")
 
-            # === COMBINE SCORES WITH ENHANCED WEIGHTS ===
-            # Weight different components based on reliability and discriminative power
+            # === COMBINE SCORES WITH TOPOLOGY-FOCUSED WEIGHTS ===
+            # Prioritize shape/topology over absolute value matching
             scores = {
-                # Core variance-based methods (50% total weight)
-                'pearson': (pearson_corr, 0.15),           # Linear correlation
-                'spearman': (spearman_corr, 0.10),         # Rank correlation
-                'mae': (mae_similarity, 0.15),             # Absolute difference
-                'shape': (shape_correlation, 0.10),        # Shape similarity
+                # Topology-based metrics (60% total weight) - these capture SHAPE
+                'cosine': (cosine_sim, 0.20),               # Shape similarity
+                'normalized_corr': (normalized_corr, 0.15), # Pattern correlation
+                'dtw': (dtw_similarity, 0.10),              # Pattern matching with shifts
+                'topology': (topology_score, 0.10),         # Structural features
+                'fourier': (fft_similarity, 0.05),          # Periodic patterns
+
+                # Value-based metrics (15% total weight) - less important
+                'pearson': (pearson_corr, 0.05),            # Linear correlation
+                'spearman': (spearman_corr, 0.05),          # Rank correlation
+                'mae': (mae_similarity, 0.05),              # Absolute difference
 
                 # Structural methods (25% total weight)
-                'sites': (site_similarity, 0.15),          # Restriction sites
-                'pattern': (pattern_similarity, 0.10),     # High/low patterns
-
-                # Principled features (25% total weight)
-                'syntactic': (syntactic_similarity, 0.05),    # Token patterns
-                'semantic': (semantic_similarity, 0.05),      # Embedding similarity
-                'behavioral': (behavioral_similarity, 0.05),  # Response consistency
-                'architectural': (architectural_similarity, 0.10)  # Model structure
+                'sites': (site_similarity, 0.15),           # Restriction sites
+                'pattern': (pattern_similarity, 0.10),      # High/low patterns
             }
 
             # Calculate weighted average
@@ -380,9 +553,11 @@ class DualLibrarySystem:
             weighted_sum = sum(score * weight for score, weight in scores.values())
             final_score = weighted_sum / total_weight if total_weight > 0 else 0.0
 
-            # Boost score if correlation is particularly strong
-            if pearson_corr > 0.7 or spearman_corr > 0.7:
-                final_score = min(1.0, final_score * 1.2)
+            # Boost if multiple topology metrics agree
+            topology_metrics = [cosine_sim, normalized_corr, dtw_similarity, topology_score]
+            if sum(m > 0.6 for m in topology_metrics) >= 2:  # At least 2 topology metrics show good match
+                final_score = min(1.0, final_score * 1.15)
+                print(f"  Topology agreement boost applied")
 
             print(f"  FINAL SCORE: {final_score:.3f}")
 
@@ -524,9 +699,14 @@ class DualLibrarySystem:
                 return fp_data
         return None
 
-    def get_testing_strategy(self, identification: ModelIdentification) -> Dict:
+    def get_testing_strategy(self, identification: ModelIdentification, test_layer_count: int = None, variance_profile: List[float] = None) -> Dict:
         """
         Get testing strategy based on identification.
+
+        Args:
+            identification: Model identification result
+            test_layer_count: Number of layers in test model (for scaling)
+            variance_profile: Actual variance measurements from light probe
 
         Returns:
             Dict with testing configuration
@@ -539,24 +719,94 @@ class DualLibrarySystem:
                 # Extract restriction sites from reference
                 restriction_sites = reference_fp.get("restriction_sites", [])
                 focus_layers = []
-                if restriction_sites:
-                    # Use restriction sites as focus layers
+
+                # Get reference and test model layer counts for scaling
+                ref_layer_count = reference_fp.get("layer_count", reference_fp.get("behavioral_topology", {}).get("total_layers", 32))
+
+                # Try to extract test layer count from notes if not provided
+                if test_layer_count is None:
+                    # Parse from notes string like "Matched across size difference (32 vs 80 layers)"
+                    import re
+                    notes_match = re.search(r'\((\d+) vs (\d+) layers\)', identification.notes or '')
+                    if notes_match:
+                        test_layer_count = int(notes_match.group(2))
+                    else:
+                        test_layer_count = 80  # Default fallback
+
+                # If we have actual variance measurements, use them to find high-variance layers
+                if variance_profile and len(variance_profile) > 0:
+                    # Find layers with highest variance from light probe
+                    variance_with_layer = [(i, v) for i, v in enumerate(variance_profile)]
+                    # Sort by variance descending
+                    variance_with_layer.sort(key=lambda x: x[1], reverse=True)
+
+                    # Take top N highest variance layers (matching number of restriction sites)
+                    num_sites = len(restriction_sites) if restriction_sites else 7
+                    high_variance_layers = [layer for layer, _ in variance_with_layer[:num_sites]]
+
+                    # Also get scaled positions from reference for comparison
+                    reference_scaled = []
+                    if restriction_sites:
+                        for site in restriction_sites:
+                            if isinstance(site, dict) and "layer" in site:
+                                ref_layer = site["layer"]
+                                scaled_layer = int(round((ref_layer / ref_layer_count) * test_layer_count))
+                                scaled_layer = min(scaled_layer, test_layer_count - 1)
+                                reference_scaled.append(scaled_layer)
+                            elif isinstance(site, int):
+                                scaled_layer = int(round((site / ref_layer_count) * test_layer_count))
+                                scaled_layer = min(scaled_layer, test_layer_count - 1)
+                                reference_scaled.append(scaled_layer)
+
+                    # Combine high-variance layers with reference-predicted layers
+                    # Prioritize layers that appear in both
+                    combined_layers = set(high_variance_layers) | set(reference_scaled)
+
+                    # Sort combined layers by variance (prioritize high variance)
+                    focus_layers = sorted(combined_layers,
+                                         key=lambda l: variance_profile[l] if l < len(variance_profile) else 0,
+                                         reverse=True)[:15]  # Take top 15 for focused analysis
+
+                    logger.info(f"[STRATEGY] Selected {len(focus_layers)} high-variance layers from light probe")
+                    logger.info(f"[STRATEGY] High-variance layers: {high_variance_layers[:5]}")
+                    logger.info(f"[STRATEGY] Reference-predicted layers: {reference_scaled[:5]}")
+                    logger.info(f"[STRATEGY] Final selected layers: {sorted(focus_layers)[:15]}")
+
+                elif restriction_sites:
+                    # Fallback to just scaling if no variance data available
                     for site in restriction_sites:
                         if isinstance(site, dict) and "layer" in site:
-                            focus_layers.append(site["layer"])
+                            ref_layer = site["layer"]
+                            # Scale layer position proportionally
+                            scaled_layer = int(round((ref_layer / ref_layer_count) * test_layer_count))
+                            # Ensure we don't exceed model boundaries
+                            scaled_layer = min(scaled_layer, test_layer_count - 1)
+                            focus_layers.append(scaled_layer)
                         elif isinstance(site, int):
-                            focus_layers.append(site)
+                            # Scale integer layer position
+                            scaled_layer = int(round((site / ref_layer_count) * test_layer_count))
+                            scaled_layer = min(scaled_layer, test_layer_count - 1)
+                            focus_layers.append(scaled_layer)
+
+                # Always include first and last layers for boundary behavior
+                if 0 not in focus_layers:
+                    focus_layers.insert(0, 0)
+                if (test_layer_count - 1) not in focus_layers:
+                    focus_layers.append(test_layer_count - 1)
+
+                # Remove duplicates and sort
+                focus_layers = sorted(list(set(focus_layers)))
 
                 return {
                     "strategy": "targeted",
                     "reference_model": identification.reference_model,
-                    "focus_layers": focus_layers[:10],  # Top 10 restriction sites
-                    "restriction_sites": restriction_sites,
+                    "candidate_layers": focus_layers[:15],  # Candidate positions to probe for actual sites
+                    "baseline_measurements": restriction_sites,  # Reference measurements for comparison
                     "skip_layers": reference_fp.get("stable_layers", []),
                     "cassettes": reference_fp.get("recommended_cassettes", ["syntactic", "semantic"]),
                     "expected_patterns": reference_fp.get("behavioral_patterns", {}),
                     "challenges": reference_fp.get("challenges_processed", 10),
-                    "notes": f"Using reference from {identification.reference_model} with {len(focus_layers)} restriction sites"
+                    "notes": f"Using baseline from {identification.reference_model} (scaled from {ref_layer_count} to {test_layer_count} layers)"
                 }
             else:
                 # Family identified but no reference available
@@ -590,6 +840,70 @@ class DualLibrarySystem:
                 "challenges": 20,
                 "notes": "Full exploratory analysis"
             }
+
+    def _normalize_variance_profile(self, variance_profile):
+        """
+        Normalize variance profile to [0, 1] range for cross-model comparison.
+
+        This is critical for comparing models of different scales (e.g., GPT2 vs Llama).
+        Different models have vastly different variance magnitudes, so normalization
+        ensures we're comparing patterns/shapes rather than absolute values.
+
+        Args:
+            variance_profile: List or array of variance values
+
+        Returns:
+            Normalized variance profile in [0, 1] range
+        """
+        if not variance_profile or len(variance_profile) == 0:
+            return []
+
+        # Convert to numpy array for easier manipulation
+        profile = np.array(variance_profile)
+
+        # Handle edge case where all values are the same
+        min_val = profile.min()
+        max_val = profile.max()
+
+        if max_val - min_val < 1e-10:  # All values essentially the same
+            # Return array of 0.5 (middle of range) to indicate no variance
+            return np.full_like(profile, 0.5).tolist()
+
+        # Standard min-max normalization to [0, 1]
+        normalized = (profile - min_val) / (max_val - min_val)
+
+        return normalized.tolist()
+
+    def _interpolate_profile(self, positions, values, common_positions):
+        """
+        Helper to interpolate a profile to common positions.
+
+        Args:
+            positions: Original positions (0 to 1)
+            values: Original values
+            common_positions: Target positions to interpolate to
+
+        Returns:
+            Interpolated values at common positions
+        """
+        if len(positions) < 2 or len(values) < 2:
+            # Not enough points for interpolation
+            return np.zeros_like(common_positions)
+
+        # Ensure arrays are properly sized
+        positions = np.array(positions[:len(values)])
+        values = np.array(values[:len(positions)])
+
+        # Create interpolator
+        interp_func = interpolate.interp1d(
+            positions,
+            values,
+            kind='linear',
+            fill_value='extrapolate',
+            bounds_error=False
+        )
+
+        return interp_func(common_positions)
 
     def add_to_active_library(self, fingerprint_data: Dict, model_info: Dict):
         """Add a new fingerprint to the active library."""

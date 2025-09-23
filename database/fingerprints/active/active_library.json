@@ -2679,12 +2679,34 @@
       "model_path": "/Users/rohanvinaik/LLM_models/llama-2-7b-chat-hf",
       "run_type": "reference_baseline",
       "timestamp": "2025-09-13T18:42:19.326300"
+    },
+    "distilgpt2_20250923_141145": {
+      "behavioral_patterns": {
+        "hv_entropy": 13.630207593323705,
+        "hv_sparsity": 0.01,
+        "response_diversity": 0.03446730647148885,
+        "avg_response_length": 16.848496287907388,
+        "principled_features": {}
+      },
+      "model_family": "llama",
+      "model_size": "unknown",
+      "architecture_version": "distilgpt2",
+      "reference_model": "llama-2-7b-hf",
+      "hypervectors_generated": 7947,
+      "challenges_processed": 7947,
+      "processing_time": 149.47669911384583,
+      "validation_score": 1.0,
+      "source": "pipeline_generated",
+      "model_name": "distilgpt2",
+      "model_path": "/Users/rohanvinaik/LLM_models/distilgpt2",
+      "run_type": "reference_baseline",
+      "timestamp": "2025-09-23T14:11:45.974793"
     }
   },
   "metadata": {
     "version": "2.0",
     "created": "2025-09-03T19:15:46.608513",
-    "last_updated": "2025-09-13T18:42:19.326302",
-    "num_fingerprints": 34
+    "last_updated": "2025-09-23T14:11:45.974796",
+    "num_fingerprints": 35
   }
 }

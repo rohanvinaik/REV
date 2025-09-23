@@ -1133,18 +1133,78 @@ grep -i "precision targeting" your_run.log
 | llama-7b   | 32     | 2-3 hours     | 3-4GB        | ~440 probes      |
 | phi-2      | 32     | 2-3 hours     | 2-3GB        | ~440 probes      |
 
+### 🔧 CRITICAL FIX: TARGETED EXECUTION AT RESTRICTION SITES (December 2024)
+
+#### The Problem
+When REV identifies a model with high confidence (e.g., 95% match with Llama reference), it was still:
+1. Running deep analysis on ALL 80 layers
+2. Executing 7,945 prompts × 80 layers = 635,600 operations
+3. Taking 22+ days instead of using the reference restriction sites
+
+#### The Solution
+Implemented targeted execution that:
+1. Uses reference restriction sites when confidence > 30% (enhanced matching threshold)
+2. Executes prompts ONLY at identified restriction sites (e.g., layers 7, 14, 21, 43, 57)
+3. Reduces operations from 635,600 to ~39,725 (15-20x speedup)
+
+#### Implementation Details
+**Files Modified**:
+- `run_rev.py`: Added logic to skip deep analysis when high-confidence reference match exists
+- `src/models/true_segment_execution.py`: Added `identify_restriction_sites_targeted()` method
+
+**Key Changes**:
+```python
+# run_rev.py - Override deep analysis when reference match exists
+if identification.confidence >= confidence_threshold and identification.identified_family and strategy.get('focus_layers'):
+    needs_deep_analysis = False  # Use targeted approach instead
+    # Will probe ONLY at reference restriction sites
+```
+
+```python
+# true_segment_execution.py - New targeted execution method
+def identify_restriction_sites_targeted(self, probe_prompts, target_layers):
+    # Only profiles specified layers (15-20x speedup)
+    for layer_idx in target_layers:  # e.g., [7, 14, 21, 43, 57]
+        profile = self.profile_layer_behavior(layer_idx, probe_prompts)
+```
+
+#### Usage
+The system now automatically:
+1. Runs light behavioral probe (10-15% of layers)
+2. Matches against reference library
+3. If confidence > 30%: Uses targeted execution at reference sites
+4. If confidence < 30%: Falls back to full deep analysis
+
+No command changes needed - the optimization is automatic!
+
 ### 🎯 CURRENT LIBRARY STATUS (September 2024)
 
-**Reference Library**: Contains 1 complete reference (pythia-70m)
-- File: `fingerprint_library/reference_library.json` (5.7KB)
-- Challenges processed: 3 (minimal - needs rebuild!)
-- Behavioral topology: Complete with restriction sites
+**Reference Library**: Contains 3 complete references
+- File: `fingerprint_library/reference_library.json`
+- References: pythia-70m, distilgpt2, llama-2-7b-hf
+- Behavioral topology: Complete with variance profiles and behavioral patterns
 
-**Active Library**: Contains multiple model runs  
-- File: `fingerprint_library/active_library.json` (4.1KB)
+**Active Library**: Contains multiple model runs
+- File: `fingerprint_library/active_library.json`
 - Continuously updated with each model run
 
-**Recommendation**: The current pythia reference has only 3 challenges processed - this should be rebuilt with the full comprehensive analysis for maximum effectiveness.
+### 🔄 LAYER SCALING FOR CROSS-SIZE MATCHING (Fixed September 2024)
+
+**Issue**: Reference library from smaller models (e.g., 32-layer) was not properly scaled to larger test models (e.g., 80-layer).
+
+**Solution**: Implemented proportional layer scaling in `dual_library_system.py`:
+```python
+# Scale reference layers to test model dimensions
+scaled_layer = int(round((ref_layer / ref_layer_count) * test_layer_count))
+```
+
+**How it works**:
+- 32-layer reference → 80-layer test model scaling:
+  - Layer 5 (32-layer) → Layer 12-13 (80-layer)
+  - Layer 10 (32-layer) → Layer 25 (80-layer)
+  - Layer 15 (32-layer) → Layer 37-38 (80-layer)
+- Always includes layer 0 and last layer for boundary behavior
+- Enables proper cross-size behavioral matching for 15-20x speedup
 
 ## 🧬 DUAL LIBRARY SYSTEM
 
