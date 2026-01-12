@@ -1,0 +1,38 @@
+{
+  "tests_run": 6,
+  "tests_passed": 6,
+  "tests_failed": 0,
+  "details": {
+    "numba": {
+      "available": true,
+      "entropy_ms": 0.005721669876947999
+    },
+    "hdc": {
+      "dimension": 10000,
+      "encode_time_ms": 0.7286110000374416,
+      "normalized": "True"
+    },
+    "dual_library": {
+      "reference_families": 3,
+      "avg_challenges": 6546.666666666667
+    },
+    "orchestration": {
+      "systems_active": 5,
+      "total_prompts": 37,
+      "generation_time_s": 1.9569906250108033
+    },
+    "fingerprinting": {
+      "encoding_time_ms": 0.7530556758865714,
+      "dimension": 10000,
+      "has_generate_method": true,
+      "sim_ml_ai": 0.0015143887139856815,
+      "sim_ai_nn": -0.00979842059314251
+    },
+    "sprt": {
+      "samples_used": 50,
+      "mean": 0.08872630473719299,
+      "variance": 0.0021793434856577296,
+      "confidence": 0.45131742241741946
+    }
+  }
+}

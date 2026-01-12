@@ -17,7 +17,6 @@ import logging
 from .model_library import ModelFingerprintLibrary, ModelIdentificationResult, BaseModelFingerprint
 from ..hdc.unified_fingerprint import UnifiedFingerprintGenerator, UnifiedFingerprint
 from ..analysis.unified_model_analysis import UnifiedModelAnalyzer
-from ..challenges.cassette_executor import CassetteExecutor
 
 logger = logging.getLogger(__name__)
 

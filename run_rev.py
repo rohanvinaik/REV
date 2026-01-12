@@ -36,10 +36,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional
 
 # REV components
-from src.models.api_only_inference import APIOnlyInference, APIOnlyConfig
-from src.models.unified_inference import UnifiedInferenceManager
-from src.models.large_model_inference import LargeModelInference, LargeModelConfig
-from src.models.metal_accelerated_inference import MetalAcceleratedInference, get_optimal_device
+from src.models.metal_accelerated_inference import MetalAcceleratedInference, get_optimal_device, LargeModelConfig
 from src.rev_pipeline import REVPipeline
 from src.hdc.encoder import HypervectorEncoder, HypervectorConfig
 from src.hdc.adaptive_encoder import AdaptiveSparsityEncoder, AdjustmentStrategy
@@ -55,8 +52,6 @@ from src.core.sequential import SequentialState, TestType
 from src.hypervector.similarity import AdvancedSimilarity
 from src.diagnostics.probe_monitor import get_probe_monitor, reset_probe_monitor
 from src.hdc.behavioral_sites import BehavioralSites
-from src.challenges.cassette_executor import CassetteExecutor, CassetteExecutionConfig
-from src.challenges.advanced_probe_cassettes import ProbeType
 from src.analysis.behavior_profiler import BehaviorProfiler, integrate_with_rev_pipeline
 
 # New feature extraction components

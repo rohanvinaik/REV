@@ -1,1662 +1,226 @@
-# REV - Restriction Enzyme Verification System v3.0
+# REV - Restriction Enzyme Verification System
 
-## ⚠️ CRITICAL: ONE UNIFIED PIPELINE
+## CRITICAL MISTAKES TO AVOID ("Sin Bucket") - READ THIS FIRST!
 
-**`run_rev.py` is the ONLY entry point** - All features integrated, no other pipeline scripts
-
-## 🚀 QUICK START
-
-### Two Execution Modes
-
-1. **LOCAL FILESYSTEM MODELS** (on disk)
-   - **Segmented STREAMING** - models are NEVER fully loaded into memory
-   - Streams model weights layer-by-layer from disk during execution
-   - Processes one layer at a time at "restriction sites" (behavioral boundaries)
-   - 2GB memory cap per process (default)
-   - **NEW: Parallel processing up to 36GB total memory**
-   - NO API keys needed
-   - Enables running 68GB+ models on 64GB systems
-
-2. **CLOUD API MODELS**
-   - External API calls
-   - Requires API keys
-
-### ⚠️ CRITICAL: Security & Architecture
-
-**MODEL WEIGHTS REMAIN SECRET** - REV never exposes, logs, or leaks model weights. The system:
-- Accesses weights layer-by-layer from disk (never fully in memory)
-- Injects prompts at specific behavioral boundaries ("restriction sites")
-- Streams responses back without revealing internal weights
-- Maintains complete opacity of model parameters
-
-**"API Mode" means treating models as black boxes** - whether local or remote:
-- The entire model is NEVER loaded into memory at once
-- Weights are accessed only for computation, never exposed
-- Behavioral fingerprinting happens through response analysis, not weight inspection
-
-This is fundamentally different from traditional inference where entire models are loaded into RAM/VRAM. REV's innovation is treating ALL models as secure black boxes.
-
-### ⚠️ CRITICAL: Behavioral Verification for Security
-
-**REV identifies models through behavioral analysis, NOT metadata:**
-- **Config files can lie** - Easily spoofed to bypass verification
-- **Paths can be renamed** - No security value  
-- **Only behavior reveals truth** - Topological patterns under prompt injection
-
-**How Model Identification Works:**
-1. Light behavioral probe samples 10-20% of layers (adaptive by model size)
-2. Measures variance profile and divergence patterns
-3. Binary search interpolation finds exact restriction sites (behavioral boundaries)
-4. Matches topology against reference library using sorting algorithms
-5. Confidence = topological similarity (0-100%)
-
-**Smart Sampling Strategy:**
-- Small models (≤10 layers): 100% coverage
-- Medium models (11-30 layers): ~20% sampling
-- Large models (31-100 layers): 12-15% sampling
-- Very large models (>100 layers): 10% sampling with strategic points
-- Always includes boundaries (first/last) and key percentiles (25%, 50%, 75%)
-
-**Orchestration is DEFAULT** - Automatically generates 250-400+ challenges
-
-## 🔬 VARIANCE-BASED REV SITE SELECTION (December 2024 Update)
-
-### Current Implementation
-
-The system now intelligently selects high-variance layers for deep behavioral fingerprinting:
-
-1. **Light Probe Phase**: Samples 10-20% of layers to build variance profile
-2. **Reference Matching**: Identifies model family and retrieves baseline measurements
-3. **Variance-Based Selection**:
-   - Identifies layers with highest variance from light probe
-   - Gets reference-predicted positions (scaled proportionally)
-   - Combines both sets, prioritizing layers appearing in both
-   - Selects top 15 layers sorted by actual variance
-4. **Deep Fingerprinting**: Orchestrates 250-400+ prompts at selected high-variance sites
-
-**Key Fix (Sept 2024)**: System now uses actual variance measurements rather than just proportional scaling. Reference data is treated as "baseline measurements" for comparison, not final restriction sites.
-
-## 🔬 HOW FINGERPRINTING ACTUALLY WORKS
-
-### From Behavioral Analysis to Fingerprint
-
-**The Complete Process:**
-
-1. **Prompt Injection at Layers**
-   ```
-   Layer 0: "Complete this sentence: The weather today is"
-   → Response variance: 0.270 (high diversity)
-   
-   Layer 3: "Complete this sentence: The weather today is"
-   → Response variance: 0.333 (restriction site - behavioral boundary)
-   
-   Layer 5: "Complete this sentence: The weather today is"
-   → Response variance: 0.291 (moderate diversity)
-   ```
-
-2. **Divergence Measurement**
-   Each probe generates divergence metrics:
-   - **CV_score**: Coefficient of variation (response consistency)
-   - **Layer_score**: Depth-dependent behavior changes
-   - **Sparsity_score**: Activation patterns
-   - **Range_score**: Output value distributions
-   - **Entropy_score**: Information content
-
-3. **Topology Construction**
-   ```
-   Behavioral Topology for DistilGPT2:
-   - Restriction Sites: [0, 3, 5] (high divergence layers)
-   - Variance Profile: [0.270, 0.315, 0.333, 0.298, 0.304, 0.291]
-   - Divergence Pattern: "ascending-peak-plateau"
-   ```
-
-4. **Fingerprint Generation**
-   The fingerprint combines:
-   - **Topological signature**: Pattern of restriction sites
-   - **Variance vectors**: Layer-by-layer behavioral measurements
-   - **Response embeddings**: Actual model outputs (hashed)
-   - **Statistical metrics**: Aggregated behavioral scores
-
-5. **Reference Matching**
-   ```python
-   # Simplified matching algorithm
-   def match_fingerprint(new_fp, reference_library):
-       best_match = None
-       best_similarity = 0.0
-       
-       for ref_fp in reference_library:
-           # Compare restriction site patterns
-           site_similarity = compare_sites(new_fp.sites, ref_fp.sites)
-           
-           # Compare variance profiles
-           profile_similarity = cosine_similarity(new_fp.profile, ref_fp.profile)
-           
-           # Weighted combination
-           similarity = 0.7 * site_similarity + 0.3 * profile_similarity
-           
-           if similarity > best_similarity:
-               best_match = ref_fp.family
-               best_similarity = similarity
-       
-       return best_match, best_similarity
-   ```
-
-### Example Run Output Showing Fingerprinting
-
+### 1. ALWAYS Use --enable-prompt-orchestration
+**WRONG:**
 ```bash
-$ python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 --challenges 20 --debug
-
-[BEHAVIORAL-ANALYSIS] Starting prompt injection...
-
-Probe 1/20: Layer 0 | Divergence: 0.270 | Time: 87ms
-  Response: "wonderful and sunny with..." (truncated)
-  CV_score: 0.42 | Entropy: 2.31
-
-Probe 2/20: Layer 1 | Divergence: 0.315 | Time: 92ms
-  Response: "quite pleasant despite the..." (truncated)
-  CV_score: 0.38 | Entropy: 2.45
-
-Probe 3/20: Layer 2 | Divergence: 0.333 | Time: 89ms ← RESTRICTION SITE
-  Response: "unpredictable as always in..." (truncated)
-  CV_score: 0.51 | Entropy: 2.67
-
-[TOPOLOGY] Building behavioral fingerprint...
-- Identified 3 restriction sites: [0, 3, 5]
-- Variance profile shape: ascending-peak-plateau
-- Behavioral phase transitions at layers: [2-3, 4-5]
-
-[FINGERPRINT] Generated unique signature:
-- Hash: 7f8a9b2c3d4e5f6a...
-- Dimensions: 100,000 (sparse: 0.001)
-- Key features:
-  * Early attention divergence (layer 0-2)
-  * Mid-layer stabilization (layer 3-4)
-  * Output normalization pattern (layer 5)
-
-[MATCHING] Comparing against reference library...
-- Testing against GPT family reference...
-  * Site overlap: 85% (2/3 sites match)
-  * Profile correlation: 0.92
-  * Overall similarity: 87.4%
-- Testing against Pythia family reference...
-  * Site overlap: 33% (1/3 sites match)
-  * Profile correlation: 0.41
-  * Overall similarity: 35.4%
-
-[IDENTIFICATION] Model identified as GPT family with 87.4% confidence
+python run_rev.py /path/to/model  # Generates only 0-7 challenges - USELESS
+python run_rev.py /path/to/model --challenges 50  # Still broken without orchestration
 ```
 
-### Security Implications
-
-**Why This Matters:**
-1. **Unforgeable**: Behavioral patterns emerge from billions of parameters
-2. **Robust**: Works even with quantized or modified models
-3. **Verifiable**: Can prove model identity without exposing weights
-4. **Cross-version**: Detects model families across versions/sizes
-
-**Attack Resistance:**
-- **Metadata spoofing**: Useless - only behavior matters
-- **Weight pruning**: Still creates identifiable patterns
-- **Fine-tuning**: Base behavior remains detectable
-- **Quantization**: Topology preserved despite precision loss
-
-### ✅ CORRECT USAGE - Local Models
-
+**CORRECT:**
 ```bash
-# Use FULL PATH to directory containing config.json
-# ALWAYS include --enable-prompt-orchestration for proper operation
-
-# HuggingFace cache format - USE SNAPSHOT PATH
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx \
-    --enable-prompt-orchestration
-
-# Standard format
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct \
-    --enable-prompt-orchestration
-python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b \
-    --enable-prompt-orchestration  # 68GB model on 64GB system WORKS!
-
-# Multi-model comparison
-python run_rev.py /path/to/model1 /path/to/model2 \
-    --enable-prompt-orchestration
-
-# With specific challenge count (overrides default)
-python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 50
-# Small models (6 layers): ~250-300 prompts automatically
-# Medium models (12-24 layers): ~260-290 prompts automatically  
-# Large models (32+ layers): ~280-320 prompts automatically
+python run_rev.py /path/to/model --enable-prompt-orchestration  # Generates 250+ challenges
 ```
 
-### Finding Model Paths
+Without orchestration, the pipeline generates insufficient challenges for meaningful fingerprinting.
 
+### 2. Use FULL PATH to Model Directory
+**WRONG:**
 ```bash
-# Find HuggingFace cache models
-find ~/LLM_models -name "config.json" | grep pythia
-
-# Example output:
-# /Users/.../models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42/config.json
-# Use the directory containing config.json!
+python run_rev.py EleutherAI/pythia-70m  # Tries cloud API, not local
+python run_rev.py ~/models/pythia-70m  # May fail on relative path
 ```
 
-### ❌ COMMON MISTAKES
-
+**CORRECT:**
 ```bash
-# WRONG: Missing orchestration (generates 0-7 challenges only!)
-python run_rev.py /path/to/model  # BROKEN - inadequate challenges
-
-# WRONG: Model ID instead of path
-python run_rev.py EleutherAI/pythia-70m  # Tries API
-
-# WRONG: --local flag (REMOVED)
-python run_rev.py /path --local  # ERROR
-
-# WRONG: Missing snapshot path
-python run_rev.py /Users/.../models--EleutherAI--pythia-70m  # Need snapshot
-
-# WRONG: Expecting reference speedup without orchestration
-python run_rev.py /path/to/large_model --challenges 50  # Won't use references
-
-# CORRECT: Full path with orchestration
-python run_rev.py /Users/.../pythia-70m/snapshots/xxx --enable-prompt-orchestration
+python run_rev.py /Users/rohanvinaik/LLM_models/pythia-70m --enable-prompt-orchestration
 ```
 
-## 🧬 KEY CONCEPTS
+The path MUST contain `config.json` for the model to be recognized.
 
-### Restriction Sites & Fingerprinting
-
-**Restriction Sites**: Behavioral boundaries in model layers where significant changes occur (similar to restriction enzyme cut sites in DNA). The system identifies these automatically.
-
-**How It Works**:
-1. **Dynamic Site Discovery**: Automatically identifies restriction sites based on model layer count
-   - Small models (≤6 layers): Every layer is a potential site
-   - Medium models (7-12 layers): Every 2nd layer + boundaries
-   - Large models (13-24 layers): Key behavioral boundaries (25%, 50%, 75%)
-   - Very large models (>24 layers): Strategic sampling at critical points
-2. **Adaptive Prompt Generation**: Generates prompts dynamically: sites × prompts_per_site
-   - More prompts per site for small models (70 per site)
-   - Fewer prompts per site for large models (45 per site)
-3. **Fingerprinting**: At each restriction site, injects targeted prompts to build unique behavioral signature
-4. **Active Library**: When testing larger models, uses reference to know WHERE to probe intensively
-
-**Why This Matters**:
-- **Dynamic, Not Fixed**: System discovers sites and generates appropriate prompts (not hardcoded 400)
-- Without reference: Must probe ALL layers exhaustively (slow)
-- With reference: Knows exactly where restriction sites are (15-20x faster)
-- Cross-architecture: References work across different model sizes in same architecture
-- Cross-dimension: Even works when models have different dimensions (768D → 1024D)
-
-### 🎯 Enhanced Model Identification (v3.1)
-
-**Pattern-Based Matching**: The system now focuses on behavioral variance patterns rather than layer counts for improved accuracy.
-
-**Key Improvements**:
-1. **Variance Delta Patterns (60% weight)**: Focuses on magnitude and direction of behavioral changes
-2. **Relative Positions (25% weight)**: Normalizes layer positions relative to model depth
-3. **Adaptive Probing**: Automatically probes more layers when confidence < 80%
-4. **Behavioral Matching**: Compares patterns of change, not absolute architecture
-
-**How It Works**:
-```python
-# Old approach (problematic):
-# - Weighted layer count heavily
-# - Misidentified llama-32-layers as pythia-32-layers
-
-# New approach (improved):
-# - Extracts variance delta patterns (e.g., -48% at layer 5)
-# - Normalizes positions (layer 5/32 = 15.6% depth)
-# - Matches behavioral signatures independent of size
-# - Correctly identifies llama models based on unique variance patterns
+### 3. For HuggingFace Cache, Use SNAPSHOT Path
+**WRONG:**
+```bash
+python run_rev.py /path/to/models--EleutherAI--pythia-70m  # Parent directory
 ```
 
-**Adaptive Light Probe** (Improved November 2024):
-- **Sampling Strategy**: 10-20% of layers based on model size (not fixed "every 3rd")
-- **Strategic Points**: Always includes boundaries (0, 1, n-2, n-1) and key percentiles
-- **If confidence < 80%**: Expands sampling adaptively
-- **Ensures correct family identification** before using references
-
-**Efficient Binary Search Interpolation**:
-- **Purpose**: Precisely locates behavioral transitions (REV sites)
-- **Method**: Sorting-based transition detection + binary search refinement
-- **Activation Thresholds**:
-  - Very strong transitions (>0.25): 3-point binary search
-  - Moderate transitions (>0.1): 2-point golden ratio search
-  - Weak transitions (>0.02): Single midpoint
-- **Efficiency**: Only interpolates at detected transitions, not uniformly
-- **Dense Pattern Handling**: Automatically skips interpolation for reference builds with complete layer data
-- **Thresholds**: Based on empirical analysis of reference runs (transitions range from 0.0036 to 0.6333)
-
-## 📚 KEY WORKFLOWS
-
-### Building Reference Library (One-Time Setup per Architecture)
-
-**CRITICAL**: Use `--build-reference --enable-prompt-orchestration` together!
-
+**CORRECT:**
 ```bash
-# Build deep behavioral reference for model architecture
-# ALWAYS use smallest model in architecture family
-# Orchestrator automatically generates 400+ probes (ignores --challenges)
-# Reference works across ALL models sharing architecture (even different sizes!)
-# Model weights remain completely secret throughout process
-
-# Pythia/GPT-NeoX architecture (70M parameters - smallest)
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx \
-    --build-reference --enable-prompt-orchestration
-
-# GPT-2 architecture (DistilGPT2 - smallest, works for GPT2-medium, GPT2-large, etc)  
-python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 \
-    --build-reference --enable-prompt-orchestration
-    
-# Llama architecture (7B - smallest available, works for 13B, 70B, 405B)
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf \
-    --build-reference --enable-prompt-orchestration
-
-# NOTE: --challenges parameter is IGNORED for reference builds
-# The orchestrator controls prompt generation for comprehensive coverage
+python run_rev.py /path/to/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 --enable-prompt-orchestration
 ```
 
-### ⚠️ CRITICAL: Ensuring Robust Model-Agnostic Execution
+Find the snapshot path with: `find ~/LLM_models -name "config.json" | grep pythia`
 
-**Known Issues and Solutions**:
-
-1. **Insufficient Challenge Generation**
-   - **Symptom**: Reference build completes with only 7-20 challenges instead of 250+
-   - **Root Cause**: Missing `--enable-prompt-orchestration` flag
-   - **Solution**: ALWAYS use both flags together: `--build-reference --enable-prompt-orchestration`
-   - **Verification**: Look for "Generated XXX orchestrated challenges" in output (should be 250+)
-
-2. **Mock Response Detection**
-   - **Symptom**: Probes complete in 5-10ms (unrealistically fast)
-   - **Root Cause**: System using synthetic responses instead of real model execution
-   - **Solution**: Ensure true_segment_execution.py is properly streaming weights from disk
-   - **Expected timing**: 50-150ms per probe for real execution
-
-3. **Reference Library Management**
-   - **Issue**: Duplicate entries with different challenge counts
-   - **Solution**: Pipeline automatically updates existing references
-   - **Verification**: Each model family should have ONE reference entry with 250+ challenges
-
-4. **Model Path Compatibility**
-   - **Standard format**: `/path/to/model-name/`
-   - **HuggingFace cache**: Use full snapshot path with hash
-   - **Single-file models**: Automatically handled with synthetic weight index
-   - **Multi-file models**: Requires model.safetensors.index.json
-
-### Expected Reference Build Behavior
-
-**Successful Reference Build Characteristics**:
-- Generates 250-300 behavioral probes automatically
-- Tests each layer comprehensively (not just sampling)
-- Takes 15-60 minutes depending on model size
-- Shows "PROBE SUCCESS" messages with divergence scores
-- Creates behavioral topology with restriction sites
-- Updates reference_library.json with 250+ challenges_processed
-
-**Red Flags Indicating Problems**:
-- ❌ Less than 250 challenges generated
-- ❌ Completes in under 5 minutes for any model
-- ❌ Probe times under 10ms (indicates mock responses)
-- ❌ No "orchestrated challenges" message in output
-- ❌ Missing layer-by-layer streaming messages
-
-### ✅ MAJOR SUCCESS: Reference Library System Fixed (September 2024)
-
-**🎉 BREAKTHROUGH**: The reference library system has been **completely repaired** and is now fully operational!
-
-**What Was Broken**:
-- Deep behavioral analysis was failing with "expected str, bytes or os.PathLike object, not NoneType" 
-- System was falling back to shallow references with fake 0.0 divergence values
-- All reference builds were generating useless "mock" restriction sites
-- No actual 15-20x speedup capability despite claims
-
-**The Fix**:
-- **Location**: `run_rev.py:844` 
-- **Change**: Added proper model_path validation before SegmentExecutionConfig
-- **Result**: Deep behavioral analysis now works correctly
-- **Impact**: All reference builds generate **real behavioral topology**
-
-**Current Verified Status**:
+### 4. Reference Builds Require BOTH Flags
+**WRONG:**
 ```bash
-✅ PYTHIA FAMILY: pythia-70m reference COMPLETE
-   - 261 challenges processed (comprehensive)
-   - Real restriction sites with -76% behavioral transition at layer 1
-   - Verified 15-20x speedup with pythia-160m test
-
-✅ GPT FAMILY: distilgpt2 reference COMPLETE  
-   - 263 challenges processed (comprehensive)
-   - Real restriction sites with proper behavioral topology
-   - Verified 15-20x speedup with gpt2 test
-
-🔄 LLAMA FAMILY: llama-2-7b-hf reference IN PROGRESS
-   - 32-layer comprehensive analysis underway
-   - Showing real divergence values (0.451+ at layer 2)
-   - Will enable 15-20x speedup for Llama-70B+ models when complete
+python run_rev.py /path/to/model --build-reference  # Generates 0 challenges!
 ```
 
-**Performance Verification Results**:
+**CORRECT:**
 ```bash
-# CONFIRMED WORKING:
-$ python run_rev.py /path/to/pythia-160m --enable-prompt-orchestration
-# Output: "Enables 15-20x speedup on large models" ✅
-
-$ python run_rev.py /path/to/gpt2 --enable-prompt-orchestration  
-# Output: "Enables 15-20x speedup on large models" ✅
-```
-
-### ⚠️ CRITICAL SANITY CHECKS: How to Verify Your REV System
-
-**🔍 ESSENTIAL VERIFICATION STEPS**:
-
-#### 1. Model Weight Security Check
-```bash
-# NEVER should you see model weights printed to console
-# NEVER should weights be saved to files
-# ALL access should be layer-by-layer streaming
-
-# ✅ CORRECT BEHAVIOR - Look for these messages:
-# "[SEGMENT-EXEC] Loaded weights for layer X" 
-# "[SEGMENT-EXEC] Found layer X weights with prefix 'model.layers.X'"
-# "Layer-by-layer execution enabled"
-
-# ❌ DANGER SIGNS - If you see:
-# Full model tensors printed to console
-# Weight values logged in plaintext
-# "Loading full model into memory"
-```
-
-#### 2. Real vs Mock Behavioral Analysis
-```bash
-# ✅ REAL ANALYSIS INDICATORS:
-# Divergence values vary: 0.302, 0.433, 0.446, 0.450, etc.
-# Probe times: 50-500ms (real computation)
-# "[DIVERGENCE-DEBUG] Computing signature for layer X"
-# "[DIVERGENCE-CALC] Layer score computed: 0.XXX"
-
-# ❌ MOCK ANALYSIS INDICATORS:
-# All divergence values identical: 0.417, 0.417, 0.417...
-# Probe times: 1-10ms (too fast to be real)
-# Missing "[SEGMENT-EXEC]" messages
-# No layer-by-layer weight loading messages
-```
-
-#### 3. Reference Library Quality Check
-```bash
-# Check your reference library status:
-python -c "
-import json
-with open('fingerprint_library/reference_library.json', 'r') as f:
-    data = json.load(f)
-    for name, info in data.get('fingerprints', {}).items():
-        challenges = info.get('challenges_processed', 0)
-        sites = info.get('restriction_sites', [])
-        has_real_deltas = any(site.get('divergence_delta', 0) != 0.0 for site in sites)
-        status = '✅ GOOD' if challenges >= 250 and has_real_deltas else '❌ BAD'
-        print(f'{status}: {name} - {challenges} challenges, real_deltas: {has_real_deltas}')
-"
-
-# ✅ GOOD OUTPUT EXAMPLE:
-# ✅ GOOD: pythia-70m_reference - 261 challenges, real_deltas: True
-# ✅ GOOD: distilgpt2_reference - 263 challenges, real_deltas: True
-
-# ❌ BAD OUTPUT EXAMPLE:
-# ❌ BAD: some_model_reference - 7 challenges, real_deltas: False
-```
-
-#### 4. Streaming Execution Verification
-```bash
-# During model runs, monitor for proper layer-by-layer streaming:
-# ✅ Expected behavior:
-tail -f your_run.log | grep -E "SEGMENT-EXEC|weights for layer"
-
-# Should see continuous messages like:
-# "[SEGMENT-EXEC] Found layer 0 weights with prefix..."
-# "[SEGMENT-EXEC] Loaded 15 weights for layer 0"
-# "[SEGMENT-EXEC] Found layer 1 weights with prefix..."
-# etc.
-
-# ❌ If you see nothing, the system is not streaming properly
-```
-
-#### 5. Reference Acceleration Test
-```bash
-# Test that references actually provide speedup:
-# 1. Run a larger model in family with existing reference:
-python run_rev.py /path/to/larger_model --enable-prompt-orchestration
-
-# 2. Look for these success indicators in output:
-# "Using reference baseline from family: FAMILY_NAME"
-# "Precision targeting enabled: 15-20x speedup expected"
-# "Enables 15-20x speedup on large models"
-
-# 3. If you DON'T see these, the reference system isn't working
-```
-
-### 🚨 TROUBLESHOOTING: Common Issues & Solutions
-
-#### Problem: Reference Build Generates <250 Challenges
-```bash
-# Symptom: Reference completes with only 7-20 challenges
-# Cause: Missing --enable-prompt-orchestration flag
-# Solution: Always use both flags together
 python run_rev.py /path/to/model --build-reference --enable-prompt-orchestration
-
-# Verification: Look for "Generated XXX behavioral probes across 10 categories"
 ```
 
-#### Problem: All Divergence Values Are Identical  
+### 5. Build References with SMALLEST Model in Family
+**WRONG:**
 ```bash
-# Symptom: 0.417, 0.417, 0.417... (fake values)
-# Cause: Deep behavioral analysis is failing, using shallow fallback
-# Solution: Check that model path exists and contains config.json
-ls -la /path/to/model/config.json  # Must exist
-
-# This was the major bug we fixed - should no longer occur
+python run_rev.py /path/to/llama-70b --build-reference --enable-prompt-orchestration  # Takes days
 ```
 
-#### Problem: "Expected str, bytes or os.PathLike object, not NoneType"
+**CORRECT:**
 ```bash
-# Symptom: Deep analysis crashes with this error
-# Cause: model_path validation failure (FIXED in run_rev.py:844)
-# Solution: Update to latest version with the fix
-
-# If still occurring:
-# 1. Verify model path is absolute, not relative
-# 2. Ensure config.json exists in the path
-# 3. Check file permissions
+python run_rev.py /path/to/llama-2-7b-hf --build-reference --enable-prompt-orchestration  # Reference for all Llama
 ```
 
-#### Problem: Reference Not Being Used
-```bash
-# Symptom: Large model doesn't show "Using reference baseline"
-# Cause 1: Reference doesn't exist for this family
-# Solution: Build reference for the model family first
-
-# Cause 2: Family detection failed
-# Workaround: System uses architectural fallbacks
-# Check logs for "Family confidence: X.X%" - low confidence is expected
-
-# Cause 3: Reference is corrupted/shallow
-# Solution: Rebuild reference with --enable-prompt-orchestration
-```
-
-#### Problem: Probe Times Too Fast (<10ms)
-```bash
-# Symptom: "Time: 5.2ms" consistently
-# Cause: System using mock responses instead of real execution
-# Solution: Verify model streaming is enabled
-# Look for "[SEGMENT-EXEC]" messages during execution
-```
-
-### 📊 Expected Performance Metrics
-
-| Model Size | Reference Build Time | Challenges Generated | Speedup Factor |
-|------------|---------------------|---------------------|----------------|
-| 70M (pythia-70m) | 20-25 minutes | 260-270 | N/A (is reference) |
-| 1.5B (distilgpt2) | 25-30 minutes | 260-270 | N/A (is reference) |
-| 7B (llama-2-7b-hf) | 2-3 hours | 280-300 | N/A (is reference) |
-| 160M (pythia-160m) | 8-12 minutes | ~50 challenges | 15-20x faster |
-| 1.3B (gpt-neo) | 15-20 minutes | ~50 challenges | 15-20x faster |
-| 70B (llama-70b) | 2-4 hours | ~50 challenges | 15-20x faster |
-
-### Using References for Large Models (15-20x Faster)
-
-```bash
-# After reference exists, large models run MUCH faster
-# Reference provides educated assumptions about restriction sites
-# Works even across different model dimensions (768D → 1024D)
-
-# Pythia-12B (uses pythia-70m reference)
-python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b \
-    --enable-prompt-orchestration
-
-# Llama-70B (uses llama-7b reference)  
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-3.3-70b-instruct \
-    --enable-prompt-orchestration
-
-# GPT2-medium (can use distilgpt2 reference despite dimension difference)
-python run_rev.py /Users/rohanvinaik/LLM_models/gpt2-medium \
-    --enable-prompt-orchestration
-
-# Yi-34B (auto-detects architecture reference)
-python run_rev.py /Users/rohanvinaik/LLM_models/yi-34b \
-    --enable-prompt-orchestration
-```
-
-### Advanced Options
-
-```bash
-# Full orchestration with all 7 prompt systems (auto-generates hundreds of prompts)
-python run_rev.py /path/to/model \
-    --enable-prompt-orchestration \
-    --enable-pot --enable-kdf --enable-evolutionary \
-    --enable-dynamic --enable-hierarchical \
-    --debug
-
-# Adversarial testing
-python run_rev.py /path/to/model \
-    --adversarial --adversarial-ratio 0.5 \
-    --adversarial-types jailbreak alignment_faking
-
-# Multi-stage orchestration with time budget
-python run_rev.py /path/to/model \
-    --orchestrate --time-budget 2.5 \
-    --claimed-family llama --add-to-library
-
-# Unified fingerprinting
-python run_rev.py /path/to/model \
-    --unified-fingerprints --fingerprint-dimension 100000 \
-    --fingerprint-sparsity 0.001 --save-fingerprints
-```
-
-### 🆕 Parallel Processing (36GB Memory Limit)
-
-**IMPORTANT UPDATE (v3.1)**: Parallel processing now uses the unified prompt orchestration system with all 7 specialized generators for better prompt diversity and comprehensive behavioral coverage.
-
-```bash
-# Process multiple models in parallel
-python run_rev.py model1/ model2/ model3/ \
-    --parallel --parallel-memory-limit 36.0
-
-# Process many prompts on single model (batch processing)
-python run_rev.py /path/to/model \
-    --parallel --parallel-batch-size 10 \
-    --parallel-memory-limit 36.0
-
-# Parallel reference building with orchestration
-python run_rev.py /path/to/model \
-    --build-reference --parallel \
-    --parallel-workers 4 \
-    --enable-prompt-orchestration
-
-# Adaptive parallel processing (adjusts to system load)
-python run_rev.py model1/ model2/ \
-    --parallel --enable-adaptive-parallel \
-    --parallel-memory-limit 36.0
-
-# Different parallel modes
-python run_rev.py model1/ model2/ model3/ \
-    --parallel --parallel-mode cross_product  # Each model × all prompts
-    
-python run_rev.py model1/ model2/ model3/ \
-    --parallel --parallel-mode broadcast      # All models × same prompts
-    
-python run_rev.py model1/ model2/ model3/ \
-    --parallel --parallel-mode paired         # model[i] × prompt[i]
-
-# Parallel with full orchestration (7 prompt systems)
-python run_rev.py model1/ model2/ \
-    --parallel --enable-prompt-orchestration \
-    --parallel-memory-limit 36.0 \
-    --challenges 200  # Distributed across all 7 systems
-```
-
-## 🎯 PROMPT ORCHESTRATION
-
-### Seven Specialized Systems
-
-1. **PoT (Proof-of-Training)** - Cryptographically pre-committed behavioral probes for restriction sites and model identity verification (30%)
-2. **KDF** - Security/adversarial testing (20%) 
-3. **Evolutionary** - Genetic optimization (20%)
-4. **Dynamic** - Template-based synthesis (20%)
-5. **Hierarchical** - Taxonomical exploration (10%)
-6. **Response Predictor** - Effectiveness prediction
-7. **Behavior Profiler** - Pattern analysis
-
-### Usage
-
-```bash
-# Enable all (recommended)
-python run_rev.py <model> --enable-prompt-orchestration --challenges 100
-
-# Specific systems
-python run_rev.py <model> \
-    --enable-pot --enable-kdf --enable-evolutionary \
-    --enable-dynamic --enable-hierarchical \
-    --prompt-analytics --challenges 100
-
-# Strategies
-python run_rev.py <model> --enable-prompt-orchestration \
-    --prompt-strategy [balanced|adversarial|behavioral|comprehensive]
-```
-
-## 🚨 TROUBLESHOOTING REFERENCE LIBRARY USAGE
-
-### Why References Aren't Being Used
-
-**Symptom**: Deep analysis triggers despite having references
-```
-[IDENTIFICATION] Family: None, Confidence: 0.0%
-[DEEP-ANALYSIS] Initiating deep behavioral analysis
-```
-
-**Causes & Solutions**:
-
-1. **Missing Orchestration Flag**
-   - **Problem**: Without `--enable-prompt-orchestration`, only 0-7 challenges generated
-   - **Solution**: ALWAYS use `--enable-prompt-orchestration`
-   
-2. **Family Detection Failure**
-   - **Problem**: System shows "Family: None, Confidence: 0.0%"
-   - **Current State**: Known issue - family detection not working properly
-   - **Impact**: References exist but aren't matched to models
-   - **Workaround**: Orchestration still generates adequate challenges
-
-3. **Incomplete Reference Build**
-   - **Problem**: Reference has <250 challenges (check with verification commands)
-   - **Solution**: Rebuild with both flags: `--build-reference --enable-prompt-orchestration`
-
-### Verifying Reference Is Working
-
-```bash
-# Check if reference exists and has adequate challenges
-python -c "
-import json
-with open('fingerprint_library/reference_library.json', 'r') as f:
-    data = json.load(f)
-    for name, info in data['fingerprints'].items():
-        if 'reference' in name:
-            print(f'{info.get(\"model_family\", name)}: {info.get(\"challenges_processed\", 0)} challenges')
-"
-
-# Good reference: 250+ challenges
-# Bad reference: <50 challenges (needs rebuild)
-```
-
-### Expected Behavior WITH Working References
-
-When references work properly, you should see:
-```
-[IDENTIFICATION] Family: gpt2, Confidence: 95.2%
-Using reference baseline from family: gpt2
-Precision targeting enabled: 15-20x speedup expected
-Testing restriction sites: [3, 7, 10, 12, 14, 18, 20]
-```
-
-Instead of current broken state:
-```
-[IDENTIFICATION] Family: None, Confidence: 0.0%
-[DEEP-ANALYSIS] Initiating deep behavioral analysis
-Generated 0 orchestrated challenges  # Pipeline broken!
-```
-
-## 🔍 VERIFYING PIPELINE HEALTH
-
-### Quick Health Check Commands
-
-```bash
-# Check reference library status
-python -c "
-import json
-with open('fingerprint_library/reference_library.json', 'r') as f:
-    data = json.load(f)
-    for name, info in data['fingerprints'].items():
-        if 'reference' in name:
-            print(f\"{info.get('model_family', name)}: {info.get('challenges_processed', 0)} challenges\")
-"
-
-# Verify real execution (not mock)
-grep "PROBE SUCCESS" *.log | head -5
-# Should show times of 50-150ms, NOT 5-10ms
-
-# Check for orchestration
-grep "Generated.*orchestrated challenges" *.log | tail -3
-# Should show 250+ challenges for reference builds
-
-# Verify layer streaming
-grep "SEGMENTED.*Layer.*loaded" *.log | head -10
-# Should show progressive layer loading with memory sizes
-```
-
-### Pipeline Diagnostics
-
-```bash
-# Test minimal run WITH ORCHESTRATION (required for proper operation)
-python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 5 --debug
-
-# If that fails, check:
-# 1. Model path contains config.json
-# 2. Weights are .safetensors or .bin format
-# 3. System has 2GB+ free memory
-
-# Without orchestration - BROKEN (only for debugging)
-python run_rev.py /path/to/model --challenges 10 --debug
-# WARNING: Generates only 0-7 challenges - pipeline non-functional!
-
-# Correct usage always includes orchestration
-python run_rev.py /path/to/model --enable-prompt-orchestration --challenges 30
-# Generates 250+ challenges regardless of --challenges value
-```
-
-## 🎯 LIGHT BEHAVIORAL SAMPLING (November 2024 Improvements)
-
-**Efficient Layer Sampling for Unknown Models**:
-When encountering a new/unknown model, REV uses intelligent adaptive sampling:
-
-| Model Size | Layers | Sampling Strategy | Coverage |
-|------------|--------|------------------|----------|
-| Small | ≤10 | All layers | 100% |
-| Medium | 11-30 | Every 5th layer | ~20% |
-| Large | 31-50 | Strategic + even distribution | 15% |
-| Very Large | 51-100 | Strategic + sparse | 12% |
-| Massive | >100 | Boundaries + key percentiles | 10% |
-
-**Strategic Layer Selection**:
-- **Always included**: First 2 layers, last 2 layers
-- **Key percentiles**: 25%, 33%, 50%, 67%, 75% of depth
-- **Even distribution**: Fill remaining budget evenly
-
-**Binary Search for REV Sites**:
-1. Sort layer transitions by variance delta magnitude
-2. Identify top 5 transition candidates
-3. Apply binary search refinement based on transition strength
-4. Precisely locate behavioral boundaries without exhaustive testing
-
-## 🔬 DEEP BEHAVIORAL ANALYSIS
-
-Profiles ALL layers to extract:
-- **Restriction Sites**: High-divergence boundaries
-- **Stable Regions**: Parallelization opportunities  
-- **Behavioral Phases**: Architecture stages
-- **Optimization Hints**: Critical layers, memory requirements
-
-### Triggers Automatically When:
-- Unknown model (confidence < 0.5)
-- `--build-reference` flag
-- `--profiler` flag
-
-### Performance Impact
-- **Small Model (70M-125M)**: 15-20 minutes for complete reference
-- **Medium Model (7B)**: 6-24h once → Complete reference  
-- **Large Model (405B)**: 37h → 2h using reference (18.5x speedup!)
-
-### Reference Library Build Settings (CRITICAL)
-When running `--build-reference`, the system:
-1. **Automatically generates 400+ behavioral probes** (NOT manually selected)
-2. **Profiles ALL layers** comprehensively (6 for pythia-70m, 12 for GPT-2, etc.)
-3. **Takes appropriate time** (18 min for pythia-70m, 41 min for GPT-2)
-4. **Uses cryptographic challenge generation** via PoTChallengeGenerator (Proof-of-Training framework)
-
-#### CRITICAL: Reference Library Building Commands
-
-⚠️ **MUST USE --enable-prompt-orchestration WITH --build-reference**
-
-Without orchestration, reference builds generate 0 challenges and are useless!
-
-```bash
-# CORRECT - Pythia family reference (smallest model)
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/a39f36b100fe8a5377810d56c3f4789b9c53ac42 \
-    --build-reference --enable-prompt-orchestration
-
-# CORRECT - GPT family reference (smallest model)  
-python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 \
-    --build-reference --enable-prompt-orchestration
-
-# CORRECT - Llama family reference (smallest model)
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf \
-    --build-reference --enable-prompt-orchestration
-
-# WRONG - Missing orchestration (generates 0 challenges)
-python run_rev.py /path/to/model --build-reference  # ❌ NO CHALLENGES!
-```
-
-**Expected Behavior**:
-- Generates 400+ orchestrated prompts
-- Processes ALL transformer layers comprehensively
-- Takes 20+ minutes for small models, hours for larger ones
-- Creates deep behavioral topology with restriction sites
-
-## 🏗️ ARCHITECTURE
-
-### Core Components
-- **REVUnified** (run_rev.py) - Main orchestrator
-- **REVPipeline** (src/rev_pipeline.py) - Segmented execution engine
-- **MetalAcceleratedInference** - Apple Silicon GPU support
-- **SegmentRunner** - Layer-by-layer execution
-- **UnifiedInferenceManager** - Model loading coordinator
-
-### Key Features
-- Memory-bounded execution (2-4GB for 70B+ models)
-- Hyperdimensional behavioral fingerprinting  
-- Merkle tree computation verification
-- Dual library system (Reference + Active)
-- Multi-stage orchestrated testing
-
-### Important: Reference Library Architecture Independence
-The reference library provides educated ASSUMPTIONS about behavioral boundaries (restriction sites), NOT exact architectural matches. The system:
-1. Uses smaller model's topology as an initial guess for where restriction sites might be
-2. Validates these predictions with light prompt injection
-3. Only performs comprehensive prompt orchestration where needed
-4. This allows testing models with different dimensions (e.g., DistilGPT2 768D guiding GPT2-medium 1024D)
-
-The reference is a smart optimization to avoid exhaustive layer testing, not a requirement for perfect dimensional alignment.
-
-## 📂 PROJECT STRUCTURE
-
-### Source Code Organization
-```
-src/
-├── core/           # SPRT statistical testing
-├── executor/       # Memory-bounded execution
-├── hdc/           # Hyperdimensional computing
-├── hypervector/   # Vector operations
-├── fingerprint/   # Model fingerprinting
-├── verifier/      # Model verification
-├── privacy/       # ZK proofs, homomorphic ops
-└── orchestration/ # Prompt orchestration
-```
-
-### Data & Reports Organization (NEW)
-```
-database/           # Organized fingerprint database
-├── fingerprints/
-│   ├── reference/  # Reference library (smallest models)
-│   │   └── reference_library.json
-│   └── active/     # Active library (all runs)
-│       └── active_library.json
-└── behavioral_profiles/  # Detailed behavioral data
-
-reports/            # All pipeline outputs
-├── rev_reports/    # Main REV pipeline reports
-│   └── rev_report_YYYYMMDD_HHMMSS.json
-├── diagnostics/    # Diagnostic analysis reports
-│   └── diagnostic_model_YYYYMMDD_HHMMSS.{json,html}
-├── reference_builds/  # Reference build logs
-│   └── model_reference_build.log
-└── test_runs/      # Regular test run logs
-    └── model_test.log
-
-fingerprint_library/  # Symbolic links for backward compatibility
-├── reference_library.json -> ../database/fingerprints/reference/
-└── active_library.json -> ../database/fingerprints/active/
-```
-
-### Key Files
-- `run_rev.py` - Main pipeline entry point
-- `CLAUDE.md` - This comprehensive documentation
-- `README.md` - User-facing documentation
-- `Makefile` - Build and test automation
-
-## 🔧 REFERENCE LIBRARY MANAGEMENT & TROUBLESHOOTING
-
-### ⚠️ CRITICAL ISSUES IDENTIFIED & SOLUTIONS
-
-#### Issue 1: UnifiedFingerprint Initialization Errors
-**Problem**: Library loading fails with error:
-```
-UnifiedFingerprint.__init__() missing 5 required positional arguments: 'prompt_text', 'response_text', 'layer_count', 'layers_sampled', and 'divergence_stats'
-```
-
-**Root Cause**: The `UnifiedFingerprint` dataclass requires specific fields that old library JSON doesn't contain.
-
-**Solution**: Clean library initialization when loading fails:
-```bash
-# Check library status
-ls -la fingerprint_library/
-
-# If corrupted, the system will automatically:
-# 1. Create fresh libraries with default fingerprints
-# 2. Log "Starting with fresh library" message
-# 3. Initialize 6 default model fingerprints (llama, gpt, mistral, yi, qwen)
-```
-
-#### Issue 2: Reference Builds Using ALL Probes Instead of --challenges Parameter
-**Problem**: `--build-reference` ignores `--challenges 20` and uses ALL generated probes (388-443)
-
-**Expected vs Actual Behavior**:
-```bash
-# Command: --challenges 20 --build-reference
-# Expected: 20 challenges for quick reference
-# Actual: 388-443 probes (6-24 hour analysis)
-```
-
-**Logs Showing Issue**:
-```
-[REFERENCE-BUILD] Generated 388 behavioral probes across 10 categories
-[REFERENCE-BUILD] Using ALL 388 generated probes
-[REFERENCE-BUILD] Ignoring --challenges parameter for comprehensive analysis
-```
-
-**Solution**: This is **intentional behavior** for reference builds! Reference libraries need comprehensive analysis:
-
-- **For Reference Building**: Always uses ALL probes (comprehensive analysis)
-- **For Regular Runs**: Uses `--challenges` parameter (faster execution)
-
-#### Issue 3: Multiple Concurrent Reference Builds Causing System Load
-**Problem**: Running 15+ reference builds simultaneously exhausts system resources
-
-**Current Status Check**:
-```bash
-# Count running REV processes
-ps aux | grep python | grep run_rev | wc -l
-
-# Check specific reference builds
-ps aux | grep "build-reference"
-```
-
-**Solutions**:
-```bash
-# Stop all current reference builds
-pkill -f "python run_rev.py.*--build-reference"
-
-# Check system load
-top | grep "python run_rev"
-
-# Run ONE reference build at a time
-python run_rev.py /path/to/smallest/model/in/family --build-reference
-```
-
-### 📋 PROPER REFERENCE LIBRARY WORKFLOW
-
-#### Step 1: Choose the RIGHT Model for Each Family
-**Critical Rule**: Always use the SMALLEST model in each family for reference building
-
-```bash
-# CORRECT Reference Models (smallest in family)
-python run_rev.py /Users/rohanvinaik/LLM_models/models--EleutherAI--pythia-70m/snapshots/xxx --build-reference
-python run_rev.py /Users/rohanvinaik/LLM_models/distilgpt2 --build-reference  
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-2-7b-hf --build-reference
-python run_rev.py /Users/rohanvinaik/LLM_models/phi-2 --build-reference
-
-# WRONG (don't build references for large models)
-python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b --build-reference    # NO!
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-70b --build-reference     # NO!
-```
-
-#### Step 2: Monitor Reference Build Progress
-```bash
-# Check running builds
-ps aux | grep "build-reference"
-
-# Monitor logs (look for these progress indicators)
-tail -f *_reference_build.log | grep -E "(PROBE SUCCESS|Layer.*Divergence|Expected analysis time)"
-
-# Key progress markers:
-# - "Generated XXX behavioral probes" (setup complete)
-# - "Expected analysis time: X hours" (time estimate)
-# - "PROBE SUCCESS: Layer X | Divergence: X.XXX" (active progress)
-```
-
-#### Step 3: Verify Successful Reference Creation
-```bash
-# Check reference library
-ls -la fingerprint_library/reference_library.json
-
-# Verify reference contains your model
-python -c "
-import json
-with open('fingerprint_library/reference_library.json', 'r') as f:
-    data = json.load(f)
-    for name, info in data['fingerprints'].items():
-        print(f'{name}: {info.get(\"model_family\", \"unknown\")} - {info.get(\"challenges_processed\", 0)} challenges')
-"
-```
-
-#### Step 4: Use References for Large Models (15-20x Speedup!)
-```bash
-# After pythia-70m reference exists
-python run_rev.py /Users/rohanvinaik/LLM_models/pythia-12b --challenges 100      # Uses reference!
-
-# After llama-7b reference exists  
-python run_rev.py /Users/rohanvinaik/LLM_models/llama-70b --challenges 200       # Uses reference!
-
-# Verify speedup in logs:
-# Look for: "Using reference baseline from family: pythia"
-#          "Precision targeting enabled: 15-20x speedup expected"
-```
-
-### 🚨 COMMON TROUBLESHOOTING
-
-#### Problem: Reference Build Stuck/No Progress
-```bash
-# Check if process is actually running
-ps aux | grep "build-reference" | grep -v grep
-
-# Check for memory issues
-top -p $(pgrep -f "build-reference")
-
-# Look for actual probe execution in logs
-tail -f build_log.log | grep "PROBE SUCCESS"
-
-# If no PROBE SUCCESS for >5 minutes, kill and restart:
-pkill -f "python run_rev.py.*build-reference.*specific-model"
-```
-
-#### Problem: "Error loading library" on Every Run
-```bash
-# This is EXPECTED when libraries are incompatible
-# System automatically creates fresh libraries with defaults
-
-# Verify fresh library creation:
-ls -la fingerprint_library/
-# Should see recently created reference_library.json and active_library.json
-```
-
-#### Problem: Large Model Not Using Reference (Slow Execution)
-```bash
-# Check logs for:
-grep -i "using reference baseline" your_run.log
-grep -i "precision targeting" your_run.log
-
-# If not found, ensure:
-# 1. Reference for that family exists
-# 2. Large model is correctly identified (family confidence >50%)
-```
-
-### 📊 REFERENCE BUILD TIME ESTIMATES
-
-| Model Size | Layers | Expected Time | Memory Usage | Probes Generated |
-|------------|--------|---------------|--------------|------------------|
-| pythia-70m | 6      | 20 minutes    | 1-2GB        | ~390 probes      |
-| distilgpt2 | 6      | 15 minutes    | 1GB          | ~380 probes      |
-| llama-7b   | 32     | 2-3 hours     | 3-4GB        | ~440 probes      |
-| phi-2      | 32     | 2-3 hours     | 2-3GB        | ~440 probes      |
-
-### 🔧 CRITICAL FIX: TARGETED EXECUTION AT RESTRICTION SITES (December 2024)
-
-#### The Problem
-When REV identifies a model with high confidence (e.g., 95% match with Llama reference), it was still:
-1. Running deep analysis on ALL 80 layers
-2. Executing 7,945 prompts × 80 layers = 635,600 operations
-3. Taking 22+ days instead of using the reference restriction sites
-
-#### The Solution
-Implemented targeted execution that:
-1. Uses reference restriction sites when confidence > 30% (enhanced matching threshold)
-2. Executes prompts ONLY at identified restriction sites (e.g., layers 7, 14, 21, 43, 57)
-3. Reduces operations from 635,600 to ~39,725 (15-20x speedup)
-
-#### Implementation Details
-**Files Modified**:
-- `run_rev.py`: Added logic to skip deep analysis when high-confidence reference match exists
-- `src/models/true_segment_execution.py`: Added `identify_restriction_sites_targeted()` method
-
-**Key Changes**:
-```python
-# run_rev.py - Override deep analysis when reference match exists
-if identification.confidence >= confidence_threshold and identification.identified_family and strategy.get('focus_layers'):
-    needs_deep_analysis = False  # Use targeted approach instead
-    # Will probe ONLY at reference restriction sites
-```
-
-```python
-# true_segment_execution.py - New targeted execution method
-def identify_restriction_sites_targeted(self, probe_prompts, target_layers):
-    # Only profiles specified layers (15-20x speedup)
-    for layer_idx in target_layers:  # e.g., [7, 14, 21, 43, 57]
-        profile = self.profile_layer_behavior(layer_idx, probe_prompts)
-```
-
-#### Usage
-The system now automatically:
-1. Runs light behavioral probe (10-15% of layers)
-2. Matches against reference library
-3. If confidence > 30%: Uses targeted execution at reference sites
-4. If confidence < 30%: Falls back to full deep analysis
-
-No command changes needed - the optimization is automatic!
-
-### 🎯 CURRENT LIBRARY STATUS (September 2024)
-
-**Reference Library**: Contains 3 complete references
-- File: `fingerprint_library/reference_library.json`
-- References: pythia-70m, distilgpt2, llama-2-7b-hf
-- Behavioral topology: Complete with variance profiles and behavioral patterns
-
-**Active Library**: Contains multiple model runs
-- File: `fingerprint_library/active_library.json`
-- Continuously updated with each model run
-
-### 🔄 LAYER SCALING FOR CROSS-SIZE MATCHING (Fixed September 2024)
-
-**Issue**: Reference library from smaller models (e.g., 32-layer) was not properly scaled to larger test models (e.g., 80-layer).
-
-**Solution**: Implemented proportional layer scaling in `dual_library_system.py`:
-```python
-# Scale reference layers to test model dimensions
-scaled_layer = int(round((ref_layer / ref_layer_count) * test_layer_count))
-```
-
-**How it works**:
-- 32-layer reference → 80-layer test model scaling:
-  - Layer 5 (32-layer) → Layer 12-13 (80-layer)
-  - Layer 10 (32-layer) → Layer 25 (80-layer)
-  - Layer 15 (32-layer) → Layer 37-38 (80-layer)
-- Always includes layer 0 and last layer for boundary behavior
-- Enables proper cross-size behavioral matching for 15-20x speedup
-
-## 🧬 DUAL LIBRARY SYSTEM
-
-### Reference Library
-- **Location**: `fingerprint_library/reference_library.json`
-- **Purpose**: ONE reference per model family (smallest model only)
-- **Contents**: Deep behavioral topology with restriction sites
-- **Updates**: Rarely, only when adding new model families
-- **Build Command**: `--build-reference --enable-prompt-orchestration`
-
-### Active Library  
-- **Location**: `fingerprint_library/active_library.json`
-- **Purpose**: ALL other model runs (including larger models from same family)
-- **Contents**: Standard fingerprints for verification
-- **Updates**: Automatic after each successful run
-- **Build Command**: Any normal run without `--build-reference`
-
-### Library Management Rules
-1. **One reference per family**: Only the smallest model (pythia-70m, distilgpt2, etc.)
-2. **Never duplicate**: If pythia-70m is reference, pythia-160m/12b go to active library
-3. **Reference builds are special**: Use `--build-reference --enable-prompt-orchestration`
-4. **Active library for everything else**: All non-reference runs automatically added
-
-## 📊 TESTING STRATEGIES
-
-| Architecture | Confidence | Strategy | Time | Focus |
-|-------------|------------|----------|------|-------|
-| Known (Llama 70B) | >85% | Targeted | 2h | Layers 15,35,55 |
-| Variant | 60-85% | Adaptive | 3h | Every 8th layer |
-| Novel | <60% | Exploratory | 4h | Every 5th layer |
-
-## 🔬 VALIDATION SUITE
-
-### Running Full Validation
-```bash
-# Run complete validation suite with all experiments
-python run_rev.py --run-validation --generate-validation-plots
-
-# Run specific experiments only
-python run_rev.py --run-validation --validation-experiments empirical adversarial
-
-# Custom output directory
-python run_rev.py --run-validation --validation-output my_results/
-
-# Specify model families to test
-python run_rev.py --run-validation --validation-families gpt llama mistral yi
-
-# Adjust sample size for faster/more thorough testing
-python run_rev.py --run-validation --validation-samples 200
-```
-
-### Collecting Validation Data During Normal Runs
-```bash
-# Collect metrics during normal pipeline execution
-python run_rev.py /path/to/model --collect-validation-data --export-validation-data metrics.json
-
-# Multiple models with validation collection
-python run_rev.py model1 model2 model3 --collect-validation-data \
-    --export-validation-data validation_batch.json
-```
-
-### Validation Outputs
-- **ROC Curves**: Model family classification performance with AUC scores
-- **Stopping Time Histograms**: SPRT efficiency analysis showing 50-70% sample reduction
-- **Adversarial Attack Results**: Success rates for 5 attack types (stitching, spoofing, gradient, poisoning, collision)
-- **Performance Dashboard**: Comprehensive 8-panel metrics visualization
-- **HTML Report**: Combined report with all plots
-
-Results saved to `experiments/results/`:
-- `empirical_metrics.json` - Classification metrics
-- `adversarial_results.json` - Attack experiment data  
-- `stopping_time_report.json` - SPRT analysis
-- `complete_validation_results.json` - All results combined
-- `validation_summary.json` - High-level summary
-- `plots/` - Publication-ready visualizations (300 DPI)
-- `report.html` - Combined HTML report
-
-## 🔐 SECURITY FEATURES
-
-### Attestation Server
-```bash
-# Start attestation server for fingerprint verification
-python run_rev.py --attestation-server --attestation-port 8080
-
-# With Trusted Execution Environment (TEE) support
-python run_rev.py --attestation-server --enable-tee
-
-# With Hardware Security Module (HSM) for signing
-python run_rev.py --attestation-server --enable-hsm
-
-# Full security configuration
-python run_rev.py --attestation-server \
-    --attestation-port 8443 \
-    --enable-tee \
-    --enable-hsm \
-    --debug
-```
-
-Server endpoints:
-- `GET /health` - Health check
-- `POST /attest/fingerprint` - Create attestation
-- `GET /verify/attestation/<id>` - Verify attestation
-- `POST /prove/distance` - ZK distance proof
-- `POST /prove/range` - Bulletproof range proof
-- `POST /register/fingerprint` - Register fingerprint (auth required)
-- `GET /audit/log` - Audit log (admin only)
-
-### Zero-Knowledge Proofs
-```bash
-# Enable ZK proofs for fingerprint comparisons
-python run_rev.py /path/to/model --enable-zk-proofs
-
-# Combined with other features
-python run_rev.py /path/to/model \
-    --enable-zk-proofs \
-    --enable-prompt-orchestration \
-    --challenges 50
-```
-
-ZK proof types:
-- **Distance proofs**: Prove distance between fingerprints without revealing them
-- **Range proofs**: Prove similarity score is in range [0,1] using Bulletproofs
-- **Membership proofs**: Prove fingerprint is in Merkle tree without revealing it
-
-### Rate Limiting
-```bash
-# Enable API rate limiting
-python run_rev.py /path/to/model --enable-rate-limiting --rate-limit 20.0
-
-# Hierarchical rate limiting (user → model → global)
-python run_rev.py /path/to/model \
-    --enable-rate-limiting \
-    --rate-limit 10.0
-```
-
-Rate limiting features:
-- Token bucket algorithm with configurable refill rate
-- Exponential backoff with jitter for repeated failures
-- Per-model and per-user quota management
-- Redis backend support for distributed systems
-- Adaptive rate limiting based on system load
-
-### Complete Security Setup
-```bash
-# Enable all security features
-python run_rev.py /path/to/model \
-    --enable-security \
-    --enable-zk-proofs \
-    --enable-rate-limiting \
-    --rate-limit 15.0 \
-    --enable-hsm
-
-# With attestation server running separately
-# Terminal 1:
-python run_rev.py --attestation-server --enable-tee --enable-hsm
-
-# Terminal 2:
-python run_rev.py /path/to/model --enable-security --enable-zk-proofs
-```
-
-### Security Testing
-```bash
-# Run security test suite
-pytest tests/test_security.py -v
-
-# Specific test categories
-pytest tests/test_security.py::TestZKAttestation -v
-pytest tests/test_security.py::TestRateLimiter -v
-pytest tests/test_security.py::TestMerkleTrees -v
-pytest tests/test_security.py::TestAttestationServer -v
-```
-
-### Performance Targets
-- **ZK Proof Generation**: < 200ms per proof ✅
-- **Merkle Proof Verification**: < 10ms ✅
-- **Rate Limiting Check**: < 1ms ✅
-- **Batch Verification**: 10-20% speedup ✅
-- **Attestation Creation**: < 50ms ✅
-
-## 🧬 PRINCIPLED FEATURE EXTRACTION
-
-### Overview
-REV now includes a principled feature extraction system that replaces hand-picked features with automatically discovered, interpretable features across four hierarchical categories.
-
-### Feature Categories
-
-1. **Syntactic Features** (9 features)
-   - Token distributions and type-token ratios
-   - Zipf distribution parameters
-   - N-gram entropy (1-3 grams)
-   - Lexical complexity metrics
-   - Sentence structure analysis
-
-2. **Semantic Features** (20 features)
-   - Embedding space statistics (mean, std, skew, kurtosis)
-   - Cosine similarity distributions
-   - Principal component analysis (top 10 components)
-   - Attention entropy and focus patterns
-
-3. **Behavioral Features** (9 features)
-   - Response consistency metrics
-   - Uncertainty quantification (entropy, confidence)
-   - Refusal behavior analysis
-   - Sentiment indicators
-   - Temperature-like diversity estimates
-
-4. **Architectural Features** (18 features)
-   - Layer-wise activation statistics
-   - Gradient flow patterns (vanishing/exploding detection)
-   - Sparsity analysis across layers
-   - Model capacity indicators
-   - Transformer-specific features (heads, dimensions)
-
-### Running with Principled Features
-
-```bash
-# Basic usage with principled feature extraction
-python run_rev.py /path/to/model --enable-principled-features --challenges 50
-
-# Full configuration with all options
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --feature-selection-method ensemble \
-    --feature-reduction-method umap \
-    --num-features-select 100 \
-    --enable-learned-features \
-    --feature-analysis-report
-
-# Compare multiple models with feature analysis
-python run_rev.py model1 model2 model3 \
-    --enable-principled-features \
-    --feature-analysis-report \
-    --challenges 100
-
-# With prompt orchestration and principled features
-python run_rev.py /path/to/model \
-    --enable-prompt-orchestration \
-    --enable-principled-features \
-    --enable-learned-features \
-    --challenges 200
-```
-
-### Feature Selection Methods
-
-```bash
-# Mutual information (best for classification)
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --feature-selection-method mutual_info
-
-# LASSO (sparse linear features)
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --feature-selection-method lasso
-
-# Elastic Net (balanced L1/L2)
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --feature-selection-method elastic_net
-
-# Ensemble (combines all methods - recommended)
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --feature-selection-method ensemble
-```
-
-### Dimensionality Reduction Options
-
-```bash
-# PCA (linear, preserves variance)
---feature-reduction-method pca
-
-# t-SNE (non-linear, 2D visualization)
---feature-reduction-method tsne
-
-# UMAP (non-linear, preserves structure - recommended)
---feature-reduction-method umap
-
-# No reduction (use all selected features)
---feature-reduction-method none
-```
-
-### Learned Features
-
-Enable contrastive learning and autoencoders for adaptive feature discovery:
-
-```bash
-# Enable all learning methods
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --enable-learned-features \
-    --challenges 100
-
-# Learned features improve with more models
-python run_rev.py model1 model2 model3 model4 model5 \
-    --enable-principled-features \
-    --enable-learned-features
-```
-
-### Feature Analysis Report
-
-Generate comprehensive analysis with visualizations:
-
-```bash
-# Generate full analysis report
-python run_rev.py /path/to/model \
-    --enable-principled-features \
-    --feature-analysis-report
-
-# Output includes:
-# - Feature correlation matrices with clustering
-# - Feature importance rankings across methods
-# - Ablation study results
-# - Model family-specific feature distributions
-# - LaTeX report for publication
-# - All saved to: experiments/feature_analysis_results/
-```
-
-### Integration with Existing Features
-
-The principled features seamlessly integrate with:
-- **HDC Encoding**: Features weighted by importance before hypervector encoding
-- **Prompt Orchestration**: Enhanced behavioral features from diverse prompts
-- **Deep Behavioral Analysis**: Architectural features from layer profiling
-- **Unified Fingerprints**: Principled features included in fingerprint data
-
-### Performance Impact
-
-- **Feature Extraction**: ~100ms per model
-- **Feature Selection**: ~500ms for 100 features
-- **Learned Features**: ~2s for contrastive learning (improves over time)
-- **Analysis Report**: ~10s for full visualization suite
-
-### Advanced Usage Examples
-
-```bash
-# Reference library building with principled features
-python run_rev.py /path/to/small_model \
-    --build-reference \
-    --enable-principled-features \
-    --enable-learned-features \
-    --feature-analysis-report
-
-# Adversarial testing with feature analysis
-python run_rev.py /path/to/model \
-    --adversarial \
-    --enable-principled-features \
-    --feature-selection-method mutual_info \
-    --challenges 50
-
-# Multi-model comparison with feature importance
-python run_rev.py gpt-model llama-model mistral-model \
-    --enable-principled-features \
-    --feature-analysis-report \
-    --output comparison_report.json
-
-# Full pipeline with all advanced features
-python run_rev.py /path/to/model \
-    --enable-prompt-orchestration \
-    --enable-principled-features \
-    --enable-learned-features \
-    --unified-fingerprints \
-    --comprehensive-analysis \
-    --feature-analysis-report \
-    --challenges 500 \
-    --debug
-```
-
-### Feature Data Storage
-
-Principled features are stored in the pipeline results:
-
-```json
-{
-  "stages": {
-    "behavioral_analysis": {
-      "metrics": {
-        "principled_features": {
-          "syntactic": [...],
-          "semantic": [...],
-          "behavioral": [...],
-          "architectural": [...],
-          "feature_importance": [
-            ["response_consistency", 0.92],
-            ["embedding_mean", 0.87],
-            ["attention_entropy", 0.84],
-            ...
-          ],
-          "learned_features": [...]
-        }
-      }
-    }
-  }
-}
-```
-
-### Interpreting Results
-
-The feature analysis report provides:
-
-1. **Top Important Features**: Ranked list of most discriminative features
-2. **Feature Correlations**: Identify redundant or complementary features
-3. **Ablation Results**: Impact of each feature category on performance
-4. **Family Distributions**: How features vary across model families
-5. **LaTeX Report**: Publication-ready analysis documentation
-
-## 🔧 DEVELOPMENT
-
-### Running Tests
-```bash
-make install-dev
-make test                # All tests
-make test-unit          # Unit tests
-make test-integration   # Integration
-make test-performance   # Benchmarks
-make test-coverage      # Coverage report
-```
-
-### Performance Targets Met
-- ✅ Hamming distance: <1ms for 10K dimensions
-- ✅ HDC encoding: <50ms per 100K-dim sample
-- ✅ Sequential test: <100ms for 1000 samples
-- ✅ ZK proof generation: <300ms
-- ✅ Feature extraction: <100ms per model
-- ✅ Feature selection: <500ms for 100 features
-
-### Code Guidelines
-- Type hints for all functions
-- Docstrings with Args/Returns
-- Black formatting (line length: 100)
-- Update CLAUDE.md with changes
-
-## 💡 KEY INNOVATION
-
-REV enables verification of massive LLMs (68GB Yi-34B, 405B models) that EXCEED available memory through intelligent segmented execution. Models are processed layer-by-layer at restriction sites (attention boundaries) while maintaining cryptographic verification through Merkle trees.
+### 6. Never Run Multiple Reference Builds Concurrently
+Reference builds are resource-intensive. Run ONE at a time.
 
 ---
-*Repository: https://github.com/rohanvinaik/REV*
+
+## Overview
+
+**REV (Restriction Enzyme Verification)** identifies and verifies neural network models through behavioral analysis, inspired by restriction enzymes that cut DNA at specific sites. REV identifies "behavioral boundaries" (restriction sites) where significant behavioral changes occur between transformer layers.
+
+**Key Innovation**: Stream 68GB+ models on 64GB systems by loading weights layer-by-layer from disk (never fully in memory). Model weights remain secret throughout - only behavioral fingerprints are extracted.
+
+---
+
+## Core Architecture
+
+```
+Light Probe (10-20% layers)  →  Reference Match  →  Targeted Execution
+         ↓                            ↓                     ↓
+   Variance Profile              Dual Library          REV Sites Only
+   Family Detection           (Ref + Active)         (15-20x speedup)
+```
+
+**Key Components:**
+- `run_rev.py` - Single entry point (users run ONLY this)
+- `fingerprint_library/reference_library.json` - Deep behavioral topology (one per model family)
+- `fingerprint_library/active_library.json` - All other run fingerprints
+- `src/models/true_segment_execution.py` - Layer-by-layer streaming engine (2GB memory cap)
+
+---
+
+## Quick Start Commands
+
+### Standard Model Verification
+```bash
+python run_rev.py /full/path/to/model --enable-prompt-orchestration
+```
+
+### Build Reference (One-Time Per Family)
+```bash
+# Use SMALLEST model in family (e.g., pythia-70m, not pythia-12b)
+python run_rev.py /path/to/smallest-model --build-reference --enable-prompt-orchestration
+```
+
+### Multi-Model Comparison
+```bash
+python run_rev.py /path/model1 /path/model2 --enable-prompt-orchestration
+```
+
+### Verify Reference Library
+```bash
+python -c "import json; print({k: v.get('challenges_processed', 0) for k,v in json.load(open('fingerprint_library/reference_library.json'))['fingerprints'].items()})"
+```
+
+---
+
+## Key Concepts
+
+### Restriction Sites
+Behavioral boundaries in transformer layers where significant changes occur. Analogous to restriction enzyme cut sites in DNA. Identified through variance analysis, not architecture inspection.
+
+### Dual Library System
+| Library | Purpose | Updates |
+|---------|---------|---------|
+| Reference | Deep behavioral topology from smallest model in family | Once per family |
+| Active | All runtime fingerprints | Every run |
+
+Reference enables 15-20x speedup: instead of probing all layers, probe only known restriction sites.
+
+### Light Probe → Match → Target Workflow
+1. **Light Probe**: Sample 10-20% of layers, measure variance profile
+2. **Reference Match**: Compare against known families (Llama, GPT, Pythia, etc.)
+3. **Targeted Execution**: If match >30% confidence, probe only restriction sites
+
+### 7 Prompt Orchestration Systems
+The pipeline auto-generates 250-400+ prompts using:
+- PoT (30%) - Proof-of-Training behavioral probes
+- KDF (20%) - Adversarial/security testing
+- Evolutionary (20%) - Genetic optimization
+- Dynamic (20%) - Template synthesis
+- Hierarchical (10%) - Taxonomy exploration
+
+---
+
+## Quick Troubleshooting
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| <250 challenges generated | Missing orchestration flag | Add `--enable-prompt-orchestration` |
+| Probe times <10ms | Mock responses (not real execution) | Check for `[SEGMENT-EXEC]` in logs |
+| Identical divergence values | Deep analysis failing | Verify model path has config.json |
+| "NoneType" error | Invalid model path | Use absolute path to directory with config.json |
+| No reference speedup | Reference missing or incomplete | Rebuild with both flags |
+| System slowdown | Concurrent builds | Run ONE reference build at a time |
+
+### Verify Real Execution
+Look for these log patterns (real execution):
+```
+[SEGMENT-EXEC] Loaded weights for layer X
+[DIVERGENCE-DEBUG] Computing signature for layer X
+Probe times: 50-150ms (not <10ms)
+Divergence values: varying (not all identical)
+```
+
+---
+
+## Expected Results
+
+| Model Size | Reference Build Time | Challenges | Use Case |
+|------------|---------------------|------------|----------|
+| 70M (pythia-70m) | 20 min | 260+ | Reference baseline |
+| 7B (llama-7b) | 2-3 hours | 280+ | Reference baseline |
+| 160M (with ref) | 8-12 min | ~50 | Uses reference speedup |
+| 70B (with ref) | 2-4 hours | ~50 | Uses reference speedup |
+
+---
+
+## Project Structure
+
+```
+run_rev.py                     # ONLY entry point
+fingerprint_library/
+├── reference_library.json     # Deep behavioral topology
+└── active_library.json        # All runtime fingerprints
+src/
+├── models/                    # Streaming execution engine
+├── fingerprint/               # Dual library system
+├── challenges/                # 7 prompt orchestration systems
+├── hdc/                       # Hyperdimensional computing
+├── core/                      # SPRT statistical testing
+└── analysis/                  # Behavioral analysis
+```
+
+---
+
+## Dependencies
+
+```bash
+pip install torch transformers safetensors numpy scipy
+```
+
+---
+
+## Running Tests
+
+```bash
+make test                # All tests
+make test-unit          # Unit tests only
+python run_rev.py --help  # Verify installation
+```
+
+---
+
+## REV vs HBT_Paper
+
+These are **separate but related** projects:
+- **REV** (`/Users/rohanvinaik/REV`): Practical tool for verifying local models on disk
+- **HBT_Paper** (`/Users/rohanvinaik/HBT_Paper`): Academic research with additional theory (VMCI, Holographic Construction)
+
+REV handles execution; HBT handles interpretation. Both can be used independently.

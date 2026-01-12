@@ -1,277 +1,203 @@
-# REV: Restriction Enzyme Verification System v3.0
+# REV — Restriction Enzyme Verification for LLM Identity
 
-**Behavioral Fingerprinting for LLM Security & Verification**
+> **TL;DR**: We identify neural networks through *behavioral fingerprinting at restriction sites*—unique boundaries where models exhibit characteristic behavioral transitions. Like restriction enzymes that recognize specific DNA sequences, REV finds the distinctive behavioral "cut sites" that reveal a model's true identity.
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Production](https://img.shields.io/badge/Status-Production-brightgreen.svg)]()
+---
 
-## 🔬 Overview
+## The Problem
 
-REV (Restriction Enzyme Verification) identifies and verifies Large Language Models through deep behavioral analysis, treating them as secure black boxes. Like restriction enzymes in molecular biology that recognize specific DNA sequences, REV identifies unique behavioral "restriction sites" in neural networks where significant behavioral changes occur.
+Large language models are black boxes. When you download "Llama-70B" from an untrusted source, or receive model outputs from an API, you have no way to verify you're getting what you paid for. Meanwhile, these models are too large to fit in memory for traditional analysis—a 70B model requires 140GB of VRAM.
 
-### Key Innovations
-- **Segmented Streaming**: Process 70B+ models with only 2-4GB RAM by streaming weights layer-by-layer
-- **Dual Library System**: Reference library (deep topology) + Active library (runtime fingerprints)
-- **Variance-Based Site Selection**: Identifies high-variance layers for optimal behavioral fingerprinting
-- **Prompt Orchestration**: 7 specialized systems generate 250-400+ targeted behavioral probes
-- **Enhanced Matching**: 95% accuracy across 80x size differences using topological similarity
+**Questions we answer:**
+- "Is this 70B model actually Llama, or has it been swapped?"
+- "Can I verify model identity without loading 140GB into memory?"
+- "How do I fingerprint a model I can only access through an API?"
 
-### Security First
-- Model weights remain completely secret - never fully loaded into memory
-- Behavioral patterns are unforgeable (emerge from billions of parameters)
-- Robust against metadata spoofing, weight pruning, quantization, and fine-tuning
-- Works with both local filesystem models and cloud APIs
+---
 
-## 🚀 Quick Start
+## The Key Insight
+
+> *"Models have behavioral DNA that can be read at specific sites."*
+
+Just as restriction enzymes cut DNA at specific recognition sequences, neural networks have **restriction sites**—layer boundaries where behavioral patterns change dramatically. These sites are:
+1. **Unique to model families** (Llama vs GPT vs Pythia)
+2. **Preserved across sizes** (7B and 70B Llama share restriction site patterns)
+3. **Unforgeable** (emerge from billions of trained parameters)
+4. **Memory-efficient to detect** (only need to stream one layer at a time)
+
+By probing behavior at these restriction sites, we generate a **behavioral fingerprint** without ever loading the full model into memory.
+
+---
+
+## Results at a Glance
+
+### Core Feature Validation: 100% Pass Rate
+
+| Feature | Status | Performance |
+|---------|--------|-------------|
+| **Numba JIT Compilation** | PASS | 0.006ms per 10KB entropy calculation |
+| **10K-dim Hypervector Encoding** | PASS | 0.7ms per prompt |
+| **Dual Library System** | PASS | 3 model families, 6547 avg challenges |
+| **Prompt Orchestration (7 systems)** | PASS | 37 prompts from 5 systems in 1.96s |
+| **Behavioral Fingerprinting** | PASS | 0.8ms per fingerprint |
+| **Sequential Testing (SPRT)** | PASS | 50 samples, 0.45 confidence |
+
+### Memory Efficiency: 70B+ Models on 64GB Systems
+
+| Model Size | Traditional Memory | REV Memory | How |
+|------------|-------------------|------------|-----|
+| 7B | 14GB | 2-3GB | Layer-by-layer streaming |
+| 70B | 140GB | 3-4GB | Restriction site targeting |
+| 405B | 810GB | 4GB | Reference-guided probing |
+
+### Speed: 15-20x Faster with Reference Library
+
+| Scenario | Without Reference | With Reference | Speedup |
+|----------|------------------|----------------|---------|
+| Llama-70B verification | 37+ hours | 2-4 hours | **15-20x** |
+| Llama-405B verification | 72+ hours | 4-6 hours | **18x** |
+| New model family | Full analysis | N/A | — |
+
+---
+
+## Why You Should Care
+
+| If you're... | REV gives you... |
+|--------------|------------------|
+| **Verifying downloaded models** | Behavioral proof of model identity |
+| **Running limited hardware** | 70B model analysis on 8GB RAM |
+| **Auditing API endpoints** | Black-box fingerprinting capability |
+| **Detecting model substitution** | Unforgeable behavioral signatures |
+
+**Cost comparison for 70B model verification:**
+| Method | Hardware | Time | Result |
+|--------|----------|------|--------|
+| **REV (with reference)** | Consumer laptop | 2-4 hours | Behavioral fingerprint |
+| Traditional inference | 140GB+ VRAM | Minutes | Requires full model load |
+| Weight comparison | 140GB+ VRAM | N/A | Requires weight access |
+
+---
+
+## How It Works (30 seconds)
+
+1. **Light Probe** — Sample 10-15% of layers to identify model family
+2. **Reference Match** — Compare variance profile against known architectures
+3. **Targeted Fingerprinting** — Focus 250-400 prompts on restriction sites
+4. **SPRT Decision** — Stop when statistically confident
+
+```
+Layer 0:  Divergence 0.290  ← Initial baseline
+Layer 3:  Divergence 0.333  ← RESTRICTION SITE (behavioral boundary)
+Layer 5:  Divergence 0.291  ← Stable region
+...
+```
+
+The **Dual Library System** makes this fast:
+- **Reference Library**: Deep topology from smallest model in each family
+- **Active Library**: Runtime fingerprints for cross-verification
+
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/rohanvinaik/REV.git
 cd REV
 pip install -r requirements.txt
+
+# Standard verification (ALWAYS use --enable-prompt-orchestration)
+python run_rev.py /path/to/llama-70b --enable-prompt-orchestration
+
+# Build reference library (one-time, use SMALLEST model in family)
+python run_rev.py /path/to/llama-7b --build-reference --enable-prompt-orchestration
+
+# Run validation suite
+python validate_core.py
 ```
-
-## 🧬 How REV Actually Works
-
-### Phase 1: Light Behavioral Probe
-Quick topology scan (~10-15% of layers) to determine model family:
-```
-Layer 0:  Divergence: 0.290  ← Initial behavioral baseline
-Layer 7:  Divergence: 0.320  ← Attention layer boundary
-Layer 14: Divergence: 0.285  ← Stable region
-Layer 21: Divergence: 0.314  ← Behavioral shift
-...
-Layer 79: Divergence: 0.350  ← Output layer characteristics
-```
-
-### Phase 2: Enhanced Dual Library Matching
-When initial confidence is low (e.g., 20%), automatically invokes:
-- **Variance-Based Selection**: Identifies actual high-variance layers from light probe
-- **Cosine Similarity** (20%): Shape matching of variance profiles
-- **DTW Matching** (10%): Dynamic time warping for pattern alignment
-- **Topology Signatures** (10%): Structural feature comparison
-- **Fourier Analysis** (5%): Periodic pattern detection
-- **Adaptive Thresholds**: Cross-size normalization (32 vs 80 layers)
-
-### Phase 3: Prompt Orchestration System
-Generates 250-400+ specialized prompts across 7 systems:
-
-1. **PoT (Proof-of-Training)** - 30% of prompts
-   - Cryptographically pre-committed challenges
-   - Tests model-specific training artifacts
-   - Verifies behavioral consistency
-
-2. **KDF Adversarial** - 20% of prompts
-   - Security boundary testing
-   - Jailbreak resistance probes
-   - Alignment verification
-
-3. **Evolutionary** - 20% of prompts
-   - Genetically optimized discriminative prompts
-   - Mutation and crossover for prompt diversity
-   - Fitness-based selection
-
-4. **Dynamic Synthesis** - 20% of prompts
-   - Real-time template combination
-   - Context-aware prompt generation
-   - Adaptive complexity
-
-5. **Hierarchical Taxonomy** - 10% of prompts
-   - Systematic capability exploration
-   - Nested behavioral testing
-   - Cross-domain verification
-
-6. **Response Predictor** - Effectiveness scoring
-7. **Behavior Profiler** - Pattern analysis
-
-### Phase 4: Deep Behavioral Fingerprinting
-Creates 10,000-dimensional hypervector fingerprints from:
-- Response diversity patterns at each restriction site
-- Layer-wise behavioral transitions
-- Attention pattern signatures
-- Sparsity distributions
-- Entropy measurements
-
-## 📚 Dual Library System
-
-### Reference Library
-**Purpose**: Deep behavioral topology maps for model families
-
-**Contains**:
-- Complete restriction site mappings
-- Variance profiles across all layers
-- Behavioral phase transitions
-- Architecture-specific patterns
-
-**Build Process** (one-time per architecture family):
-```bash
-# Use SMALLEST model in family as reference
-# Generates 400+ comprehensive probes across ALL layers
-
-# Pythia family (use 70M model as reference)
-python run_rev.py /path/to/pythia-70m \
-  --build-reference --enable-prompt-orchestration
-
-# Llama family (use 7B model as reference)
-python run_rev.py /path/to/llama-2-7b-hf \
-  --build-reference --enable-prompt-orchestration
-
-# GPT family (use DistilGPT2 as reference)
-python run_rev.py /path/to/distilgpt2 \
-  --build-reference --enable-prompt-orchestration
-```
-
-**Time Investment**:
-- Small models (70M-1B): 20-30 minutes
-- Medium models (7B): 2-3 hours
-- Worth it: Enables 15-20x speedup for all larger models in family
-
-### Active Library
-**Purpose**: Runtime fingerprints for all tested models
-
-**Contains**:
-- Model fingerprints from regular runs
-- Confidence scores and family matches
-- Testing timestamps and parameters
-- Cross-model comparison data
-
-**Automatic Updates**:
-- Every successful run adds to active library
-- No manual intervention needed
-- Used for cross-model verification
-
-### How Libraries Work Together
-
-```
-First Time Testing Llama-70B (no reference):
-  1. Light probe → 20% confidence (unknown family)
-  2. Enhanced matching → Still uncertain
-  3. Deep analysis → 37+ hours of comprehensive probing
-  4. Result saved to active library
-
-After Building Llama-7B Reference:
-  1. Light probe → 20% confidence initially
-  2. Enhanced matching with reference → 95% confidence!
-  3. Targeted probing at known restriction sites
-  4. Complete in 2-4 hours (15-20x faster!)
-```
-
-## 📋 Core Usage
-
-### Standard Testing (with Orchestration)
-```bash
-# ALWAYS use --enable-prompt-orchestration
-# Without it, only 0-7 probes generated (broken!)
-
-# Standard model test
-python run_rev.py /path/to/llama-3.3-70b-instruct \
-  --enable-prompt-orchestration
-
-# With comprehensive analysis
-python run_rev.py /path/to/model \
-  --enable-prompt-orchestration \
-  --comprehensive-analysis \
-  --unified-fingerprints
-
-# With debug output
-python run_rev.py /path/to/model \
-  --enable-prompt-orchestration \
-  --debug
-```
-
-### Cloud API Models
-```bash
-# OpenAI
-python run_rev.py gpt-4 --api-key sk-...
-
-# Anthropic
-python run_rev.py claude-3-opus --provider anthropic --api-key ...
-```
-
-## 📊 Performance Metrics
-
-| Model | Memory | Without Reference | With Reference | Speedup |
-|-------|--------|------------------|----------------|---------|
-| 7B | 2-3GB | N/A (is reference) | N/A | - |
-| 70B | 3-4GB | 37+ hours | 2-4 hours | 15-20x |
-| 405B | 4GB | 72+ hours | 4-6 hours | 18x |
-
-## 🎯 Why This Matters
-
-### For Security
-- **Verify model identity** without access to weights
-- **Detect trojaned/backdoored** models
-- **Prove model provenance** cryptographically
-- **Identify fine-tuned variants** of base models
-
-### For Efficiency
-- **Run 70B models on laptops** with 8GB RAM
-- **15-20x faster testing** with reference library
-- **Cross-architecture verification** without re-testing
-
-### For Research
-- **Understand model families** through behavioral analysis
-- **Map architectural evolution** across versions
-- **Discover behavioral boundaries** (restriction sites)
-
-## ⚠️ Common Issues & Solutions
-
-### Issue: "Only 7 challenges generated"
-**Cause**: Missing `--enable-prompt-orchestration` flag
-**Solution**: Always include this flag for proper operation
-
-### Issue: "Model confidence 0.0%"
-**Cause**: No reference library for this architecture
-**Solution**: Build reference using smallest model in family
-
-### Issue: Probe times <10ms
-**Cause**: Mock responses (not real computation)
-**Solution**: Verify model path and weights exist
-
-### Issue: Taking 37+ hours for large model
-**Cause**: No reference library available
-**Solution**: Build reference first (one-time investment)
-
-## 🛠️ Advanced Features
-
-```bash
-# Parallel processing for multiple models
-python run_rev.py model1 model2 model3 \
-  --parallel --parallel-memory-limit 36.0
-
-# Adversarial testing
-python run_rev.py /path/to/model \
-  --adversarial \
-  --adversarial-types jailbreak alignment_faking
-
-# Full validation suite
-python run_rev.py /path/to/model \
-  --enable-prompt-orchestration \
-  --comprehensive-analysis \
-  --unified-fingerprints \
-  --collect-validation-data
-```
-
-## 📚 Documentation
-
-See [CLAUDE.md](CLAUDE.md) for comprehensive documentation including:
-- Detailed architecture explanations
-- Complete troubleshooting guide
-- Prompt orchestration details
-- Security considerations
-- Development guidelines
-
-## 🤝 Contributing
-
-Contributions welcome! Please read our contributing guidelines and submit PRs.
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-Built with support from the open-source community. Special thanks to contributors advancing LLM security and verification.
 
 ---
-*For bugs/issues: https://github.com/rohanvinaik/REV/issues*
+
+## The 7 Prompt Orchestration Systems
+
+| System | Purpose | Weight |
+|--------|---------|--------|
+| **PoT** | Cryptographically pre-committed behavioral probes | 30% |
+| **KDF Adversarial** | Security boundary and alignment testing | 20% |
+| **Evolutionary** | Genetically optimized discriminative prompts | 20% |
+| **Dynamic Synthesis** | Real-time template combination | 20% |
+| **Hierarchical Taxonomy** | Systematic capability exploration | 10% |
+| **Response Predictor** | Effectiveness scoring | — |
+| **Behavior Profiler** | Pattern analysis | — |
+
+---
+
+## Technical Details
+
+<details>
+<summary><b>Hyperdimensional Computing (HDC)</b></summary>
+
+REV encodes behavioral patterns as 10,000-dimensional sparse hypervectors:
+- L2-normalized for consistent similarity comparisons
+- 0.01 sparsity for memory efficiency
+- Semantic differentiation: different prompts produce orthogonal vectors
+
+</details>
+
+<details>
+<summary><b>Sequential Probability Ratio Test (SPRT)</b></summary>
+
+Enables early stopping when statistically confident:
+- Welford's algorithm for running statistics
+- E-value tracking for anytime-valid inference
+- Adaptive thresholds based on variance
+
+</details>
+
+<details>
+<summary><b>Reference Library Architecture</b></summary>
+
+Reference libraries enable 15-20x speedup:
+- Build once with smallest model in family (e.g., Pythia-70M)
+- Contains restriction site topology scaled proportionally
+- Works across 80x size differences (70M → 70B)
+
+</details>
+
+<details>
+<summary><b>Streaming Execution</b></summary>
+
+Models are never fully loaded into memory:
+- Weights streamed layer-by-layer from disk
+- 2GB memory cap per process (configurable)
+- Enables 405B model analysis on consumer hardware
+
+</details>
+
+---
+
+## Critical Usage Notes
+
+1. **ALWAYS** use `--enable-prompt-orchestration` (otherwise only 0-7 probes generated)
+2. Use **full path** to model directory containing `config.json`
+3. For HuggingFace cache, use the **snapshot path** (not `models--` parent)
+4. Build references with the **smallest model** in each family
+5. Never run multiple reference builds concurrently
+
+---
+
+## Limitations
+
+- Initial reference build takes 20 minutes to 3 hours (one-time per family)
+- Family detection requires reference library for high confidence
+- API models limited by rate limits and costs
+- Not designed for real-time verification (optimized for thorough analysis)
+
+---
+
+## License & Citation
+
+MIT License. If you use this in research or production, please cite this repository.
+
+---
+
+*Behavioral fingerprinting: because models have DNA you can read without seeing the weights.*
