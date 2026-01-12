@@ -63,3 +63,16 @@ Thumbs.db
 # Experiment results
 experiments/results/
 experiments/outputs/
+results/
+
+# Cache directories
+cache/
+contamination_cache/
+.pytest_cache/
+.benchmarks/
+
+# Database files
+*.db
+
+# Analytics outputs
+analytics_outputs/
