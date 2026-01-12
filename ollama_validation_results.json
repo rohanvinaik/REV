@@ -1,0 +1,60 @@
+{
+  "models_tested": [
+    "smollm:360m",
+    "tinyllama:latest",
+    "gemma2:2b"
+  ],
+  "prompts_used": 10,
+  "divergence_matrix": {
+    "smollm:360m vs smollm:360m": {
+      "length_divergence": 0.0,
+      "vocab_overlap": 1.0,
+      "variance_a": 18.35783211602067,
+      "variance_b": 18.35783211602067,
+      "semantic_similarity": 1.0000001192092896,
+      "semantic_divergence": -1.1920928955078125e-07
+    },
+    "smollm:360m vs tinyllama:latest": {
+      "length_divergence": 5.900000000000006,
+      "vocab_overlap": 0.14540816326530612,
+      "variance_a": 18.35783211602067,
+      "variance_b": 29.601351320505625,
+      "semantic_similarity": 0.0006866292096674442,
+      "semantic_divergence": 0.9993133707903326
+    },
+    "smollm:360m vs gemma2:2b": {
+      "length_divergence": 21.30000000000001,
+      "vocab_overlap": 0.14545454545454545,
+      "variance_a": 18.35783211602067,
+      "variance_b": 13.892443989449804,
+      "semantic_similarity": 0.014393824152648449,
+      "semantic_divergence": 0.9856061758473516
+    },
+    "tinyllama:latest vs tinyllama:latest": {
+      "length_divergence": 0.0,
+      "vocab_overlap": 1.0,
+      "variance_a": 29.601351320505625,
+      "variance_b": 29.601351320505625,
+      "semantic_similarity": 1.0,
+      "semantic_divergence": 0.0
+    },
+    "tinyllama:latest vs gemma2:2b": {
+      "length_divergence": 15.400000000000006,
+      "vocab_overlap": 0.09738717339667459,
+      "variance_a": 29.601351320505625,
+      "variance_b": 13.892443989449804,
+      "semantic_similarity": -0.0003308102022856474,
+      "semantic_divergence": 1.0003308102022856
+    },
+    "gemma2:2b vs gemma2:2b": {
+      "length_divergence": 0.0,
+      "vocab_overlap": 1.0,
+      "variance_a": 13.892443989449804,
+      "variance_b": 13.892443989449804,
+      "semantic_similarity": 0.9999999403953552,
+      "semantic_divergence": 5.960464477539063e-08
+    }
+  },
+  "fingerprint_dimensions": 10000,
+  "validation_passed": true
+}

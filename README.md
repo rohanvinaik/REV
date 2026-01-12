@@ -31,6 +31,25 @@ By probing behavior at these restriction sites, we generate a **behavioral finge
 
 ## Results at a Glance
 
+### Multi-Model Validation: 100% Pass Rate
+
+Tested with 3 real Ollama models (smollm:360m, tinyllama, gemma2:2b):
+
+| Test | Result | Evidence |
+|------|--------|----------|
+| **Self-consistency** | PASS | Each model 100% similar to itself |
+| **Cross-model divergence** | PASS | 98.6-100% divergence between different models |
+| **Fingerprint discrimination** | PASS | Near-zero similarity between different models |
+| **Response collection** | PASS | 10 prompts × 3 models in ~4 seconds |
+
+**Fingerprint Similarity Matrix** (cosine similarity):
+```
+              smollm   tinyllama   gemma2
+smollm         1.000      0.000    -0.018
+tinyllama      0.000      1.000     0.001
+gemma2        -0.018      0.001     1.000
+```
+
 ### Core Feature Validation: 100% Pass Rate
 
 | Feature | Status | Performance |
@@ -105,15 +124,26 @@ git clone https://github.com/rohanvinaik/REV.git
 cd REV
 pip install -r requirements.txt
 
+# Run multi-model validation with Ollama (recommended first test)
+python validate_ollama_pipeline.py
+
+# Run component validation
+python validate_core.py
+
 # Standard verification (ALWAYS use --enable-prompt-orchestration)
 python run_rev.py /path/to/llama-70b --enable-prompt-orchestration
 
 # Build reference library (one-time, use SMALLEST model in family)
 python run_rev.py /path/to/llama-7b --build-reference --enable-prompt-orchestration
-
-# Run validation suite
-python validate_core.py
 ```
+
+### Supported Model Sources
+
+| Source | Format | Example |
+|--------|--------|---------|
+| **Ollama** | Local API | `smollm:360m`, `gemma2:2b`, `llama3.2:3b` |
+| **HuggingFace** | Safetensors | `/path/to/model/` with `config.json` |
+| **Cloud APIs** | REST | OpenAI, Anthropic, Together, HuggingFace Inference |
 
 ---
 
